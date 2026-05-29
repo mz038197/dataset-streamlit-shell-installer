@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataset-streamlit-shell-installer"
+version = "0.1.0"
+description = "Install the workshop dataset Streamlit shell into an agent project."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["typer>=0.12"]
+
+[project.scripts]
+add-dataset-streamlit-shell = "add_dataset_streamlit_shell.cli:main"
+
+[tool.setuptools.package-data]
+add_dataset_streamlit_shell = ["templates/dataset_streamlit_shell/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
