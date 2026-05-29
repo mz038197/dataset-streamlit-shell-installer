@@ -34,10 +34,10 @@ def install(
         "-u",
         help="Update shell code in place while preserving data, sessions, and uploads.",
     ),
-    no_agent_core_check: bool = typer.Option(
+    require_agent_core: bool = typer.Option(
         False,
-        "--no-agent-core-check",
-        help="Skip checking for agent_core.py in the project root.",
+        "--require-agent-core",
+        help="Require agent_core.py to exist before installing.",
     ),
 ) -> None:
     """Copy dataset_streamlit_shell/ into a workshop project."""
@@ -51,7 +51,7 @@ def install(
             project_root,
             force=force,
             update=update,
-            require_agent_core=not no_agent_core_check,
+            require_agent_core=require_agent_core,
         )
     except (FileExistsError, FileNotFoundError) as exc:
         typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)

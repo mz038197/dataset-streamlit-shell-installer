@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import io
 import json
 import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import pandas as pd
 import streamlit as st
@@ -17,12 +18,10 @@ PROJECT_ROOT = SHELL_ROOT.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from agent_core import Agent
-
-
 DATA_DIR = SHELL_ROOT / "data"
 SESSION_DIR = SHELL_ROOT / "sessions"
 CHAT_IMAGE_DIR = SHELL_ROOT / "uploads" / "chat_images"
+AGENT_ACTIVATION_MARKER_PATH = SHELL_ROOT / ".agent_core_activated"
 ORIGINAL_DATASET_PATH = DATA_DIR / "original.csv"
 WORKING_DATASET_PATH = DATA_DIR / "working.csv"
 READY_DATASET_PATH = DATA_DIR / "ready.csv"
@@ -59,6 +58,15 @@ def inject_style() -> None:
         border: 1px solid rgba(90, 160, 255, 0.24);
         font-size: 0.8rem;
     }
+    .data-agent-title-spacer {
+        height: 0.75rem;
+    }
+    .data-agent-title-text {
+        font-size: 1.25rem;
+        font-weight: 800;
+        line-height: 1.5;
+        margin-bottom: 0.55rem;
+    }
 </style>
 """,
         unsafe_allow_html=True,
@@ -75,6 +83,58 @@ def _ensure_session_dir() -> None:
 
 def _ensure_chat_image_dir() -> None:
     CHAT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_agent_class(project_root: Path = PROJECT_ROOT) -> tuple[type[Any] | None, str | None]:
+    agent_core_path = project_root / "agent_core.py"
+    if not agent_core_path.exists():
+        return None, "請確認 agent_core.py 已放在專案根目錄。"
+
+    module_name = f"_dataset_shell_agent_core_{uuid.uuid4().hex}"
+    spec = importlib.util.spec_from_file_location(module_name, agent_core_path)
+    if spec is None or spec.loader is None:
+        return None, "已找到 agent_core.py，但無法載入這個檔案。"
+
+    inserted_path = False
+    project_root_text = str(project_root)
+    if project_root_text not in sys.path:
+        sys.path.insert(0, project_root_text)
+        inserted_path = True
+
+    try:
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        return None, f"已找到 agent_core.py，但無法匯入 Agent：{exc}"
+    finally:
+        sys.modules.pop(module_name, None)
+        if inserted_path:
+            with contextlib.suppress(ValueError):
+                sys.path.remove(project_root_text)
+
+    agent_class = getattr(module, "Agent", None)
+    if agent_class is None:
+        return None, "已找到 agent_core.py，但檔案內沒有 Agent 類別。"
+    return agent_class, None
+
+
+def _clear_agent_cache() -> None:
+    st.session_state.pop("data_agent", None)
+    st.session_state.pop("data_agent_session_path", None)
+    st.session_state["data_agent_core_connected"] = False
+
+
+def _write_activation_marker() -> None:
+    AGENT_ACTIVATION_MARKER_PATH.write_text(
+        datetime.now().isoformat(timespec="seconds"),
+        encoding="utf-8",
+    )
+
+
+def _remove_activation_marker() -> None:
+    if AGENT_ACTIVATION_MARKER_PATH.exists():
+        AGENT_ACTIVATION_MARKER_PATH.unlink()
 
 
 def _save_uploaded_chat_image(uploaded_file) -> tuple[str | None, str | None]:
@@ -390,18 +450,59 @@ def _reset_session_picker_widget() -> None:
     )
 
 
-def _get_agent_for_session(session_path: str) -> Agent:
+def _create_agent_for_session(session_path: str) -> Any:
+    agent_class, error = load_agent_class()
+    if error is not None or agent_class is None:
+        raise RuntimeError(error or "無法載入 Agent Core。")
+    return agent_class.from_env(session_path=session_path)
+
+
+def _get_agent_for_session(session_path: str) -> Any:
     if (
         "data_agent" not in st.session_state
         or st.session_state.get("data_agent_session_path") != session_path
     ):
-        st.session_state["data_agent"] = Agent.from_env(session_path=session_path)
+        st.session_state["data_agent"] = _create_agent_for_session(session_path)
         st.session_state["data_agent_session_path"] = session_path
+        st.session_state["data_agent_core_connected"] = True
     return st.session_state["data_agent"]
 
 
+def _activate_agent_core(session_path: str) -> tuple[bool, str]:
+    _clear_agent_cache()
+    try:
+        agent = _create_agent_for_session(session_path)
+    except RuntimeError as exc:
+        _remove_activation_marker()
+        return False, str(exc)
+    except Exception as exc:
+        _remove_activation_marker()
+        return False, f"Agent Core 啟用失敗：{exc}"
+
+    st.session_state["data_agent"] = agent
+    st.session_state["data_agent_session_path"] = session_path
+    st.session_state["data_agent_core_connected"] = True
+    _write_activation_marker()
+    return True, "Agent Core 已連接。"
+
+
+def _restore_agent_core_if_possible(session_path: str) -> tuple[bool, str | None]:
+    if st.session_state.get("data_agent_core_connected"):
+        return True, None
+    if not AGENT_ACTIVATION_MARKER_PATH.exists():
+        return False, None
+    ok, message = _activate_agent_core(session_path)
+    if ok:
+        return True, None
+    return False, message
+
+
 def render_chat_panel(extra_context: str = "") -> None:
-    st.markdown("##### 資料 Agent")
+    st.markdown('<div class="data-agent-title-spacer"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="data-agent-title-text">資料 Agent</div>',
+        unsafe_allow_html=True,
+    )
 
     df = load_working_dataset()
     if df is None:
@@ -418,7 +519,7 @@ def render_chat_panel(extra_context: str = "") -> None:
         st.session_state["data_chat_history"] = [
             (
                 "assistant",
-                "我可以協助分析目前上傳的 CSV。你可以問：有哪些缺失值？某個欄位如何分布？能否幫我新增計算欄位？",
+                "請先按「啟用資料 Agent」。啟用後，我可以協助分析目前上傳的 CSV。",
             )
         ]
 
@@ -478,9 +579,25 @@ def render_chat_panel(extra_context: str = "") -> None:
         st.chat_input("詢問...", disabled=True, key="data_chat_no_session")
         return
 
-    current_session_path = PROJECT_ROOT / current_session
-    st.caption(f"對話紀錄：{_session_label(current_session_path)}")
-    st.caption("Agent 會讀取並更新「Working 工作資料」。")
+    restored, restore_error = _restore_agent_core_if_possible(current_session)
+    connected = bool(st.session_state.get("data_agent_core_connected")) or restored
+    status_text = ":green[●] Agent Core：已連接" if connected else ":red[●] Agent Core：未啟用"
+    st.markdown(f"**{status_text}**")
+    if not connected:
+        st.caption("請按下方按鈕，將你的 WG-22 Agent Core 連接到 Data Shell。")
+        if restore_error:
+            st.warning(restore_error)
+        if st.button("啟用資料 Agent", type="primary", use_container_width=True):
+            ok, message = _activate_agent_core(current_session)
+            if ok:
+                st.success("Agent Core 已連接。你可以開始詢問資料 Agent。")
+                st.rerun()
+            else:
+                st.error(message)
+        st.code("請介紹你自己，並說明你會如何協助我整理 CSV 資料。", language="text")
+        st.chat_input("請先啟用資料 Agent...", disabled=True, key="data_chat_not_activated")
+        return
+
     with st.expander("技術資訊", expanded=False):
         st.caption(f"對話紀錄檔：`{current_session}`")
         st.caption(f"Working 工作資料檔：`{_display_path(WORKING_DATASET_PATH)}`")
@@ -498,7 +615,15 @@ def render_chat_panel(extra_context: str = "") -> None:
         agent = _get_agent_for_session(current_session)
     except RuntimeError as exc:
         st.error(str(exc))
+        _clear_agent_cache()
+        _remove_activation_marker()
         st.chat_input("詢問 Agent...", disabled=True, key="data_chat_no_key")
+        return
+    except Exception as exc:
+        st.error(f"Agent Core 連線失敗：`{exc}`")
+        _clear_agent_cache()
+        _remove_activation_marker()
+        st.chat_input("詢問 Agent...", disabled=True, key="data_chat_connect_failed")
         return
 
     chat = st.container(height=460, border=False)

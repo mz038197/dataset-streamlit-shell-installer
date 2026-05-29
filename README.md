@@ -4,10 +4,16 @@ Install the workshop `dataset_streamlit_shell/` UI into a student agent project.
 
 ## Usage
 
-From a workshop project that contains `agent_core.py`:
+From the project where you want to add the shell:
 
 ```powershell
 uvx --from . add-dataset-streamlit-shell
+```
+
+To require `agent_core.py` during installation:
+
+```powershell
+uvx --from . add-dataset-streamlit-shell --require-agent-core
 ```
 
 To update an existing shell while keeping runtime data:
@@ -33,7 +39,7 @@ uv run streamlit run dataset_streamlit_shell/app.py
 ## What It Does
 
 - Copies `dataset_streamlit_shell/` into the current project.
-- Checks that `agent_core.py` exists by default.
+- Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
 - Refuses to overwrite an existing shell unless `--force` is used.
 - Supports `--update` to refresh shell code while preserving runtime data.
 - Prints the Streamlit launch command.

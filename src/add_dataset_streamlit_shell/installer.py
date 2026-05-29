@@ -20,7 +20,7 @@ def install_shell(
     *,
     force: bool = False,
     update: bool = False,
-    require_agent_core: bool = True,
+    require_agent_core: bool = False,
 ) -> InstallResult:
     project_root = project_root.resolve()
     if not project_root.exists() or not project_root.is_dir():
@@ -29,7 +29,7 @@ def install_shell(
     if require_agent_core and not (project_root / "agent_core.py").exists():
         raise FileNotFoundError(
             "agent_core.py was not found. Run this from a WG-22 workshop project root, "
-            "or pass --no-agent-core-check."
+            "or omit --require-agent-core."
         )
 
     target = project_root / SHELL_DIR_NAME

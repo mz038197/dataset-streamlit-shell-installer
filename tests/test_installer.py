@@ -7,9 +7,7 @@ import pytest
 from add_dataset_streamlit_shell.installer import install_shell
 
 
-def test_install_shell_copies_template(tmp_path: Path) -> None:
-    (tmp_path / "agent_core.py").write_text("class Agent: ...\n", encoding="utf-8")
-
+def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> None:
     result = install_shell(tmp_path)
 
     assert (result.target / "app.py").exists()
@@ -19,9 +17,9 @@ def test_install_shell_copies_template(tmp_path: Path) -> None:
     assert (result.target / "sessions" / ".gitkeep").exists()
 
 
-def test_install_shell_requires_agent_core(tmp_path: Path) -> None:
+def test_install_shell_can_require_agent_core(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="agent_core.py"):
-        install_shell(tmp_path)
+        install_shell(tmp_path, require_agent_core=True)
 
 
 def test_install_shell_refuses_existing_target(tmp_path: Path) -> None:
