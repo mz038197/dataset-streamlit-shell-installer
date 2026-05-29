@@ -17,17 +17,19 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataset_streamlit_shell.data_ui import (
-    DATASET_PATH,
-    FILTERED_DATASET_PATH,
+    ORIGINAL_DATASET_PATH,
+    READY_DATASET_PATH,
+    WORKING_DATASET_PATH,
     _display_path,
     inject_style,
     load_dataset,
+    load_ready_dataset,
     render_chat_panel,
     render_dataset_metrics,
 )
 
 
-st.set_page_config(page_title="CSV Charts", page_icon="CH", layout="wide")
+st.set_page_config(page_title="通用圖表", page_icon="CH", layout="wide")
 inject_style()
 
 COUNT_ROWS = "Count rows"
@@ -65,27 +67,36 @@ def _all_columns(df: pd.DataFrame) -> list[str]:
 
 
 def _load_chart_dataset(source: str) -> tuple[pd.DataFrame | None, str, Path | None, str | None]:
-    if source == "Agent 工作資料":
-        if FILTERED_DATASET_PATH.exists():
+    if source == "Ready 分析就緒資料":
+        dataset = load_ready_dataset()
+        return (
+            dataset,
+            "Ready 分析就緒資料",
+            READY_DATASET_PATH if dataset is not None else None,
+            None if dataset is not None else "尚未建立 Ready 分析就緒資料，請先到「建立 Ready 分析就緒資料」頁產生 ready.csv。",
+        )
+
+    if source == "Working 工作資料":
+        if WORKING_DATASET_PATH.exists():
             return (
-                pd.read_csv(FILTERED_DATASET_PATH),
-                "Agent 工作資料",
-                FILTERED_DATASET_PATH,
+                pd.read_csv(WORKING_DATASET_PATH),
+                "Working 工作資料",
+                WORKING_DATASET_PATH,
                 None,
             )
         fallback = load_dataset()
         return (
             fallback,
-            "完整資料",
-            DATASET_PATH if fallback is not None else None,
-            "尚未找到 Agent 工作資料，已改用完整資料。請回到 Database 重新上傳或建立工作資料。",
+            "Original 原始資料",
+            ORIGINAL_DATASET_PATH if fallback is not None else None,
+            "尚未找到 Working 工作資料，已改用 Original 原始資料。請回到「資料上傳與預覽」重新上傳或建立工作資料。",
         )
 
     dataset = load_dataset()
     return (
         dataset,
-        "完整資料",
-        DATASET_PATH if dataset is not None else None,
+        "Original 原始資料",
+        ORIGINAL_DATASET_PATH if dataset is not None else None,
         None,
     )
 
@@ -343,7 +354,7 @@ def _suggested_questions(chart_name: str) -> list[str]:
 
 def _warn_if_empty(df: pd.DataFrame) -> bool:
     if df.empty:
-        st.warning("目前資料來源沒有可繪圖資料。請回到 Database 調整篩選條件。")
+        st.warning("目前資料來源沒有可繪圖資料。請回到「資料上傳與預覽」檢查資料。")
         return True
     return False
 
@@ -351,12 +362,12 @@ def _warn_if_empty(df: pd.DataFrame) -> bool:
 main, side = st.columns([5, 3], gap="large")
 
 with main:
-    st.title("Chart Builder")
+    st.title("通用圖表")
     st.caption("自由選擇資料來源、圖表類型與欄位搭配，再下載目前製作出的圖。")
 
     requested_source = st.radio(
         "資料來源",
-        ["Agent 工作資料", "完整資料"],
+        ["Working 工作資料", "Ready 分析就緒資料", "Original 原始資料"],
         horizontal=True,
         key="chart_data_source",
     )
@@ -365,7 +376,7 @@ with main:
         st.warning(source_warning)
 
     if df is None:
-        st.info("請先到 Database 頁上傳 CSV。")
+        st.info("請先到「資料上傳與預覽」頁上傳 CSV，或先建立 Ready 分析就緒資料。")
     else:
         render_dataset_metrics(df)
         st.caption(f"目前使用：{source_label}")
@@ -554,7 +565,7 @@ with main:
                             )
 
             if fig is not None:
-                st.markdown("##### Preview")
+                st.markdown("##### 預覽")
                 st.pyplot(fig, clear_figure=False)
                 st.download_button(
                     "下載目前圖表 PNG",
@@ -565,7 +576,7 @@ with main:
                 _show_summary(summary)
                 plt.close(fig)
 
-                st.markdown("##### Suggested Questions")
+                st.markdown("##### 建議問 Agent")
                 st.markdown(
                     "\n".join(f"- {question}" for question in _suggested_questions(chart_label))
                 )

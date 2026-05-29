@@ -22,8 +22,12 @@ from agent_core import Agent
 
 DATA_DIR = SHELL_ROOT / "data"
 SESSION_DIR = SHELL_ROOT / "sessions"
-DATASET_PATH = DATA_DIR / "current.csv"
-FILTERED_DATASET_PATH = DATA_DIR / "current_filtered.csv"
+CHAT_IMAGE_DIR = SHELL_ROOT / "uploads" / "chat_images"
+ORIGINAL_DATASET_PATH = DATA_DIR / "original.csv"
+WORKING_DATASET_PATH = DATA_DIR / "working.csv"
+READY_DATASET_PATH = DATA_DIR / "ready.csv"
+CLEANING_LOG_PATH = DATA_DIR / "cleaning_log.jsonl"
+MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 def _display_path(path: Path) -> str:
@@ -69,11 +73,34 @@ def _ensure_session_dir() -> None:
     SESSION_DIR.mkdir(exist_ok=True)
 
 
-def save_dataset(df: pd.DataFrame, *, filtered: bool = False) -> None:
+def _ensure_chat_image_dir() -> None:
+    CHAT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _save_uploaded_chat_image(uploaded_file) -> tuple[str | None, str | None]:
+    if uploaded_file is None:
+        return None, None
+
+    data = uploaded_file.getvalue()
+    if len(data) > MAX_CHAT_IMAGE_BYTES:
+        return None, "圖片超過 5 MB，請先壓縮後再上傳。"
+
+    suffix = Path(uploaded_file.name).suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        return None, "只支援 PNG、JPG、JPEG、WEBP 圖片。"
+
+    _ensure_chat_image_dir()
+    filename = f"chat_image_{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:8]}{suffix}"
+    target = CHAT_IMAGE_DIR / filename
+    target.write_bytes(data)
+    return target.relative_to(PROJECT_ROOT).as_posix(), None
+
+
+def save_dataset(df: pd.DataFrame, *, working: bool = False) -> None:
     _ensure_data_dir()
-    target = FILTERED_DATASET_PATH if filtered else DATASET_PATH
+    target = WORKING_DATASET_PATH if working else ORIGINAL_DATASET_PATH
     df.to_csv(target, index=False)
-    if not filtered:
+    if not working:
         st.session_state["dataset_df"] = df
         st.session_state.pop("working_dataset_df", None)
         st.session_state.pop("selected_columns", None)
@@ -81,33 +108,126 @@ def save_dataset(df: pd.DataFrame, *, filtered: bool = False) -> None:
         st.session_state.pop("filter_signature", None)
 
 
+def refresh_working_dataset_cache() -> None:
+    st.session_state.pop("working_dataset_df", None)
+
+
+def refresh_ready_dataset_cache() -> None:
+    st.session_state.pop("ready_dataset_df", None)
+
+
 def load_dataset() -> pd.DataFrame | None:
     if "dataset_df" in st.session_state:
         return st.session_state["dataset_df"]
-    if DATASET_PATH.exists():
-        df = pd.read_csv(DATASET_PATH)
+    if ORIGINAL_DATASET_PATH.exists():
+        df = pd.read_csv(ORIGINAL_DATASET_PATH)
         st.session_state["dataset_df"] = df
         return df
     return None
 
 
 def load_working_dataset() -> pd.DataFrame | None:
-    if FILTERED_DATASET_PATH.exists():
-        df = pd.read_csv(FILTERED_DATASET_PATH)
+    if WORKING_DATASET_PATH.exists():
+        df = pd.read_csv(WORKING_DATASET_PATH)
         st.session_state["working_dataset_df"] = df
         return df
     return load_dataset()
 
 
+def load_ready_dataset() -> pd.DataFrame | None:
+    if READY_DATASET_PATH.exists():
+        df = pd.read_csv(READY_DATASET_PATH)
+        st.session_state["ready_dataset_df"] = df
+        return df
+    return None
+
+
 def reset_working_dataset() -> None:
     st.session_state.pop("working_dataset_df", None)
-    if FILTERED_DATASET_PATH.exists():
-        FILTERED_DATASET_PATH.unlink()
+    if WORKING_DATASET_PATH.exists():
+        WORKING_DATASET_PATH.unlink()
+    reset_ready_dataset()
+    reset_cleaning_log()
+
+
+def reset_ready_dataset() -> None:
+    refresh_ready_dataset_cache()
+    if READY_DATASET_PATH.exists():
+        READY_DATASET_PATH.unlink()
+
+
+def reset_cleaning_log() -> None:
+    if CLEANING_LOG_PATH.exists():
+        CLEANING_LOG_PATH.unlink()
 
 
 def initialize_working_dataset(df: pd.DataFrame) -> None:
-    save_dataset(df, filtered=True)
+    save_dataset(df, working=True)
     st.session_state["working_dataset_df"] = df
+
+
+def reset_working_dataset_from_source() -> bool:
+    source = load_dataset()
+    if source is None:
+        return False
+    save_dataset(source, working=True)
+    st.session_state["working_dataset_df"] = source
+    reset_ready_dataset()
+    append_cleaning_log(
+        action="重置工作資料",
+        columns=source.columns,
+        rows=len(source),
+        note="使用 original.csv 重建 working.csv。",
+        actor="ui",
+    )
+    return True
+
+
+def create_ready_dataset(df: pd.DataFrame) -> None:
+    _ensure_data_dir()
+    df.to_csv(READY_DATASET_PATH, index=False)
+    st.session_state["ready_dataset_df"] = df
+
+
+def append_cleaning_log(
+    *,
+    action: str,
+    columns: Iterable[str] | None = None,
+    rows: int | None = None,
+    note: str = "",
+    actor: str = "ui",
+) -> None:
+    _ensure_data_dir()
+    column_list = [] if columns is None else [str(column) for column in columns]
+    normalized_actor = actor if actor in {"agent", "ui"} else "ui"
+    entry = {
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "actor": normalized_actor,
+        "action": action,
+        "columns": column_list,
+        "rows": rows,
+        "note": note,
+    }
+    with CLEANING_LOG_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def load_cleaning_log(limit: int = 8) -> list[dict[str, object]]:
+    if not CLEANING_LOG_PATH.exists():
+        return []
+    entries: list[dict[str, object]] = []
+    with CLEANING_LOG_PATH.open(encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict):
+                entries.append(obj)
+    return entries[-limit:][::-1]
 
 
 def read_uploaded_csv(uploaded_file) -> pd.DataFrame:
@@ -119,15 +239,26 @@ def dataset_context(df: pd.DataFrame | None) -> str:
         return "目前尚未載入 CSV 資料。"
 
     columns = ", ".join(str(c) for c in df.columns)
-    source = _display_path(DATASET_PATH)
-    filtered = _display_path(FILTERED_DATASET_PATH)
+    source = _display_path(ORIGINAL_DATASET_PATH)
+    working = _display_path(WORKING_DATASET_PATH)
+    ready = _display_path(READY_DATASET_PATH)
+    cleaning_log = _display_path(CLEANING_LOG_PATH)
     return (
         "目前 Streamlit 畫面使用一份通用 CSV 資料集。"
-        f"完整資料路徑：{source}。"
-        f"Agent 工作資料路徑：{filtered}。上傳資料時系統會先建立一份和完整資料相同的工作副本。"
+        f"Original 原始資料路徑：{source}，只作為重置來源，請勿覆蓋。"
+        f"Working 工作資料路徑：{working}。上傳資料時系統會先建立一份和原始資料相同的工作副本。"
+        f"Ready 分析就緒資料路徑：{ready}，由工作資料凍結後供 Wald / PCA / K-Means 使用。"
         f"資料共有 {len(df)} 筆、{len(df.columns)} 欄。欄位：{columns}。"
         "回答資料問題時，請使用你的 read_file 或 exec 工具實際讀取 CSV 後再回答。"
-        f"如果使用者要求補值、計算欄位或新增欄位，請讀取並更新 {filtered}。不要覆蓋 {source}。"
+        f"如果使用者要求補值、清理資料、計算欄位或新增欄位，請預設讀取並更新 {working}，不要覆蓋 {source}。"
+        f"修改 Working 工作資料後，請追加一筆 JSONL 紀錄到 {cleaning_log}，每行必須是單一 JSON 物件，"
+        "欄位固定為 created_at、actor、action、columns、rows、note。"
+        "actor 必須是 agent；action 使用簡短 snake_case；columns 是受影響欄位陣列；"
+        "rows 是受影響筆數；note 用繁體中文一句話摘要修改內容。"
+        "範例："
+        '{"created_at":"2026-05-29T12:05:41","actor":"agent",'
+        '"action":"fill_missing_age","columns":["Age"],"rows":177,'
+        '"note":"以中位數補齊 Age 欄位的空值。"}'
     )
 
 
@@ -260,12 +391,12 @@ def _get_agent_for_session(session_path: str) -> Agent:
     return st.session_state["data_agent"]
 
 
-def render_chat_panel() -> None:
+def render_chat_panel(extra_context: str = "") -> None:
     st.markdown("##### DATA AGENT")
 
     df = load_working_dataset()
     if df is None:
-        st.caption("先在 Database 頁上傳 CSV，右側 Agent 才能分析同一份資料。")
+        st.caption("先在「資料上傳與預覽」頁上傳 CSV，右側 Agent 才能分析同一份資料。")
         st.chat_input("ask the agent...", disabled=True, key="data_chat_disabled")
         return
 
@@ -340,10 +471,19 @@ def render_chat_panel() -> None:
 
     current_session_path = PROJECT_ROOT / current_session
     st.caption(f"對話紀錄：{_session_label(current_session_path)}")
-    st.caption("Agent 會讀取並更新「Agent 工作資料」。")
+    st.caption("Agent 會讀取並更新「Working 工作資料」。")
     with st.expander("技術資訊", expanded=False):
         st.caption(f"對話紀錄檔：`{current_session}`")
-        st.caption(f"Agent 工作資料檔：`{_display_path(FILTERED_DATASET_PATH)}`")
+        st.caption(f"Working 工作資料檔：`{_display_path(WORKING_DATASET_PATH)}`")
+
+    uploaded_image = st.file_uploader(
+        "附加圖片（選填）",
+        type=["png", "jpg", "jpeg", "webp"],
+        key=f"data_chat_image_{current_session}",
+        help="圖片只會送給下一則訊息；支援 PNG/JPG/WEBP，大小上限 5 MB。",
+    )
+    if uploaded_image is not None:
+        st.image(uploaded_image, caption="下一則訊息會附上這張圖片", use_container_width=True)
 
     try:
         agent = _get_agent_for_session(current_session)
@@ -359,12 +499,24 @@ def render_chat_panel() -> None:
                 st.markdown(text)
 
     if user_text := st.chat_input("ask the data agent...", key="data_chat"):
-        st.session_state["data_chat_history"].append(("user", user_text))
-        prompt = f"{dataset_context(df)}\n\n學生問題：{user_text}"
+        image_path, image_error = _save_uploaded_chat_image(uploaded_image)
+        display_user_text = user_text
+        if image_error:
+            st.warning(image_error)
+        elif image_path:
+            display_user_text = f"{user_text}\n\n（已附圖：{image_path}）"
+
+        st.session_state["data_chat_history"].append(("user", display_user_text))
+        context = dataset_context(df)
+        if extra_context.strip():
+            context = f"{context}\n\n【目前頁面狀態】{extra_context.strip()}"
+        prompt = f"{context}\n\n學生問題：{user_text}"
 
         with chat:
             with st.chat_message("user"):
                 st.markdown(user_text)
+                if uploaded_image is not None and image_path:
+                    st.image(uploaded_image, caption="已附圖", use_container_width=True)
             with st.chat_message("assistant"):
                 placeholder = st.empty()
                 answer_parts: list[str] = []
@@ -379,6 +531,7 @@ def render_chat_panel() -> None:
                     ):
                         final_text = agent.chat(
                             prompt,
+                            image_path=image_path,
                             on_token=on_token,
                         )
                 except Exception as exc:  # keep classroom UI alive during agent debugging

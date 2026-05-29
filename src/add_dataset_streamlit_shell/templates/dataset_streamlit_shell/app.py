@@ -10,12 +10,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataset_streamlit_shell.data_ui import (
-    DATASET_PATH,
-    FILTERED_DATASET_PATH,
+    ORIGINAL_DATASET_PATH,
+    READY_DATASET_PATH,
+    WORKING_DATASET_PATH,
     SHELL_ROOT,
     _display_path,
     inject_style,
     load_dataset,
+    load_ready_dataset,
+    load_working_dataset,
     render_chat_panel,
     render_column_pills,
     render_dataset_metrics,
@@ -30,14 +33,17 @@ def overview() -> None:
     main, side = st.columns([5, 3], gap="large")
 
     with main:
-        st.title("CSV Data Agent Shell")
+        st.title("Dataset Learning Lab")
         st.caption(
-            "上傳任意 CSV、篩選目前工作資料，將完成的 `agent_core.Agent` 套到右側聊天框。"
+            "上傳 CSV，透過 Agent 協作整理 Working 工作資料，建立 Ready 分析就緒資料。"
         )
 
-        df = load_dataset()
+        source_df = load_dataset()
+        working_df = load_working_dataset()
+        ready_df = load_ready_dataset()
+        df = working_df if working_df is not None else source_df
         if df is None:
-            st.info("請到 Database 頁上傳 CSV。上傳後會寫入目前 shell 的 `data/current.csv`。")
+            st.info("請到「資料上傳與預覽」頁上傳 CSV。上傳後會建立 Original 原始資料與 Working 工作資料。")
             return
 
         st.markdown('<div class="data-card">', unsafe_allow_html=True)
@@ -45,24 +51,31 @@ def overview() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
-        st.markdown("##### DATASET")
-        st.write("完整資料：目前資料集")
-        st.write("工作資料：Agent 工作資料")
+        st.markdown("##### 資料生命週期")
+        st.write("Original 原始資料：上傳後保留，不直接修改。")
+        st.write("Working 工作資料：Agent 協作整理與診斷的主要工作區。")
+        st.write("Ready 分析就緒資料：整理完成後凍結，供 Wald / PCA / K-Means 使用。")
         with st.expander("技術資訊", expanded=False):
-            st.caption(f"完整資料檔：`{_display_path(DATASET_PATH)}`")
-            st.caption(f"Agent 工作資料檔：`{_display_path(FILTERED_DATASET_PATH)}`")
+            st.caption(f"Original 原始資料檔：`{_display_path(ORIGINAL_DATASET_PATH)}`")
+            st.caption(f"Working 工作資料檔：`{_display_path(WORKING_DATASET_PATH)}`")
+            st.caption(f"Ready 分析就緒資料檔：`{_display_path(READY_DATASET_PATH)}`")
         render_column_pills(df.columns)
 
-        st.markdown("##### QUICK PREVIEW")
+        if ready_df is None:
+            st.warning("尚未建立 Ready 分析就緒資料。完成資料整理後，請到「建立 Ready 分析就緒資料」頁產生 `ready.csv`。")
+        else:
+            st.success(f"Ready 分析就緒資料已建立：{len(ready_df):,} 筆、{len(ready_df.columns):,} 欄。")
+
+        st.markdown("##### 快速預覽")
         st.dataframe(df.head(12), use_container_width=True, hide_index=True)
 
-        st.markdown("##### LESSON FLOW")
+        st.markdown("##### 課程流程")
         st.markdown(
             """
-1. 在 Database 頁上傳或更換 CSV。
-2. 用欄位選擇與欄位值篩選調整畫面檢視；這些篩選不會覆蓋 CSV。
-3. 完成 WG-22 後，右側 Agent 會透過 `Agent.chat(..., on_token=...)` 分析同一份 CSV。
-4. 若請 Agent 補值、計算或新增欄位，目標工作檔是 `current_filtered.csv`。
+1. 在「資料上傳與預覽」上傳或更換 CSV。
+2. 到「AI 協作整理流程」診斷 `working.csv`，請右側 Agent 一步一步整理資料。
+3. 在「建立 Ready 分析就緒資料」產生 `ready.csv`。
+4. Wald / PCA / K-Means 頁面預設讀取 `ready.csv`。
 """
         )
 
@@ -70,10 +83,28 @@ def overview() -> None:
         render_chat_panel()
 
 
-st.navigation(
-    [
-        st.Page(overview, title="Overview", default=True),
-        st.Page(str(SHELL_ROOT / "pages" / "1_Database.py"), title="Database"),
-        st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="Charts"),
-    ]
-).run()
+pages = {
+    "資料工作區": [
+        st.Page(overview, title="總覽", default=True),
+        st.Page(str(SHELL_ROOT / "pages" / "1_Database.py"), title="資料上傳與預覽"),
+        st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="通用圖表"),
+    ],
+    "AI 協作整理流程": [
+        st.Page(str(SHELL_ROOT / "pages" / "3_Field_Quality.py"), title="欄位與資料概覽"),
+        st.Page(str(SHELL_ROOT / "pages" / "4_Duplicates.py"), title="刪除重複資料列"),
+        st.Page(str(SHELL_ROOT / "pages" / "5_Numeric_Diagnostics.py"), title="缺失值處理"),
+        st.Page(str(SHELL_ROOT / "pages" / "6_Outliers.py"), title="離群值檢查"),
+        st.Page(str(SHELL_ROOT / "pages" / "7_Categorical.py"), title="類別欄位整理"),
+        st.Page(str(SHELL_ROOT / "pages" / "8_Encoding.py"), title="類別欄位編碼"),
+        st.Page(str(SHELL_ROOT / "pages" / "9_Correlation.py"), title="數值相關性"),
+        st.Page(str(SHELL_ROOT / "pages" / "8_Ready.py"), title="建立 Ready 分析就緒資料"),
+    ],
+    "統計推論": [
+        st.Page(str(SHELL_ROOT / "pages" / "9_Wald.py"), title="Wald 法"),
+    ],
+    "降維分析": [
+        st.Page(str(SHELL_ROOT / "pages" / "10_PCA.py"), title="PCA 主成分分析"),
+    ],
+}
+
+st.navigation(pages).run()

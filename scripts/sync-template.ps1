@@ -35,8 +35,15 @@ Copy-Item -LiteralPath $sourcePath -Destination $destination -Recurse -Force
 Get-ChildItem -LiteralPath (Join-Path $destination "data") -Filter "*.csv" -File -ErrorAction SilentlyContinue |
     Remove-Item -Force
 
+Get-ChildItem -LiteralPath (Join-Path $destination "data") -Filter "*.jsonl" -File -ErrorAction SilentlyContinue |
+    Remove-Item -Force
+
 Get-ChildItem -LiteralPath (Join-Path $destination "sessions") -Filter "*.jsonl" -File -ErrorAction SilentlyContinue |
     Remove-Item -Force
+
+if (Test-Path -LiteralPath (Join-Path $destination "uploads")) {
+    Remove-Item -LiteralPath (Join-Path $destination "uploads") -Recurse -Force
+}
 
 foreach ($folder in @("data", "sessions")) {
     $folderPath = Join-Path $destination $folder
