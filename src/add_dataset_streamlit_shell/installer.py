@@ -19,6 +19,7 @@ def install_shell(
     project_root: Path,
     *,
     force: bool = False,
+    update: bool = False,
     require_agent_core: bool = True,
 ) -> InstallResult:
     project_root = project_root.resolve()
@@ -33,21 +34,36 @@ def install_shell(
 
     target = project_root / SHELL_DIR_NAME
     backup: Path | None = None
+    template = resources.files("add_dataset_streamlit_shell").joinpath(
+        "templates",
+        SHELL_DIR_NAME,
+    )
     if target.exists():
+        if update:
+            with resources.as_file(template) as template_path:
+                _update_existing(target, template_path)
+            return InstallResult(target=target)
         if not force:
             raise FileExistsError(
                 f"{SHELL_DIR_NAME}/ already exists. Re-run with --force to replace it."
             )
         backup = _backup_existing(target)
 
-    template = resources.files("add_dataset_streamlit_shell").joinpath(
-        "templates",
-        SHELL_DIR_NAME,
-    )
     with resources.as_file(template) as template_path:
         shutil.copytree(template_path, target)
 
     return InstallResult(target=target, backed_up_to=backup)
+
+
+def _update_existing(target: Path, template_path: Path) -> None:
+    for child in target.iterdir():
+        if child.name in {"data", "sessions", "scripts", "uploads"}:
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+    shutil.copytree(template_path, target, dirs_exist_ok=True)
 
 
 def _backup_existing(target: Path) -> Path:

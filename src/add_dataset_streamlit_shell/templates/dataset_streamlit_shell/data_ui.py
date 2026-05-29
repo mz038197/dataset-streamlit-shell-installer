@@ -247,10 +247,12 @@ def dataset_context(df: pd.DataFrame | None) -> str:
         "目前 Streamlit 畫面使用一份通用 CSV 資料集。"
         f"Original 原始資料路徑：{source}，只作為重置來源，請勿覆蓋。"
         f"Working 工作資料路徑：{working}。上傳資料時系統會先建立一份和原始資料相同的工作副本。"
-        f"Ready 分析就緒資料路徑：{ready}，由工作資料凍結後供 Wald / PCA / K-Means 使用。"
+        f"Ready 分析就緒資料路徑：{ready}，由工作資料凍結後供後續學習與分析使用。"
         f"資料共有 {len(df)} 筆、{len(df.columns)} 欄。欄位：{columns}。"
         "回答資料問題時，請使用你的 read_file 或 exec 工具實際讀取 CSV 後再回答。"
         f"如果使用者要求補值、清理資料、計算欄位或新增欄位，請預設讀取並更新 {working}，不要覆蓋 {source}。"
+        "如果需要撰寫 Python 腳本來整理或檢查資料，請只建立在 dataset_streamlit_shell/scripts/ 底下，"
+        "不要在專案根目錄建立臨時 Python 腳本。"
         f"修改 Working 工作資料後，請追加一筆 JSONL 紀錄到 {cleaning_log}，每行必須是單一 JSON 物件，"
         "欄位固定為 created_at、actor、action、columns、rows、note。"
         "actor 必須是 agent；action 使用簡短 snake_case；columns 是受影響欄位陣列；"
@@ -276,10 +278,17 @@ def metric_value(df: pd.DataFrame, kind: str) -> str:
 
 def render_dataset_metrics(df: pd.DataFrame) -> None:
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Rows", f"{len(df):,}")
-    c2.metric("Columns", f"{len(df.columns):,}")
-    c3.metric("Missing Cells", metric_value(df, "missing"))
-    c4.metric("Numeric Columns", metric_value(df, "numeric"))
+    c1.metric("資料列數", f"{len(df):,}")
+    c2.metric("欄位數", f"{len(df.columns):,}")
+    c3.metric("缺失儲存格", metric_value(df, "missing"))
+    c4.metric("數值欄位", metric_value(df, "numeric"))
+
+
+def prepare_dataframe_for_display(df: pd.DataFrame) -> pd.DataFrame:
+    display = df.copy()
+    for column in display.select_dtypes(include=["object", "category"]).columns:
+        display[column] = display[column].map(lambda value: "" if pd.isna(value) else str(value))
+    return display
 
 
 def render_column_pills(columns: Iterable[str]) -> None:
@@ -392,12 +401,12 @@ def _get_agent_for_session(session_path: str) -> Agent:
 
 
 def render_chat_panel(extra_context: str = "") -> None:
-    st.markdown("##### DATA AGENT")
+    st.markdown("##### 資料 Agent")
 
     df = load_working_dataset()
     if df is None:
         st.caption("先在「資料上傳與預覽」頁上傳 CSV，右側 Agent 才能分析同一份資料。")
-        st.chat_input("ask the agent...", disabled=True, key="data_chat_disabled")
+        st.chat_input("詢問 Agent...", disabled=True, key="data_chat_disabled")
         return
 
     sessions = _list_sessions()
@@ -417,7 +426,7 @@ def render_chat_panel(extra_context: str = "") -> None:
     ids = list(labels)
     if current_session and current_session not in labels:
         ids.insert(0, current_session)
-        labels[current_session] = "just now · current"
+        labels[current_session] = "剛剛 · 目前對話"
 
     picker_key = f"session_picker_{st.session_state.get('session_picker_version', 0)}"
 
@@ -429,7 +438,7 @@ def render_chat_panel(extra_context: str = "") -> None:
 
     pick_col, new_col, del_col = st.columns([6, 1, 1])
     pick_col.selectbox(
-        "session",
+        "對話紀錄",
         ids,
         index=selected_index,
         format_func=lambda value: labels.get(value, value),
@@ -438,14 +447,14 @@ def render_chat_panel(extra_context: str = "") -> None:
         key=picker_key,
         on_change=_on_pick,
     )
-    if new_col.button("", icon=":material/add:", help="new session", use_container_width=True):
+    if new_col.button("", icon=":material/add:", help="新增對話", use_container_width=True):
         _set_current_session(_new_session_path())
         _reset_session_picker_widget()
         st.rerun()
     if del_col.button(
         "",
         icon=":material/delete:",
-        help="delete session",
+        help="刪除對話",
         use_container_width=True,
         disabled=not current_session,
     ):
@@ -465,8 +474,8 @@ def render_chat_panel(extra_context: str = "") -> None:
 
     current_session = st.session_state.get("session_path")
     if not current_session:
-        st.caption("no sessions — click **+** to start one")
-        st.chat_input("ask...", disabled=True, key="data_chat_no_session")
+        st.caption("尚無對話紀錄，請按 **+** 新增對話。")
+        st.chat_input("詢問...", disabled=True, key="data_chat_no_session")
         return
 
     current_session_path = PROJECT_ROOT / current_session
@@ -489,7 +498,7 @@ def render_chat_panel(extra_context: str = "") -> None:
         agent = _get_agent_for_session(current_session)
     except RuntimeError as exc:
         st.error(str(exc))
-        st.chat_input("ask the agent...", disabled=True, key="data_chat_no_key")
+        st.chat_input("詢問 Agent...", disabled=True, key="data_chat_no_key")
         return
 
     chat = st.container(height=460, border=False)
@@ -498,7 +507,7 @@ def render_chat_panel(extra_context: str = "") -> None:
             with st.chat_message(role):
                 st.markdown(text)
 
-    if user_text := st.chat_input("ask the data agent...", key="data_chat"):
+    if user_text := st.chat_input("詢問資料 Agent...", key="data_chat"):
         image_path, image_error = _save_uploaded_chat_image(uploaded_image)
         display_user_text = user_text
         if image_error:

@@ -765,7 +765,7 @@ def render_correlation_page() -> None:
             [
                 "請解讀我目前選取欄位之間的相關性矩陣，指出值得注意的關係。",
                 "請根據這些欄位的相關矩陣，判斷是否有欄位可能帶有重複資訊，先不要修改資料。",
-                "請說明這些欄位的相關性對後續 PCA 分析可能有什麼影響。",
+                "請說明這些欄位的相關性對後續學習或分析可能有什麼影響。",
             ]
         )
 
@@ -777,6 +777,13 @@ def render_correlation_page() -> None:
     )
 
 
+def text_or_category_columns(df: pd.DataFrame) -> list[str]:
+    return [
+        str(column)
+        for column in df.select_dtypes(include=["object", "string", "category"]).columns
+    ]
+
+
 def render_encoding_correlation_page() -> None:
     render_encoding_page()
 
@@ -784,9 +791,9 @@ def render_encoding_correlation_page() -> None:
 def render_ready_page() -> None:
     def body(df: pd.DataFrame) -> None:
         st.markdown("##### 建立 Ready 分析就緒資料")
-        st.caption("將目前 Working 工作資料凍結為穩定的 `ready.csv`，供 Wald / PCA / K-Means 使用。")
+        st.caption("將目前 Working 工作資料凍結為穩定的 `ready.csv`，供後續學習、分析與訓練使用。")
         missing_total = int(df.isna().sum().sum())
-        object_cols = len(df.select_dtypes(include=["object", "string", "category"]).columns)
+        text_columns = text_or_category_columns(df)
         duplicate_rows = int(df.duplicated().sum())
         numeric_cols = len(df.select_dtypes(include="number").columns)
         c1, c2, c3, c4 = st.columns(4)
@@ -794,10 +801,14 @@ def render_ready_page() -> None:
         c2.metric("數值欄位", f"{numeric_cols:,}")
         c3.metric("缺失儲存格", f"{missing_total:,}")
         c4.metric("重複列", f"{duplicate_rows:,}")
-        if object_cols:
-            st.warning(f"仍有 {object_cols} 個文字/類別欄位。PCA 可能需要先做編碼或只選數值欄位。")
+        if text_columns:
+            st.warning(
+                f"仍有 {len(text_columns)} 個文字/類別欄位："
+                + "、".join(f"`{column}`" for column in text_columns)
+                + "。後續分析或訓練可能需要先做編碼，或在分析頁只選數值欄位。"
+            )
         if missing_total:
-            st.warning("仍有缺失值。Wald / PCA 前建議先完成缺失值處理。")
+            st.warning("仍有缺失值。後續分析或訓練前建議先完成缺失值處理。")
         if st.button("建立 ready.csv", type="primary", use_container_width=True):
             create_ready_dataset(df)
             append_cleaning_log(
@@ -864,7 +875,7 @@ def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.Da
         st.info(f"目前分析基準：Ready 分析就緒資料 `{_display_path(READY_DATASET_PATH)}`。")
         df = load_ready_dataset()
         if df is None:
-            st.warning("尚未建立 Ready 分析就緒資料。請先到「建立分析資料集」頁完成匯出。")
+            st.warning("尚未建立 Ready 分析就緒資料。請先到「建立 Ready 分析就緒資料」頁完成匯出。")
             return
         render_main(df)
     with side:

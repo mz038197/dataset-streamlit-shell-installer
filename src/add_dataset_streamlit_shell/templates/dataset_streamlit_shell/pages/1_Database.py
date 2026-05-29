@@ -20,6 +20,7 @@ from dataset_streamlit_shell.data_ui import (
     inject_style,
     load_dataset,
     load_working_dataset,
+    prepare_dataframe_for_display,
     read_uploaded_csv,
     render_chat_panel,
     render_column_pills,
@@ -171,12 +172,12 @@ with main:
         st.info("尚未載入資料。請上傳 CSV。")
     else:
         render_dataset_metrics(df)
-        st.markdown("##### COLUMNS")
+        st.markdown("##### 欄位")
         render_column_pills(df.columns)
 
         filtered = apply_filters(df)
 
-        st.markdown("##### TABLE")
+        st.markdown("##### 資料表")
         st.caption(
             f"目前顯示 {len(filtered):,} / {len(df):,} 筆；這是畫面篩選結果，不會寫回 CSV。"
         )
@@ -189,7 +190,8 @@ with main:
         st.dataframe(filtered, use_container_width=True, hide_index=True)
 
         with st.expander("欄位統計", expanded=False):
-            st.dataframe(df.describe(include="all").transpose(), use_container_width=True)
+            summary = df.describe(include="all").transpose()
+            st.dataframe(prepare_dataframe_for_display(summary), use_container_width=True)
 
 with side:
     render_chat_panel()

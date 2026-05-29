@@ -60,28 +60,28 @@ def _render_pca(df: pd.DataFrame) -> None:
     explained = singular_values**2 / np.sum(singular_values**2)
     scores = centered.to_numpy() @ vt.T
 
-    st.markdown("##### Explained Variance")
+    st.markdown("##### 解釋變異量")
     variance_frame = pd.DataFrame(
         {
-            "component": [f"PC{i + 1}" for i in range(len(explained))],
-            "explained_variance_ratio": explained,
+            "主成分": [f"PC{i + 1}" for i in range(len(explained))],
+            "解釋變異比例": explained,
         }
     )
     st.dataframe(variance_frame.head(10), use_container_width=True, hide_index=True)
-    st.bar_chart(variance_frame.set_index("component")["explained_variance_ratio"])
+    st.bar_chart(variance_frame.set_index("主成分")["解釋變異比例"])
 
     if scores.shape[1] >= 2:
         st.markdown("##### PC1 / PC2 散點圖")
         plot_frame = pd.DataFrame({"PC1": scores[:, 0], "PC2": scores[:, 1]})
         st.scatter_chart(plot_frame, x="PC1", y="PC2")
 
-    st.markdown("##### Loading")
+    st.markdown("##### 欄位權重")
     loading = pd.DataFrame(vt[:2].T, index=matrix.columns, columns=["PC1", "PC2"])
     st.dataframe(loading.style.format("{:.3f}"), use_container_width=True)
 
     st.markdown("##### 建議問 Agent")
-    st.code("請解讀 PCA 的 explained variance，說明前兩個主成分保留了多少資訊。", language="text")
-    st.code("請根據 loading 表格，說明哪些欄位最影響 PC1 與 PC2。", language="text")
+    st.code("請解讀解釋變異量，說明前兩個主成分保留了多少資訊。", language="text")
+    st.code("請根據欄位權重表格，說明哪些欄位最影響 PC1 與 PC2。", language="text")
     st.code("請檢查目前 Ready 分析就緒資料是否還需要標準化或處理缺失值後再做 PCA。", language="text")
 
 
