@@ -594,7 +594,6 @@ def render_chat_panel(extra_context: str = "") -> None:
                 st.rerun()
             else:
                 st.error(message)
-        st.code("請介紹你自己，並說明你會如何協助我整理 CSV 資料。", language="text")
         st.chat_input("請先啟用資料 Agent...", disabled=True, key="data_chat_not_activated")
         return
 
