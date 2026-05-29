@@ -8,7 +8,7 @@ from add_dataset_streamlit_shell.installer import install_shell
 
 
 def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> None:
-    result = install_shell(tmp_path)
+    result = install_shell(tmp_path, install_dependencies=False)
 
     assert (result.target / "app.py").exists()
     assert (result.target / "data_ui.py").exists()
@@ -19,22 +19,22 @@ def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> Non
 
 def test_install_shell_can_require_agent_core(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="agent_core.py"):
-        install_shell(tmp_path, require_agent_core=True)
+        install_shell(tmp_path, require_agent_core=True, install_dependencies=False)
 
 
 def test_install_shell_refuses_existing_target(tmp_path: Path) -> None:
     (tmp_path / "agent_core.py").write_text("class Agent: ...\n", encoding="utf-8")
-    install_shell(tmp_path)
+    install_shell(tmp_path, install_dependencies=False)
 
     with pytest.raises(FileExistsError, match="already exists"):
-        install_shell(tmp_path)
+        install_shell(tmp_path, install_dependencies=False)
 
 
 def test_install_shell_force_backs_up_existing_target(tmp_path: Path) -> None:
     (tmp_path / "agent_core.py").write_text("class Agent: ...\n", encoding="utf-8")
-    install_shell(tmp_path)
+    install_shell(tmp_path, install_dependencies=False)
 
-    result = install_shell(tmp_path, force=True)
+    result = install_shell(tmp_path, force=True, install_dependencies=False)
 
     assert result.backed_up_to is not None
     assert result.backed_up_to.exists()
@@ -43,7 +43,7 @@ def test_install_shell_force_backs_up_existing_target(tmp_path: Path) -> None:
 
 def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
     (tmp_path / "agent_core.py").write_text("class Agent: ...\n", encoding="utf-8")
-    result = install_shell(tmp_path)
+    result = install_shell(tmp_path, install_dependencies=False)
     target = result.target
     original_app = (target / "app.py").read_text(encoding="utf-8")
 
@@ -64,7 +64,7 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
     upload_dir.mkdir(parents=True)
     (upload_dir / "image.png").write_bytes(b"png")
 
-    updated = install_shell(tmp_path, update=True)
+    updated = install_shell(tmp_path, update=True, install_dependencies=False)
 
     assert updated.target == target
     assert updated.backed_up_to is None
@@ -82,6 +82,24 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
 def test_install_shell_update_installs_when_target_missing(tmp_path: Path) -> None:
     (tmp_path / "agent_core.py").write_text("class Agent: ...\n", encoding="utf-8")
 
-    result = install_shell(tmp_path, update=True)
+    result = install_shell(tmp_path, update=True, install_dependencies=False)
 
     assert (result.target / "app.py").exists()
+
+
+def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) -> None:
+    calls: list[tuple[list[str], Path, bool]] = []
+
+    def fake_runner(args: list[str], *, cwd: Path, check: bool) -> None:
+        calls.append((args, cwd, check))
+
+    result = install_shell(tmp_path, dependency_runner=fake_runner)
+
+    assert calls == [
+        (
+            ["uv", "add", "streamlit", "pandas", "matplotlib", "numpy"],
+            tmp_path.resolve(),
+            True,
+        )
+    ]
+    assert result.installed_dependencies == ("streamlit", "pandas", "matplotlib", "numpy")

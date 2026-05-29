@@ -39,6 +39,11 @@ def install(
         "--require-agent-core",
         help="Require agent_core.py to exist before installing.",
     ),
+    install_dependencies: bool = typer.Option(
+        True,
+        "--install-deps/--no-install-deps",
+        help="Install Streamlit shell dependencies into the target project with uv add.",
+    ),
 ) -> None:
     """Copy dataset_streamlit_shell/ into a workshop project."""
 
@@ -52,6 +57,7 @@ def install(
             force=force,
             update=update,
             require_agent_core=require_agent_core,
+            install_dependencies=install_dependencies,
         )
     except (FileExistsError, FileNotFoundError) as exc:
         typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
@@ -62,10 +68,11 @@ def install(
     typer.echo(f"Target: {result.target}")
     if result.backed_up_to is not None:
         typer.echo(f"Previous shell backed up to: {result.backed_up_to}")
+    if result.installed_dependencies:
+        typer.echo("Installed dependencies: " + ", ".join(result.installed_dependencies))
 
     typer.echo("")
     typer.echo("Next:")
-    typer.echo("  uv add streamlit pandas")
     typer.echo("  uv run streamlit run dataset_streamlit_shell/app.py")
 
 

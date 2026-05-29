@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
 
 SHELL_DIR_NAME = "dataset_streamlit_shell"
+PROJECT_DEPENDENCIES = ("streamlit", "pandas", "matplotlib", "numpy")
+DependencyRunner = Callable[[list[str]], None]
 
 
 @dataclass(frozen=True)
 class InstallResult:
     target: Path
     backed_up_to: Path | None = None
+    installed_dependencies: tuple[str, ...] = ()
 
 
 def install_shell(
@@ -21,6 +26,8 @@ def install_shell(
     force: bool = False,
     update: bool = False,
     require_agent_core: bool = False,
+    install_dependencies: bool = True,
+    dependency_runner: Callable[..., object] = subprocess.run,
 ) -> InstallResult:
     project_root = project_root.resolve()
     if not project_root.exists() or not project_root.is_dir():
@@ -42,7 +49,11 @@ def install_shell(
         if update:
             with resources.as_file(template) as template_path:
                 _update_existing(target, template_path)
-            return InstallResult(target=target)
+            installed = _install_dependencies(
+                project_root,
+                dependency_runner,
+            ) if install_dependencies else ()
+            return InstallResult(target=target, installed_dependencies=installed)
         if not force:
             raise FileExistsError(
                 f"{SHELL_DIR_NAME}/ already exists. Re-run with --force to replace it."
@@ -52,7 +63,20 @@ def install_shell(
     with resources.as_file(template) as template_path:
         shutil.copytree(template_path, target)
 
-    return InstallResult(target=target, backed_up_to=backup)
+    installed = _install_dependencies(project_root, dependency_runner) if install_dependencies else ()
+    return InstallResult(target=target, backed_up_to=backup, installed_dependencies=installed)
+
+
+def _install_dependencies(
+    project_root: Path,
+    dependency_runner: Callable[..., object],
+) -> tuple[str, ...]:
+    dependency_runner(
+        ["uv", "add", *PROJECT_DEPENDENCIES],
+        cwd=project_root,
+        check=True,
+    )
+    return PROJECT_DEPENDENCIES
 
 
 def _update_existing(target: Path, template_path: Path) -> None:
