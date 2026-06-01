@@ -44,6 +44,25 @@ TTS_VOICE_OPTIONS = [
     "sage",
     "shimmer",
 ]
+TTS_VOICE_LABELS: dict[str, str] = {
+    "alloy": "中性 · 音色均衡",
+    "ash": "男聲 · 偏低沉、語速平穩",
+    "ballad": "男聲 · 柔和、節奏偏慢",
+    "coral": "女聲 · 溫暖、親切",
+    "echo": "男聲 · 清晰、標準",
+    "fable": "男聲 · 英式口音、適合旁白",
+    "nova": "女聲 · 明亮、有活力",
+    "onyx": "男聲 · 低沉、穩重",
+    "sage": "女聲 · 沉穩、較內斂",
+    "shimmer": "女聲 · 輕快、偏年輕",
+}
+
+
+def _tts_voice_label(voice_id: str) -> str:
+    label = TTS_VOICE_LABELS.get(voice_id)
+    if label:
+        return f"{label}（{voice_id}）"
+    return voice_id
 
 
 def _display_path(path: Path) -> str:
@@ -687,8 +706,10 @@ def render_chat_panel(extra_context: str = "") -> None:
             "聲音",
             voice_options,
             index=default_voice_index,
+            format_func=_tts_voice_label,
             key="data_tts_voice",
             disabled=not tts_enabled,
+            help="先標示男／女／中性，後接客觀音色描述；實際送 API 的仍是英文 voice id。",
         )
         tts_instructions = st.text_area(
             "語氣指示 (TTS_INSTRUCTIONS)",
