@@ -45,6 +45,10 @@ if (Test-Path -LiteralPath (Join-Path $destination "uploads")) {
     Remove-Item -LiteralPath (Join-Path $destination "uploads") -Recurse -Force
 }
 
+if (Test-Path -LiteralPath (Join-Path $destination "scripts")) {
+    Remove-Item -LiteralPath (Join-Path $destination "scripts") -Recurse -Force
+}
+
 Get-ChildItem -LiteralPath $destination -Directory -Filter "__pycache__" -Recurse -ErrorAction SilentlyContinue |
     Remove-Item -Recurse -Force
 
@@ -53,7 +57,7 @@ if (Test-Path -LiteralPath $runtimeMarker) {
     Remove-Item -LiteralPath $runtimeMarker -Force
 }
 
-foreach ($folder in @("data", "sessions")) {
+foreach ($folder in @("data", "sessions", "scripts")) {
     $folderPath = Join-Path $destination $folder
     if (-not (Test-Path -LiteralPath $folderPath)) {
         New-Item -ItemType Directory -Path $folderPath -Force | Out-Null
