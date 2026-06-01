@@ -6,12 +6,14 @@ import io
 import json
 import sys
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
 import pandas as pd
 import streamlit as st
+from openai_tts import Settings, stream_tts_play
 
 SHELL_ROOT = Path(__file__).parent
 PROJECT_ROOT = SHELL_ROOT.parent
@@ -27,6 +29,18 @@ WORKING_DATASET_PATH = DATA_DIR / "working.csv"
 READY_DATASET_PATH = DATA_DIR / "ready.csv"
 CLEANING_LOG_PATH = DATA_DIR / "cleaning_log.jsonl"
 MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024
+TTS_VOICE_OPTIONS = [
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "fable",
+    "nova",
+    "onyx",
+    "sage",
+    "shimmer",
+]
 
 
 def _display_path(path: Path) -> str:
@@ -391,6 +405,35 @@ def _session_label(path: Path) -> str:
     return f"{ts:%H:%M:%S} · 本機 · {shortid}"
 
 
+def _session_relpath(path: Path) -> str:
+    return str(path.relative_to(PROJECT_ROOT))
+
+
+def _is_valid_session_relpath(value: str) -> bool:
+    if not value or value.endswith(".jsonl") is False:
+        return False
+    if "sessions" not in Path(value).parts:
+        return False
+    return (PROJECT_ROOT / value).is_file()
+
+
+def _resolve_session_relpath(value: str, labels: dict[str, str]) -> str | None:
+    if _is_valid_session_relpath(value):
+        return value
+
+    for relpath, label in labels.items():
+        if value == label:
+            return relpath
+    return None
+
+
+def _build_session_picker_options(
+    sessions: list[Path],
+) -> tuple[list[str], dict[str, str]]:
+    labels = {_session_relpath(path): _session_label(path) for path in sessions}
+    return list(labels), labels
+
+
 def _list_sessions() -> list[Path]:
     _ensure_session_dir()
     return sorted(
@@ -437,11 +480,25 @@ def _load_session_history(path: Path) -> list[tuple[str, str]]:
 
 
 def _set_current_session(path: Path) -> None:
-    session_path = str(path.relative_to(PROJECT_ROOT))
+    session_path = _session_relpath(path)
     st.session_state["session_path"] = session_path
     st.session_state["data_chat_history"] = _load_session_history(path)
     st.session_state.pop("data_agent", None)
     st.session_state.pop("data_agent_session_path", None)
+
+
+def _ensure_valid_current_session(sessions: list[Path]) -> str | None:
+    current_session = st.session_state.get("session_path")
+    if current_session and _is_valid_session_relpath(current_session):
+        return current_session
+
+    st.session_state.pop("session_path", None)
+    st.session_state.pop("data_agent", None)
+    st.session_state.pop("data_agent_session_path", None)
+    if sessions:
+        _set_current_session(sessions[0])
+        return st.session_state["session_path"]
+    return None
 
 
 def _reset_session_picker_widget() -> None:
@@ -454,6 +511,8 @@ def _create_agent_for_session(session_path: str) -> Any:
     agent_class, error = load_agent_class()
     if error is not None or agent_class is None:
         raise RuntimeError(error or "無法載入 Agent Core。")
+    if not _is_valid_session_relpath(session_path):
+        raise RuntimeError(f"對話紀錄路徑無效：{session_path!r}")
     return agent_class.from_env(session_path=session_path)
 
 
@@ -513,7 +572,7 @@ def render_chat_panel(extra_context: str = "") -> None:
     sessions = _list_sessions()
     if "session_path" not in st.session_state and sessions:
         _set_current_session(sessions[0])
-    current_session = st.session_state.get("session_path")
+    current_session = _ensure_valid_current_session(sessions)
 
     if "data_chat_history" not in st.session_state:
         st.session_state["data_chat_history"] = [
@@ -523,22 +582,17 @@ def render_chat_panel(extra_context: str = "") -> None:
             )
         ]
 
-    labels = {str(path.relative_to(PROJECT_ROOT)): _session_label(path) for path in sessions}
-    ids = list(labels)
-    if current_session and current_session not in labels:
+    ids, labels = _build_session_picker_options(sessions)
+    if current_session and current_session not in labels and _is_valid_session_relpath(current_session):
         ids.insert(0, current_session)
         labels[current_session] = "剛剛 · 目前對話"
 
     picker_key = f"session_picker_{st.session_state.get('session_picker_version', 0)}"
 
-    def _on_pick() -> None:
-        picked = PROJECT_ROOT / st.session_state[picker_key]
-        _set_current_session(picked)
-
     selected_index = ids.index(current_session) if current_session in ids else 0
 
     pick_col, new_col, del_col = st.columns([6, 1, 1])
-    pick_col.selectbox(
+    picked_id = pick_col.selectbox(
         "對話紀錄",
         ids,
         index=selected_index,
@@ -546,8 +600,11 @@ def render_chat_panel(extra_context: str = "") -> None:
         disabled=not ids,
         label_visibility="collapsed",
         key=picker_key,
-        on_change=_on_pick,
     )
+    resolved_pick = _resolve_session_relpath(picked_id, labels)
+    if resolved_pick and resolved_pick != current_session:
+        _set_current_session(PROJECT_ROOT / resolved_pick)
+        st.rerun()
     if new_col.button("", icon=":material/add:", help="新增對話", use_container_width=True):
         _set_current_session(_new_session_path())
         _reset_session_picker_widget()
@@ -599,6 +656,28 @@ def render_chat_panel(extra_context: str = "") -> None:
     with st.expander("技術資訊", expanded=False):
         st.caption(f"對話紀錄檔：`{current_session}`")
         st.caption(f"Working 工作資料檔：`{_display_path(WORKING_DATASET_PATH)}`")
+
+    default_tts_settings = Settings.from_env()
+    voice_options = list(TTS_VOICE_OPTIONS)
+    if default_tts_settings.voice not in voice_options:
+        voice_options.insert(0, default_tts_settings.voice)
+    default_voice_index = voice_options.index(default_tts_settings.voice)
+
+    with st.expander("語音播放", expanded=False):
+        tts_enabled = st.checkbox(
+            "語音播放",
+            value=False,
+            key="data_tts_enabled",
+            help="開啟後，Agent 文字回答完成後會播放語音。",
+        )
+        tts_voice = st.selectbox(
+            "聲音",
+            voice_options,
+            index=default_voice_index,
+            key="data_tts_voice",
+            disabled=not tts_enabled,
+        )
+        st.caption("文字回答完成後才開始 TTS；語音錯誤不會影響文字顯示。")
 
     uploaded_image = st.file_uploader(
         "附加圖片（選填）",
@@ -652,6 +731,7 @@ def render_chat_panel(extra_context: str = "") -> None:
             with st.chat_message("assistant"):
                 placeholder = st.empty()
                 answer_parts: list[str] = []
+                tts_settings = replace(default_tts_settings, voice=tts_voice) if tts_enabled else None
 
                 def on_token(token: str) -> None:
                     answer_parts.append(token)
@@ -669,6 +749,13 @@ def render_chat_panel(extra_context: str = "") -> None:
                 except Exception as exc:  # keep classroom UI alive during agent debugging
                     final_text = f"Agent 執行時發生錯誤：`{exc}`"
                     placeholder.error(final_text)
+                else:
+                    answer = "".join(answer_parts).strip() or final_text.strip()
+                    if tts_enabled and tts_settings is not None and answer:
+                        try:
+                            stream_tts_play(answer, tts_settings)
+                        except Exception as exc:
+                            st.warning(f"語音播放發生錯誤，文字回答已保留：`{exc}`")
 
         answer = "".join(answer_parts).strip() or final_text
         st.session_state["data_chat_history"].append(("assistant", answer))

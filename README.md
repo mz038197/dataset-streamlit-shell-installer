@@ -25,7 +25,7 @@ uvx --from . add-dataset-streamlit-shell --update
 By default, installation and update also run this in the target project:
 
 ```powershell
-uv add streamlit pandas matplotlib numpy
+uv add streamlit pandas matplotlib numpy "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
 ```
 
 To copy or update the shell without changing project dependencies:
@@ -52,7 +52,7 @@ uv run streamlit run dataset_streamlit_shell/app.py
 
 - Copies `dataset_streamlit_shell/` into the current project.
 - Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
-- Installs required project dependencies with `uv add streamlit pandas matplotlib numpy` by default.
+- Installs required project dependencies with `uv add streamlit pandas matplotlib numpy` and `openai-tts` by default.
 - Refuses to overwrite an existing shell unless `--force` is used.
 - Supports `--update` to refresh shell code while preserving runtime data.
 - Prints the Streamlit launch command.

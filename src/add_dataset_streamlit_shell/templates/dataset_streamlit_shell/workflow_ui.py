@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -25,11 +26,32 @@ from dataset_streamlit_shell.data_ui import (
 
 
 PromptList = list[str]
+_PACKAGE_DIR = Path(__file__).resolve().parent
+CORRELATION_FORMULA_IMAGE_PATH = _PACKAGE_DIR / "assets" / "correlation_formula.png"
 CATEGORICAL_SELECTION_STATE_KEY = "confirmed_categorical_columns"
 CATEGORICAL_SELECTION_WIDGET_KEY = "selected_categorical_columns_widget"
 CATEGORICAL_SELECTION_EDIT_WIDGET_KEY = "selected_categorical_columns_edit_widget"
 CORRELATION_SELECTION_STATE_KEY = "confirmed_correlation_columns"
 CORRELATION_SELECTION_WIDGET_KEY = "selected_correlation_columns_widget"
+OUTLIER_COLUMNS_WIDGET_KEY = "outlier_check_columns_widget"
+OUTLIER_METHOD_WIDGET_KEY = "outlier_method"
+OUTLIER_ZSCORE_THRESHOLD_WIDGET_KEY = "outlier_zscore_threshold"
+FEATURE_SCALING_METHOD_WIDGET_KEY = "feature_scaling_method_widget"
+FEATURE_SCALING_COLUMNS_WIDGET_KEY = "feature_scaling_columns_widget"
+
+_SCALING_METHOD_LABELS: dict[str, str] = {
+    "zscore": "Z 分數正規化（Z-score normalization）",
+    "minmax": "最小-最大正規化（Min-Max normalization）",
+    "mean_norm": "平均值正規化（Mean normalization）",
+    "norm": "正規化（Normalization）",
+}
+_SCALING_LABEL_TO_METHOD = {label: key for key, label in _SCALING_METHOD_LABELS.items()}
+_SCALING_SUFFIXES = {
+    "norm": "_norm",
+    "minmax": "_minmax",
+    "mean_norm": "_mean_norm",
+    "zscore": "_z",
+}
 
 
 def _page_shell(
@@ -130,6 +152,8 @@ def _action_label(value: str, note: str = "") -> str:
         "handle_outliers": "處理離群值",
         "drop_columns": "刪除欄位",
         "encode_categorical_columns": "類別欄位編碼",
+        "feature_scaling": "特徵縮放",
+        "add_scaled_columns": "新增縮放欄位",
     }
     normalized = value.strip().lower()
     if normalized in labels:
@@ -273,14 +297,6 @@ def _teaching_categorical_columns(df: pd.DataFrame) -> list[str]:
     ]
 
 
-def _teaching_numeric_columns(df: pd.DataFrame) -> list[str]:
-    return [
-        str(column)
-        for column in df.columns
-        if pd.api.types.is_numeric_dtype(df[column]) and _column_kind(df[column]) == "數值"
-    ]
-
-
 def _selected_categorical_columns(df: pd.DataFrame) -> list[str]:
     selected = st.session_state.get(CATEGORICAL_SELECTION_STATE_KEY, [])
     if not isinstance(selected, list):
@@ -323,6 +339,48 @@ def _correlation_extra_context(df: pd.DataFrame) -> str:
     if not selected:
         return "目前學生尚未在 UI 中確認要做數值相關性的欄位。"
     return "目前學生在 UI 中確認要做數值相關性的欄位：" + "、".join(selected) + "。"
+
+
+def _duplicate_rule_columns(df: pd.DataFrame) -> list[str]:
+    selected = st.session_state.get("duplicate_rule_columns", [])
+    if not isinstance(selected, list):
+        return []
+    all_columns = {str(column) for column in df.columns}
+    return [str(column) for column in selected if str(column) in all_columns]
+
+
+def _duplicates_extra_context(df: pd.DataFrame) -> str:
+    selected = _duplicate_rule_columns(df)
+    if not selected:
+        return "目前學生以「整列完全相同」作為重複定義。"
+    return "目前學生選擇以這些欄位判斷重複：" + "、".join(selected) + "。"
+
+
+def _selected_outlier_columns(df: pd.DataFrame) -> list[str]:
+    selected = st.session_state.get(OUTLIER_COLUMNS_WIDGET_KEY, [])
+    if not isinstance(selected, list):
+        return []
+    allowed = set(_numeric_dtype_columns(df))
+    return [str(column) for column in selected if str(column) in allowed]
+
+
+def _outliers_extra_context(df: pd.DataFrame) -> str:
+    selected = _selected_outlier_columns(df)
+    method = st.session_state.get(OUTLIER_METHOD_WIDGET_KEY, "請選擇方法")
+    parts = ["目前頁面：離群值檢查。"]
+    if not selected:
+        parts.append("學生尚未在 UI 中選擇要檢查的數值欄位。")
+    else:
+        parts.append("學生在 UI 中選擇要檢查的數值欄位：" + "、".join(selected) + "。")
+    if not isinstance(method, str) or method == "請選擇方法":
+        parts.append("尚未選擇離群值判斷方法。")
+    elif method == "IQR 法":
+        parts.append("學生選擇的離群值判斷方法：IQR 法（1.5 × IQR 規則）。")
+    elif method == "Z-score 法":
+        threshold = st.session_state.get(OUTLIER_ZSCORE_THRESHOLD_WIDGET_KEY, 3.0)
+        parts.append(f"學生選擇的離群值判斷方法：Z-score 法，閾值 {threshold}。")
+    parts.append("請依學生選定的欄位與方法討論離群值；若要修改資料，請寫入 cleaning_log.jsonl。")
+    return "".join(parts)
 
 
 def _column_overview(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
@@ -445,41 +503,86 @@ def render_duplicates_page() -> None:
             ]
         )
 
-    _page_shell("刪除重複資料列", "讓學生先定義重複規則，再請 Agent 刪除重複列。", body)
+    _page_shell(
+        "刪除重複資料列",
+        "讓學生先定義重複規則，再請 Agent 刪除重複列。",
+        body,
+        extra_context_builder=_duplicates_extra_context,
+    )
+
+
+def _numeric_dtype_columns(df: pd.DataFrame) -> list[str]:
+    return [str(column) for column in df.select_dtypes(include="number").columns]
+
+
+def _outlier_column_overview(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "資料型態": [str(df[column].dtype) for column in columns],
+            "欄位類型（輔助）": [_column_kind(df[column]) for column in columns],
+            "空值筆數": df[columns].isna().sum(),
+            "不同值數量": df[columns].nunique(dropna=True),
+        },
+        index=columns,
+    )
 
 
 def render_outliers_page() -> None:
     def body(df: pd.DataFrame) -> None:
-        numeric_columns = _teaching_numeric_columns(df)
-        numeric = df[numeric_columns]
+        numeric_columns = _numeric_dtype_columns(df)
         st.markdown("##### 診斷：離群值")
-        if numeric.empty:
-            st.warning("目前沒有適合檢查離群值的連續數值欄位。")
+        if not numeric_columns:
+            st.warning("目前沒有數值欄位。請先完成欄位整理或編碼。")
             return
 
-        st.caption(
-            "離群值不是固定答案。請先選擇判斷方法，系統才會依照該方法列出可能有離群值的欄位。"
+        st.info(
+            "請先勾選要檢查的數值欄位，再選擇離群值判斷方法。"
+            "欄位類型僅供參考，不會自動替你排除；SibSp、Parch 這類計數欄位也可自行選取。"
         )
+        st.markdown("###### 數值欄位輔助資訊")
+        st.dataframe(
+            _outlier_column_overview(df, numeric_columns),
+            use_container_width=True,
+        )
+
+        selected_columns = st.multiselect(
+            "選擇要檢查離群值的數值欄位",
+            numeric_columns,
+            key=OUTLIER_COLUMNS_WIDGET_KEY,
+        )
+        if not selected_columns:
+            st.warning("請至少選擇一個數值欄位。")
+            return
+
+        numeric = df[selected_columns].apply(pd.to_numeric, errors="coerce")
+
         method = st.selectbox(
             "離群值判斷方法",
             ["請選擇方法", "IQR 法", "Z-score 法"],
-            key="outlier_method",
+            key=OUTLIER_METHOD_WIDGET_KEY,
         )
         if method == "請選擇方法":
-            st.info("你還沒有定義什麼算離群值，因此系統不會先判斷。")
+            st.info("請先選擇離群值判斷方法。")
             return
 
         if method == "IQR 法":
             outlier_frame = _iqr_outlier_summary(df, numeric)
         else:
-            threshold = st.slider("Z-score 閾值", min_value=2.0, max_value=4.0, value=3.0, step=0.1)
+            threshold = st.slider(
+                "Z-score 閾值",
+                min_value=2.0,
+                max_value=4.0,
+                value=3.0,
+                step=0.1,
+                key=OUTLIER_ZSCORE_THRESHOLD_WIDGET_KEY,
+            )
             outlier_frame = _zscore_outlier_summary(df, numeric, threshold)
 
         if outlier_frame.empty:
-            st.warning("目前數值欄位沒有足夠資料可檢查離群值。")
+            st.warning("目前選取的欄位沒有足夠資料可檢查離群值。")
             return
 
-        st.markdown("##### 有離群值的欄位")
+        st.markdown("##### 離群值檢查結果")
         st.dataframe(outlier_frame, use_container_width=True, hide_index=True)
         outlier_columns = outlier_frame[outlier_frame["離群值筆數"] > 0]["欄位名稱"].tolist()
         if not outlier_columns:
@@ -521,7 +624,12 @@ def render_outliers_page() -> None:
             ]
         )
 
-    _page_shell("離群值檢查", "專心檢查極端數值，避免和缺失值、分布探索混在一起。", body)
+    _page_shell(
+        "離群值檢查",
+        "專心檢查極端數值，避免和缺失值、分布探索混在一起。",
+        body,
+        extra_context_builder=_outliers_extra_context,
+    )
 
 
 def _iqr_outlier_summary(df: pd.DataFrame, numeric: pd.DataFrame) -> pd.DataFrame:
@@ -722,6 +830,15 @@ def render_encoding_page() -> None:
     )
 
 
+def _render_correlation_formula_reference() -> None:
+    with st.expander("共變異數與相關係數公式", expanded=False):
+        if CORRELATION_FORMULA_IMAGE_PATH.is_file():
+            st.image(str(CORRELATION_FORMULA_IMAGE_PATH), use_container_width=True)
+        else:
+            st.caption("公式說明圖尚未就緒。")
+        st.caption("本頁相關性矩陣每格為 Pearson 相關係數 r，範圍 [-1, 1]。")
+
+
 def render_correlation_page() -> None:
     def body(df: pd.DataFrame) -> None:
         st.markdown("##### 診斷：數值相關性")
@@ -729,6 +846,7 @@ def render_correlation_page() -> None:
             "請先和 Agent 討論哪些欄位適合做數值相關性分析，再在下方選取欄位。"
             "選取至少兩個欄位後，系統只顯示這些欄位之間的完整相關矩陣。"
         )
+        _render_correlation_formula_reference()
         all_columns = [str(column) for column in df.columns]
         st.markdown("###### 欄位輔助資訊")
         st.dataframe(_column_overview(df, all_columns), use_container_width=True)
@@ -774,6 +892,286 @@ def render_correlation_page() -> None:
         "在建立 Ready 分析就緒資料之前，檢查學生選取欄位之間的數值關係。",
         body,
         extra_context_builder=_correlation_extra_context,
+    )
+
+
+def _scaling_numeric_columns(df: pd.DataFrame) -> list[str]:
+    return [str(column) for column in df.select_dtypes(include="number").columns]
+
+
+def _is_binary_like_column(series: pd.Series) -> bool:
+    non_null = pd.to_numeric(series, errors="coerce").dropna()
+    if non_null.empty or int(non_null.nunique()) > 2:
+        return False
+    unique_values = set(non_null.unique().tolist())
+    return unique_values.issubset({0, 1, 0.0, 1.0})
+
+
+def _scaled_output_column(column: str, method: str) -> str:
+    return f"{column}{_SCALING_SUFFIXES[method]}"
+
+
+def _scaling_method_detail(method: str) -> tuple[str, str]:
+    details = {
+        "norm": (
+            "$x' = x / x_{max}$",
+            "結果約在 $[0, 1]$；**$x$ 必須 $\\ge 0$**；$x_{max} \\ne 0$。",
+        ),
+        "minmax": (
+            "$x' = \\dfrac{x - x_{min}}{x_{max} - x_{min}}$",
+            "結果約在 $[0, 1]$；$x_{max} \\ne x_{min}$。",
+        ),
+        "mean_norm": (
+            "$x' = \\dfrac{x - \\mu}{x_{max} - x_{min}}$",
+            "結果約在 $[-1, 1]$；$x_{max} \\ne x_{min}$。",
+        ),
+        "zscore": (
+            "$x' = \\dfrac{x - \\mu}{\\sigma}$",
+            "實務上約在 $[-3, 3]$；$\\sigma \\ne 0$；適合 PCA、分群、KNN、SVM。",
+        ),
+    }
+    return details[method]
+
+
+def _render_scaling_formula_reference() -> None:
+    with st.expander("四種方法公式對照", expanded=False):
+        st.markdown(
+            """
+| 方法 | 公式 | 前提／範圍 |
+|---|---|---|
+| 正規化 | $x' = x / x_{max}$ | $x \\ge 0$；$0 \\le x' \\le 1$ |
+| 最小-最大正規化 | $x' = \\dfrac{x - x_{min}}{x_{max} - x_{min}}$ | $0 \\le x' \\le 1$ |
+| 平均值正規化 | $x' = \\dfrac{x - \\mu}{x_{max} - x_{min}}$ | 約 $[-1, 1]$ |
+| Z 分數正規化 | $x' = \\dfrac{x - \\mu}{\\sigma}$ | 實務約 $[-3, 3]$ |
+"""
+        )
+
+
+def _feature_scaling_overview(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for column in columns:
+        series = pd.to_numeric(df[column], errors="coerce")
+        non_null = series.dropna()
+        if non_null.empty:
+            rows.append(
+                {
+                    "欄位名稱": column,
+                    "最小值": None,
+                    "最大值": None,
+                    "平均 μ": None,
+                    "標準差 σ": None,
+                    "空值筆數": int(series.isna().sum()),
+                    "備註": "無可用數值",
+                }
+            )
+            continue
+        min_value = float(non_null.min())
+        max_value = float(non_null.max())
+        mean_value = float(non_null.mean())
+        std_value = float(non_null.std(ddof=0))
+        notes: list[str] = []
+        if _is_binary_like_column(series):
+            notes.append("疑似 0/1 欄位，通常不必縮放")
+        if min_value < 0:
+            notes.append("含負值，不適用正規化（÷ max）")
+        if max_value == min_value:
+            notes.append("常數欄，無法 Min-Max／平均值正規化／Z-score")
+        elif max_value == 0:
+            notes.append("最大值為 0，無法正規化（÷ max）")
+        if std_value == 0:
+            notes.append("標準差為 0，無法 Z-score")
+        rows.append(
+            {
+                "欄位名稱": column,
+                "最小值": round(min_value, 4),
+                "最大值": round(max_value, 4),
+                "平均 μ": round(mean_value, 4),
+                "標準差 σ": round(std_value, 4),
+                "空值筆數": int(series.isna().sum()),
+                "備註": "；".join(notes) if notes else "可檢查",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _validate_scaling_column(series: pd.Series, method: str) -> tuple[bool, str]:
+    non_null = pd.to_numeric(series, errors="coerce").dropna()
+    if non_null.empty:
+        return False, "沒有可用數值"
+    min_value = float(non_null.min())
+    max_value = float(non_null.max())
+    std_value = float(non_null.std(ddof=0))
+    if method == "norm":
+        if min_value < 0:
+            return False, "含負值，不適用正規化（÷ max）"
+        if max_value == 0:
+            return False, "最大值為 0"
+        return True, ""
+    if max_value == min_value:
+        return False, "常數欄，分母為 0"
+    if method == "zscore" and std_value == 0:
+        return False, "標準差為 0"
+    return True, ""
+
+
+def _apply_scaling(series: pd.Series, method: str) -> pd.Series:
+    numeric = pd.to_numeric(series, errors="coerce")
+    non_null = numeric.dropna()
+    min_value = float(non_null.min())
+    max_value = float(non_null.max())
+    mean_value = float(non_null.mean())
+    std_value = float(non_null.std(ddof=0))
+    if method == "norm":
+        return numeric / max_value
+    if method == "minmax":
+        return (numeric - min_value) / (max_value - min_value)
+    if method == "mean_norm":
+        return (numeric - mean_value) / (max_value - min_value)
+    return (numeric - mean_value) / std_value
+
+
+def _selected_feature_scaling_method() -> str | None:
+    label = st.session_state.get(FEATURE_SCALING_METHOD_WIDGET_KEY)
+    if not isinstance(label, str):
+        return None
+    return _SCALING_LABEL_TO_METHOD.get(label)
+
+
+def _selected_feature_scaling_columns(df: pd.DataFrame) -> list[str]:
+    selected = st.session_state.get(FEATURE_SCALING_COLUMNS_WIDGET_KEY, [])
+    if not isinstance(selected, list):
+        return []
+    allowed = set(_scaling_numeric_columns(df))
+    return [str(column) for column in selected if str(column) in allowed]
+
+
+def _feature_scaling_extra_context(df: pd.DataFrame) -> str:
+    method = _selected_feature_scaling_method()
+    selected = _selected_feature_scaling_columns(df)
+    if method is None:
+        return "目前學生尚未在 UI 中選擇特徵縮放方法。"
+    method_label = _SCALING_METHOD_LABELS[method]
+    if not selected:
+        return f"目前學生選擇的縮放方法：{method_label}；尚未選擇欄位。"
+    valid_columns: list[str] = []
+    invalid_notes: list[str] = []
+    for column in selected:
+        ok, reason = _validate_scaling_column(df[column], method)
+        if ok:
+            valid_columns.append(column)
+        else:
+            invalid_notes.append(f"{column}（{reason}）")
+    parts = [
+        f"目前頁面：特徵縮放（Feature Scaling）。",
+        f"學生選擇的縮放方法：{method_label}。",
+    ]
+    if valid_columns:
+        new_names = "、".join(_scaled_output_column(column, method) for column in valid_columns)
+        parts.append("學生選擇且符合前提的欄位：" + "、".join(valid_columns) + "。")
+        parts.append(f"建議新增欄位名稱：{new_names}。")
+    else:
+        parts.append("目前選取的欄位都不符合此方法的前提。")
+    if invalid_notes:
+        parts.append("不適用欄位：" + "；".join(invalid_notes) + "。")
+    parts.append("請在 working.csv 新增縮放欄位並保留原欄位，不要修改 ready.csv。")
+    return "".join(parts)
+
+
+def render_feature_scaling_page() -> None:
+    def body(df: pd.DataFrame) -> None:
+        st.markdown("##### 診斷：特徵縮放（Feature Scaling）")
+        st.info(
+            "不同數值欄位的量綱可能差很多。請選擇縮放方式與欄位，"
+            "由 Agent 在 working 新增欄位；**保留原欄位**，不要覆蓋。"
+            "缺失值會略過不參與 μ、σ、min、max 計算；建議先完成缺失值處理。"
+        )
+        numeric_columns = _scaling_numeric_columns(df)
+        if len(numeric_columns) < 1:
+            st.warning("目前沒有數值欄位。請先完成欄位整理或編碼。")
+            return
+
+        st.markdown("###### 數值欄位概覽")
+        st.dataframe(
+            _feature_scaling_overview(df, numeric_columns),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        with st.container(border=True):
+            st.markdown("###### 縮放設定")
+            method_labels = list(_SCALING_METHOD_LABELS.values())
+            default_index = method_labels.index(_SCALING_METHOD_LABELS["zscore"])
+            method_label = st.radio(
+                "縮放方法",
+                method_labels,
+                index=default_index,
+                key=FEATURE_SCALING_METHOD_WIDGET_KEY,
+            )
+            method = _SCALING_LABEL_TO_METHOD[method_label]
+            formula, note = _scaling_method_detail(method)
+            st.markdown(f"**{method_label}**")
+            st.markdown(formula)
+            st.caption(note)
+            _render_scaling_formula_reference()
+
+            selected_columns = st.multiselect(
+                "選擇要縮放的數值欄位",
+                numeric_columns,
+                key=FEATURE_SCALING_COLUMNS_WIDGET_KEY,
+            )
+            if not selected_columns:
+                st.warning("請至少選擇一個數值欄位。")
+                return
+
+            valid_columns: list[str] = []
+            for column in selected_columns:
+                ok, reason = _validate_scaling_column(df[column], method)
+                if ok:
+                    valid_columns.append(column)
+                else:
+                    st.warning(f"`{column}`：{reason}")
+
+            suggested = [
+                _scaled_output_column(column, method) for column in valid_columns
+            ]
+            if suggested:
+                st.markdown("###### 預計新增欄位")
+                st.write("、".join(f"`{name}`" for name in suggested))
+                existing = [name for name in suggested if name in df.columns]
+                if existing:
+                    st.warning(
+                        "以下欄位已存在，請 Agent 改用不同後綴或先確認是否覆寫："
+                        + "、".join(f"`{name}`" for name in existing)
+                    )
+            else:
+                st.warning("目前選取的欄位都不符合此方法的前提，請調整方法或欄位。")
+                return
+
+            preview = df[valid_columns].head(10).copy()
+            for column in valid_columns:
+                output_column = _scaled_output_column(column, method)
+                preview[output_column] = _apply_scaling(df[column], method).head(10)
+            st.markdown("###### 預覽（前 10 筆，尚未寫入 working）")
+            st.dataframe(preview, use_container_width=True, hide_index=True)
+
+        method_name = _SCALING_METHOD_LABELS[method]
+        column_list = "、".join(f"`{column}`" for column in valid_columns)
+        new_columns = "、".join(
+            f"`{_scaled_output_column(column, method)}`" for column in valid_columns
+        )
+        _render_prompts(
+            [
+                f"請依 **{method_name}** 為 {column_list} 在 working 新增縮放欄位（例如 {new_columns}），保留原欄位，並回報新欄名稱。",
+                f"請說明 **{method_name}** 為什麼適合或不適合我目前選的欄位。",
+                "請將此次修改寫入 cleaning_log，action 使用 feature_scaling。",
+            ]
+        )
+
+    _page_shell(
+        "特徵縮放（Feature Scaling）",
+        "選擇縮放方式與欄位，由 Agent 新增縮放欄位；建立 Ready 前完成。",
+        body,
+        extra_context_builder=_feature_scaling_extra_context,
     )
 
 
@@ -839,21 +1237,6 @@ def render_ready_page() -> None:
         )
 
     _page_shell("建立 Ready 分析就緒資料", "把 Working 工作資料凍結成後續分析使用的穩定資料表。", body)
-
-
-def wald_status(df: pd.DataFrame) -> dict[str, object]:
-    numeric = df.select_dtypes(include="number")
-    binary_columns = [
-        str(column)
-        for column in df.columns
-        if df[column].dropna().nunique() == 2
-    ]
-    return {
-        "rows": len(df),
-        "numeric_columns": len(numeric.columns),
-        "missing_cells": int(df.isna().sum().sum()),
-        "binary_columns": binary_columns,
-    }
 
 
 def pca_status(df: pd.DataFrame) -> dict[str, object]:

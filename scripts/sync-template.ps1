@@ -45,6 +45,14 @@ if (Test-Path -LiteralPath (Join-Path $destination "uploads")) {
     Remove-Item -LiteralPath (Join-Path $destination "uploads") -Recurse -Force
 }
 
+Get-ChildItem -LiteralPath $destination -Directory -Filter "__pycache__" -Recurse -ErrorAction SilentlyContinue |
+    Remove-Item -Recurse -Force
+
+$runtimeMarker = Join-Path $destination ".agent_core_activated"
+if (Test-Path -LiteralPath $runtimeMarker) {
+    Remove-Item -LiteralPath $runtimeMarker -Force
+}
+
 foreach ($folder in @("data", "sessions")) {
     $folderPath = Join-Path $destination $folder
     if (-not (Test-Path -LiteralPath $folderPath)) {

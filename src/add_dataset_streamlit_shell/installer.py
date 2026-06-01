@@ -9,7 +9,13 @@ from pathlib import Path
 
 
 SHELL_DIR_NAME = "dataset_streamlit_shell"
-PROJECT_DEPENDENCIES = ("streamlit", "pandas", "matplotlib", "numpy")
+PROJECT_DEPENDENCIES = (
+    "streamlit",
+    "pandas",
+    "matplotlib",
+    "numpy",
+    "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
+)
 DependencyRunner = Callable[[list[str]], None]
 
 

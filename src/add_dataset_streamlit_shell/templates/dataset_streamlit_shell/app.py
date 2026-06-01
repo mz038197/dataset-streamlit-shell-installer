@@ -73,7 +73,7 @@ def overview() -> None:
         st.markdown(
             """
 1. 在「資料上傳與預覽」上傳或更換 CSV。
-2. 到「AI 協作整理流程」診斷 `working.csv`，請右側 Agent 一步一步整理資料。
+2. 到「AI 協作資料整理」診斷 `working.csv`，請右側 Agent 一步一步整理資料。
 3. 在「建立 Ready 分析就緒資料」產生 `ready.csv`。
 4. 後續學習頁面預設讀取 `ready.csv`。
 """
@@ -89,7 +89,7 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "1_Database.py"), title="資料上傳與預覽"),
         st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="通用圖表"),
     ],
-    "AI 協作整理流程": [
+    "AI 協作資料整理": [
         st.Page(str(SHELL_ROOT / "pages" / "3_Field_Quality.py"), title="欄位與資料概覽"),
         st.Page(str(SHELL_ROOT / "pages" / "4_Duplicates.py"), title="刪除重複資料列"),
         st.Page(str(SHELL_ROOT / "pages" / "5_Numeric_Diagnostics.py"), title="缺失值處理"),
@@ -97,13 +97,15 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "7_Categorical.py"), title="類別欄位整理"),
         st.Page(str(SHELL_ROOT / "pages" / "8_Encoding.py"), title="類別欄位編碼"),
         st.Page(str(SHELL_ROOT / "pages" / "9_Correlation.py"), title="數值相關性"),
+        st.Page(str(SHELL_ROOT / "pages" / "13_Feature_Scaling.py"), title="特徵縮放"),
         st.Page(str(SHELL_ROOT / "pages" / "8_Ready.py"), title="建立 Ready 分析就緒資料"),
-    ],
-    "統計推論": [
-        st.Page(str(SHELL_ROOT / "pages" / "9_Wald.py"), title="Wald 法"),
     ],
     "降維分析": [
         st.Page(str(SHELL_ROOT / "pages" / "10_PCA.py"), title="PCA 主成分分析"),
+    ],
+    "機器學習 · 非監督式": [
+        st.Page(str(SHELL_ROOT / "pages" / "11_Wards_Method.py"), title="Ward's Method（階層分群）"),
+        st.Page(str(SHELL_ROOT / "pages" / "12_KMeans.py"), title="K-Means 分群"),
     ],
 }
 

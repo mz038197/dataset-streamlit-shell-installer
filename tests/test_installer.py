@@ -97,9 +97,23 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
 
     assert calls == [
         (
-            ["uv", "add", "streamlit", "pandas", "matplotlib", "numpy"],
+            [
+                "uv",
+                "add",
+                "streamlit",
+                "pandas",
+                "matplotlib",
+                "numpy",
+                "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
+            ],
             tmp_path.resolve(),
             True,
         )
     ]
-    assert result.installed_dependencies == ("streamlit", "pandas", "matplotlib", "numpy")
+    assert result.installed_dependencies == (
+        "streamlit",
+        "pandas",
+        "matplotlib",
+        "numpy",
+        "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
+    )
