@@ -14,9 +14,12 @@ from typing import Any, Iterable
 import pandas as pd
 import streamlit as st
 from openai_tts import Settings, stream_tts_play
+from openai_tts.settings import MAX_TTS_SPEED, MIN_TTS_SPEED
+from dotenv import load_dotenv
 
 SHELL_ROOT = Path(__file__).parent
 PROJECT_ROOT = SHELL_ROOT.parent
+load_dotenv(PROJECT_ROOT / ".env")
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -310,7 +313,16 @@ def read_uploaded_csv(uploaded_file) -> pd.DataFrame:
 
 def dataset_context(df: pd.DataFrame | None) -> str:
     if df is None:
-        return "目前尚未載入 CSV 資料。"
+        source = _display_path(ORIGINAL_DATASET_PATH)
+        working = _display_path(WORKING_DATASET_PATH)
+        ready = _display_path(READY_DATASET_PATH)
+        return (
+            "目前尚未載入 CSV 資料。"
+            f"Original 原始資料路徑：{source}；Working 工作資料路徑：{working}；"
+            f"Ready 分析就緒資料路徑：{ready}。"
+            "若使用者詢問資料內容、清理、補值或欄位計算，請先提醒到「資料上傳與預覽」上傳 CSV。"
+            "若是一般概念、流程或工具使用問題，可直接回答。"
+        )
 
     columns = ", ".join(str(c) for c in df.columns)
     source = _display_path(ORIGINAL_DATASET_PATH)
@@ -565,9 +577,7 @@ def render_chat_panel(extra_context: str = "") -> None:
 
     df = load_working_dataset()
     if df is None:
-        st.caption("先在「資料上傳與預覽」頁上傳 CSV，右側 Agent 才能分析同一份資料。")
-        st.chat_input("詢問 Agent...", disabled=True, key="data_chat_disabled")
-        return
+        st.info("尚未上傳 CSV。你仍可啟用 Agent 詢問一般問題；要分析資料請先到「資料上傳與預覽」上傳。")
 
     sessions = _list_sessions()
     if "session_path" not in st.session_state and sessions:
@@ -578,7 +588,7 @@ def render_chat_panel(extra_context: str = "") -> None:
         st.session_state["data_chat_history"] = [
             (
                 "assistant",
-                "請先按「啟用資料 Agent」。啟用後，我可以協助分析目前上傳的 CSV。",
+                "請先按「啟用資料 Agent」。啟用後，我可以協助你理解資料整理流程；上傳 CSV 後也能一起分析工作資料。",
             )
         ]
 
@@ -655,7 +665,10 @@ def render_chat_panel(extra_context: str = "") -> None:
 
     with st.expander("技術資訊", expanded=False):
         st.caption(f"對話紀錄檔：`{current_session}`")
-        st.caption(f"Working 工作資料檔：`{_display_path(WORKING_DATASET_PATH)}`")
+        if df is not None:
+            st.caption(f"Working 工作資料檔：`{_display_path(WORKING_DATASET_PATH)}`")
+        else:
+            st.caption("Working 工作資料檔：尚未建立")
 
     default_tts_settings = Settings.from_env()
     voice_options = list(TTS_VOICE_OPTIONS)
@@ -676,6 +689,25 @@ def render_chat_panel(extra_context: str = "") -> None:
             index=default_voice_index,
             key="data_tts_voice",
             disabled=not tts_enabled,
+        )
+        tts_instructions = st.text_area(
+            "語氣指示 (TTS_INSTRUCTIONS)",
+            value=default_tts_settings.instructions,
+            key="data_tts_instructions",
+            height=100,
+            disabled=not tts_enabled,
+            help="控制 TTS 語氣、情感與說話風格。",
+        )
+        tts_speed = st.number_input(
+            "語速 (TTS_SPEED)",
+            min_value=MIN_TTS_SPEED,
+            max_value=MAX_TTS_SPEED,
+            value=default_tts_settings.speed if default_tts_settings.speed is not None else 1.0,
+            step=0.05,
+            format="%.2f",
+            key="data_tts_speed",
+            disabled=not tts_enabled,
+            help=f"1.0 為正常速度；範圍 {MIN_TTS_SPEED}～{MAX_TTS_SPEED}。",
         )
         st.caption("文字回答完成後才開始 TTS；語音錯誤不會影響文字顯示。")
 
@@ -731,7 +763,16 @@ def render_chat_panel(extra_context: str = "") -> None:
             with st.chat_message("assistant"):
                 placeholder = st.empty()
                 answer_parts: list[str] = []
-                tts_settings = replace(default_tts_settings, voice=tts_voice) if tts_enabled else None
+                tts_settings = (
+                    replace(
+                        default_tts_settings,
+                        voice=tts_voice,
+                        instructions=tts_instructions.strip(),
+                        speed=float(tts_speed),
+                    )
+                    if tts_enabled
+                    else None
+                )
 
                 def on_token(token: str) -> None:
                     answer_parts.append(token)
