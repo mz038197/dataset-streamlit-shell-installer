@@ -45,3 +45,4 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+.src/add_dataset_streamlit_shell/templates/dataset_streamlit_shell/scripts/
