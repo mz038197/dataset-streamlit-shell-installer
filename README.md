@@ -74,11 +74,14 @@ The file is created automatically with defaults when the panel opens. It uses th
 }
 ```
 
-Settings are loaded in this order:
+Student-facing TTS settings are loaded in this order:
 
 1. `dataset_streamlit_shell/workspace/user_settings.json`
-2. `.env` values read by `openai-tts` (`TTS_VOICE`, `TTS_INSTRUCTIONS`, `TTS_SPEED`)
-3. `openai-tts` built-in defaults
+2. `openai-tts` built-in defaults
+
+The visible UI defaults do not use `.env` values, so students only need to understand
+the settings file and the right-side panel. `.env` can still hold API keys or advanced
+runtime settings.
 
 Switching Streamlit pages reloads TTS preferences from `user_settings.json`.
 After manually editing that file, switch to another page and back, or restart the Streamlit session.

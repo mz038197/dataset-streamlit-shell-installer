@@ -8,13 +8,19 @@ from pathlib import Path
 
 
 class _FakeSettings:
-    voice = "nova"
-    instructions = "default instructions"
-    speed = None
+    def __init__(
+        self,
+        voice: str = "nova",
+        instructions: str = "default instructions",
+        speed: float | None = None,
+    ) -> None:
+        self.voice = voice
+        self.instructions = instructions
+        self.speed = speed
 
     @classmethod
     def from_env(cls):
-        return cls()
+        return cls(voice="onyx", instructions="env instructions", speed=1.5)
 
 
 def _load_data_ui_module(monkeypatch, tmp_path: Path):
