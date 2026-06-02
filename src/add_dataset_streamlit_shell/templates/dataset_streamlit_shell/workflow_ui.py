@@ -26,7 +26,7 @@ from dataset_streamlit_shell.data_ui import (
     render_dataset_metrics,
     reset_working_dataset_from_source,
 )
-from dataset_streamlit_shell.regression_model import (
+from dataset_streamlit_shell.ml.regression import (
     GradientDescentStep,
     LinearModelArtifact,
     apply_standard_scaler,

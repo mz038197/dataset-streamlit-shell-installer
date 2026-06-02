@@ -16,7 +16,7 @@ TEMPLATE_ROOT = (
 if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
-from dataset_streamlit_shell.regression_model import (
+from dataset_streamlit_shell.ml.regression import (
     LinearModelArtifact,
     apply_standard_scaler,
     compute_cost_j,
