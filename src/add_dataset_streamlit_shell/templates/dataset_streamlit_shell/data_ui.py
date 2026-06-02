@@ -238,7 +238,6 @@ def _render_tts_settings_ui(*, settings_error: str | None = None) -> None:
         voice_options.insert(0, current_voice)
 
     with st.expander("語音播放", expanded=False):
-        st.caption(f"語音設定檔：`{_display_path(USER_SETTINGS_PATH)}`")
         st.checkbox(
             "語音播放",
             key="data_tts_enabled",
