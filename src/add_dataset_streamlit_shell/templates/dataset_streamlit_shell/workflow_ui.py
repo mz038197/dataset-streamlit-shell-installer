@@ -5,12 +5,15 @@ from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import streamlit as st
+from sklearn.linear_model import LinearRegression
 
 from dataset_streamlit_shell.data_ui import (
     CLEANING_LOG_PATH,
     READY_DATASET_PATH,
+    SHELL_ROOT,
     WORKING_DATASET_PATH,
     _display_path,
     append_cleaning_log,
@@ -22,6 +25,13 @@ from dataset_streamlit_shell.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
     reset_working_dataset_from_source,
+)
+from dataset_streamlit_shell.regression_model import (
+    LinearModelArtifact,
+    apply_standard_scaler,
+    compute_cost_j,
+    create_standard_scaler,
+    save_model_artifact,
 )
 
 
@@ -1263,4 +1273,342 @@ def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.Da
         render_main(df)
     with side:
         render_chat_panel(page_name=title)
+
+
+REGRESSION_DEMO_DIR = SHELL_ROOT / "built-in-data" / "regression"
+REGRESSION_MODEL_DIR = SHELL_ROOT / "workspace" / "models" / "regression"
+RESTAURANT_PROFIT_PATH = REGRESSION_DEMO_DIR / "restaurant_profit.csv"
+HOUSE_PRICES_PATH = REGRESSION_DEMO_DIR / "house_prices.csv"
+
+
+def render_simple_linear_regression_page() -> None:
+    def body(df: pd.DataFrame, source_label: str) -> None:
+        st.markdown("##### 單變量線性回歸")
+        st.info(
+            "本頁專注在教材的第一個回歸模型：用一個 feature 預測一個連續 target，"
+            "觀察回歸線、預測誤差與成本函數 J(w,b)。"
+        )
+        numeric_columns = _numeric_regression_columns(df)
+        if len(numeric_columns) < 2:
+            st.warning("單變量線性回歸至少需要 2 個數值欄位：1 個 feature 與 1 個 target。")
+            return
+
+        default_feature = _default_column(numeric_columns, "城市人口_萬人")
+        default_target = _default_column(numeric_columns, "餐廳獲利_萬美元", exclude={default_feature})
+        c1, c2 = st.columns(2)
+        feature = c1.selectbox(
+            "選擇 feature（x）",
+            numeric_columns,
+            index=numeric_columns.index(default_feature),
+            key="simple_regression_feature",
+        )
+        target_options = [column for column in numeric_columns if column != feature]
+        target = c2.selectbox(
+            "選擇 target（y）",
+            target_options,
+            index=target_options.index(default_target) if default_target in target_options else 0,
+            key="simple_regression_target",
+        )
+
+        working = _regression_training_frame(df, [feature], target)
+        if len(working) < 2:
+            st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
+            return
+
+        model = LinearRegression()
+        model.fit(working[[feature]], working[target])
+        prediction = pd.Series(model.predict(working[[feature]]), index=working.index)
+        cost = compute_cost_j(working[target], prediction)
+
+        weight = float(model.coef_[0])
+        intercept = float(model.intercept_)
+        st.markdown("##### 模型公式")
+        st.latex(r"f_{w,b}(x) = wx + b")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("w", f"{weight:.4f}")
+        c2.metric("b", f"{intercept:.4f}")
+        c3.metric("Cost J", f"{cost:.4f}")
+        _render_cost_formula()
+
+        _render_simple_regression_plot(working, feature, target, model)
+        _render_prediction_error_table(working, target, prediction)
+        _render_save_model_button(
+            artifact=LinearModelArtifact(
+                model_kind="simple_linear_regression",
+                features=[feature],
+                target=target,
+                weights=[weight],
+                intercept=intercept,
+                scaler=None,
+                training_cost=cost,
+                data_source=source_label,
+            ),
+            filename_prefix="simple_linear_regression",
+        )
+        _render_regression_prompts(
+            [
+                "請解釋這條回歸線代表什麼，並用 w 和 b 說明模型公式。",
+                "請用 Cost J 說明這個模型目前預測得好不好。",
+                "請找出誤差最大的幾筆資料，推測可能原因。",
+            ]
+        )
+
+    _regression_page_shell(
+        "單變量線性回歸",
+        "使用內建餐廳獲利資料或目前 ready.csv，觀察一條回歸線如何擬合資料。",
+        "內建範例資料：城市人口與餐廳獲利",
+        RESTAURANT_PROFIT_PATH,
+        body,
+    )
+
+
+def render_multiple_linear_regression_page() -> None:
+    def body(df: pd.DataFrame, source_label: str) -> None:
+        st.markdown("##### 多變量線性回歸")
+        st.info(
+            "本頁使用多個數值 features 預測一個連續 target。"
+            "features 會自動做 Z-score 特徵縮放，模型 JSON 也會保存縮放參數供 inference 使用。"
+        )
+        numeric_columns = _numeric_regression_columns(df)
+        if len(numeric_columns) < 3:
+            st.warning("多變量線性回歸至少需要 2 個數值 features 與 1 個 target。")
+            return
+
+        default_features = [
+            column
+            for column in ["面積_平方英尺", "房間數", "樓層數", "屋齡_年"]
+            if column in numeric_columns
+        ]
+        if not default_features:
+            default_features = numeric_columns[: min(4, len(numeric_columns) - 1)]
+        default_target = _default_column(numeric_columns, "房價_千美元", exclude=set(default_features))
+
+        target = st.selectbox(
+            "選擇 target（y）",
+            numeric_columns,
+            index=numeric_columns.index(default_target),
+            key="multiple_regression_target",
+        )
+        feature_options = [column for column in numeric_columns if column != target]
+        selected_features = st.multiselect(
+            "選擇 features（x1, x2, ...）",
+            feature_options,
+            default=[feature for feature in default_features if feature in feature_options],
+            key="multiple_regression_features",
+        )
+        if len(selected_features) < 2:
+            st.warning("請至少選擇 2 個 features。")
+            return
+
+        working = _regression_training_frame(df, selected_features, target)
+        if len(working) < 2:
+            st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
+            return
+
+        try:
+            scaler = create_standard_scaler(working, selected_features)
+        except ValueError as exc:
+            st.warning(f"無法自動縮放：{exc}")
+            return
+        scaled_features = apply_standard_scaler(working, scaler)
+
+        model = LinearRegression()
+        model.fit(scaled_features, working[target])
+        prediction = pd.Series(model.predict(scaled_features), index=working.index)
+        cost = compute_cost_j(working[target], prediction)
+
+        st.markdown("##### 模型公式")
+        st.latex(r"f_{\mathbf{w},b}(\mathbf{x}) = w_1x_1 + w_2x_2 + ... + b")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("features", f"{len(selected_features):,}")
+        c2.metric("b", f"{float(model.intercept_):.4f}")
+        c3.metric("Cost J", f"{cost:.4f}")
+        _render_cost_formula()
+        st.caption("此處的 w 對應 Z-score 縮放後的 features；保存模型時會一併保存 mean 與 scale。")
+        weights = pd.DataFrame(
+            {
+                "feature": selected_features,
+                "w": [float(value) for value in model.coef_],
+            }
+        )
+        st.dataframe(weights, use_container_width=True, hide_index=True)
+
+        _render_actual_prediction_plot(working[target], prediction, target)
+        _render_prediction_error_table(working, target, prediction)
+        _render_feature_target_overview(working, selected_features, target)
+        _render_save_model_button(
+            artifact=LinearModelArtifact(
+                model_kind="multiple_linear_regression",
+                features=selected_features,
+                target=target,
+                weights=[float(value) for value in model.coef_],
+                intercept=float(model.intercept_),
+                scaler=scaler,
+                training_cost=cost,
+                data_source=source_label,
+            ),
+            filename_prefix="multiple_linear_regression",
+        )
+        _render_regression_prompts(
+            [
+                "請解釋每個 w 的正負方向，以及它和 target 的關係。",
+                "請說明為什麼多變量線性回歸常需要特徵縮放。",
+                "請找出預測誤差最大的資料列，並說明可能原因。",
+            ]
+        )
+
+    _regression_page_shell(
+        "多變量線性回歸",
+        "使用內建房價資料或目前 ready.csv，觀察多個 features 如何共同預測 target。",
+        "內建範例資料：房價預測",
+        HOUSE_PRICES_PATH,
+        body,
+    )
+
+
+def _regression_page_shell(
+    title: str,
+    caption: str,
+    builtin_label: str,
+    builtin_path: Path,
+    render_main: Callable[[pd.DataFrame, str], None],
+) -> None:
+    main, side = st.columns([5, 3], gap="large")
+    with main:
+        st.title(title)
+        st.caption(caption)
+        source = st.radio(
+            "資料來源",
+            ["內建範例資料", "目前 ready.csv"],
+            horizontal=True,
+            key=f"{title}_data_source",
+        )
+        if source == "內建範例資料":
+            df = pd.read_csv(builtin_path)
+            source_label = builtin_label
+            st.success(
+                "目前使用本頁內建教學資料。資料已整理完成，目的是專注理解演算法。"
+            )
+        else:
+            df = load_ready_dataset()
+            source_label = f"目前 ready.csv：{_display_path(READY_DATASET_PATH)}"
+            if df is None:
+                st.warning("尚未建立 Ready 分析就緒資料。請先建立 ready.csv，或改用內建範例資料。")
+                return
+            st.info(f"目前使用 `{_display_path(READY_DATASET_PATH)}`。")
+        render_dataset_metrics(df)
+        render_main(df, source_label)
+    with side:
+        render_chat_panel(
+            extra_context=f"目前頁面：{title}。資料來源：{source if 'source' in locals() else '未選擇'}。",
+            page_name=title,
+        )
+
+
+def _numeric_regression_columns(df: pd.DataFrame) -> list[str]:
+    return [str(column) for column in df.select_dtypes(include="number").columns]
+
+
+def _default_column(columns: list[str], preferred: str, *, exclude: set[str] | None = None) -> str:
+    exclude = exclude or set()
+    if preferred in columns and preferred not in exclude:
+        return preferred
+    for column in columns:
+        if column not in exclude:
+            return column
+    return columns[0]
+
+
+def _regression_training_frame(
+    df: pd.DataFrame,
+    features: list[str],
+    target: str,
+) -> pd.DataFrame:
+    columns = features + [target]
+    working = df[columns].apply(pd.to_numeric, errors="coerce").dropna()
+    return working
+
+
+def _render_cost_formula() -> None:
+    with st.expander("成本函數 J(w,b)", expanded=False):
+        st.latex(r"J(w,b) = \frac{1}{2m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})^2")
+        st.caption("本頁以教材中的 Cost J 作為主要指標；Cost 越小，代表整體平方誤差越小。")
+
+
+def _render_simple_regression_plot(
+    frame: pd.DataFrame,
+    feature: str,
+    target: str,
+    model: LinearRegression,
+) -> None:
+    x_values = frame[feature]
+    line_x = np.linspace(float(x_values.min()), float(x_values.max()), 100)
+    line_y = model.predict(pd.DataFrame({feature: line_x}))
+    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    ax.scatter(frame[feature], frame[target], alpha=0.75, label="資料點")
+    ax.plot(line_x, line_y, color="red", label="回歸線")
+    ax.set_xlabel(feature)
+    ax.set_ylabel(target)
+    ax.set_title("資料點與回歸線")
+    ax.legend()
+    st.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
+
+def _render_actual_prediction_plot(actual: pd.Series, prediction: pd.Series, target: str) -> None:
+    fig, ax = plt.subplots(figsize=(6.6, 5.2), constrained_layout=True)
+    ax.scatter(actual, prediction, alpha=0.75)
+    lower = float(min(actual.min(), prediction.min()))
+    upper = float(max(actual.max(), prediction.max()))
+    ax.plot([lower, upper], [lower, upper], color="red", linestyle="--", label="完全預測正確")
+    ax.set_xlabel(f"實際 {target}")
+    ax.set_ylabel(f"預測 {target}")
+    ax.set_title("實際值 vs 預測值")
+    ax.legend()
+    st.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
+
+def _render_prediction_error_table(
+    frame: pd.DataFrame,
+    target: str,
+    prediction: pd.Series,
+) -> None:
+    error = prediction - frame[target]
+    result = pd.DataFrame(
+        {
+            "actual": frame[target],
+            "prediction": prediction,
+            "error": error,
+            "squared_error": error**2,
+        }
+    )
+    st.markdown("##### 預測與誤差")
+    st.dataframe(result.head(30).style.format("{:.4f}"), use_container_width=True)
+
+
+def _render_feature_target_overview(
+    frame: pd.DataFrame,
+    features: list[str],
+    target: str,
+) -> None:
+    with st.expander("features 與 target 關係預覽", expanded=False):
+        for feature in features[:4]:
+            chart_frame = frame[[feature, target]].rename(columns={feature: "feature", target: "target"})
+            st.caption(f"`{feature}` vs `{target}`")
+            st.scatter_chart(chart_frame, x="feature", y="target")
+
+
+def _render_save_model_button(artifact: LinearModelArtifact, filename_prefix: str) -> None:
+    if st.button("保存模型 JSON", type="primary", use_container_width=True, key=f"save_{filename_prefix}"):
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = REGRESSION_MODEL_DIR / f"{filename_prefix}_{stamp}.json"
+        save_model_artifact(artifact, path)
+        st.success(f"已保存模型：`{_display_path(path)}`")
+
+
+def _render_regression_prompts(prompts: list[str]) -> None:
+    st.markdown("##### 建議問 Agent")
+    for prompt in prompts:
+        st.code(prompt, language="text")
 
