@@ -106,7 +106,6 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
                 "pandas",
                 "matplotlib",
                 "numpy",
-                "scikit-learn",
                 "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
             ],
             tmp_path.resolve(),
@@ -118,6 +117,5 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
         "pandas",
         "matplotlib",
         "numpy",
-        "scikit-learn",
         "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
     )

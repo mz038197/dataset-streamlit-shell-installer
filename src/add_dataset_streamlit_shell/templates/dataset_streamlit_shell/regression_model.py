@@ -24,6 +24,14 @@ class LinearModelArtifact:
     created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 
+@dataclass(frozen=True)
+class GradientDescentStep:
+    iteration: int
+    weights: list[float]
+    intercept: float
+    cost: float
+
+
 def compute_cost_j(actual: pd.Series | np.ndarray, prediction: pd.Series | np.ndarray) -> float:
     actual_array = np.asarray(actual, dtype=float)
     prediction_array = np.asarray(prediction, dtype=float)
@@ -33,6 +41,77 @@ def compute_cost_j(actual: pd.Series | np.ndarray, prediction: pd.Series | np.nd
         raise ValueError("actual and prediction must not be empty")
     errors = prediction_array - actual_array
     return float(np.sum(errors**2) / (2 * actual_array.size))
+
+
+def predict_with_parameters(
+    feature_frame: pd.DataFrame | np.ndarray,
+    weights: list[float] | np.ndarray,
+    intercept: float,
+) -> pd.Series:
+    values = np.asarray(feature_frame, dtype=float)
+    weight_array = np.asarray(weights, dtype=float)
+    predictions = values @ weight_array + float(intercept)
+    index = feature_frame.index if isinstance(feature_frame, pd.DataFrame) else None
+    return pd.Series(predictions, index=index, name="prediction")
+
+
+def gradient_descent_steps(
+    feature_frame: pd.DataFrame,
+    target: pd.Series,
+    *,
+    learning_rate: float,
+    epochs: int,
+    initial_weights: list[float] | None = None,
+    initial_intercept: float = 0.0,
+) -> list[GradientDescentStep]:
+    if epochs < 1:
+        raise ValueError("epochs must be at least 1")
+    if learning_rate <= 0:
+        raise ValueError("learning_rate must be greater than 0")
+
+    x = feature_frame.to_numpy(dtype=float)
+    y = np.asarray(target, dtype=float)
+    if x.ndim != 2 or x.shape[0] == 0:
+        raise ValueError("feature_frame must contain at least one row")
+    if x.shape[0] != y.shape[0]:
+        raise ValueError("feature_frame and target must have the same row count")
+
+    weights = (
+        np.zeros(x.shape[1], dtype=float)
+        if initial_weights is None
+        else np.asarray(initial_weights, dtype=float)
+    )
+    if weights.shape != (x.shape[1],):
+        raise ValueError("initial_weights must match feature count")
+    intercept = float(initial_intercept)
+
+    steps = [_gradient_step_snapshot(0, x, y, weights, intercept)]
+    m = float(x.shape[0])
+    for iteration in range(1, epochs + 1):
+        prediction = x @ weights + intercept
+        error = prediction - y
+        dj_dw = (x.T @ error) / m
+        dj_db = float(np.sum(error) / m)
+        weights = weights - learning_rate * dj_dw
+        intercept = intercept - learning_rate * dj_db
+        steps.append(_gradient_step_snapshot(iteration, x, y, weights, intercept))
+    return steps
+
+
+def _gradient_step_snapshot(
+    iteration: int,
+    x: np.ndarray,
+    y: np.ndarray,
+    weights: np.ndarray,
+    intercept: float,
+) -> GradientDescentStep:
+    prediction = x @ weights + intercept
+    return GradientDescentStep(
+        iteration=iteration,
+        weights=[float(weight) for weight in weights],
+        intercept=float(intercept),
+        cost=compute_cost_j(y, prediction),
+    )
 
 
 def create_standard_scaler(frame: pd.DataFrame, features: list[str]) -> dict[str, Any]:

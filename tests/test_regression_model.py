@@ -21,7 +21,9 @@ from dataset_streamlit_shell.regression_model import (
     apply_standard_scaler,
     compute_cost_j,
     create_standard_scaler,
+    gradient_descent_steps,
     load_model_artifact,
+    predict_with_parameters,
     predict_from_artifact,
     save_model_artifact,
 )
@@ -80,3 +82,30 @@ def test_model_artifact_json_can_be_loaded_for_inference(tmp_path: Path) -> None
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["schema_version"] == 1
     assert payload["features"] == ["面積_平方英尺", "房間數"]
+
+
+def test_gradient_descent_steps_reduce_cost_for_simple_regression() -> None:
+    frame = pd.DataFrame({"x": [0.0, 1.0, 2.0, 3.0], "y": [1.0, 3.0, 5.0, 7.0]})
+
+    steps = list(
+        gradient_descent_steps(
+            frame[["x"]],
+            frame["y"],
+            learning_rate=0.1,
+            epochs=80,
+        )
+    )
+
+    assert steps[0].iteration == 0
+    assert steps[-1].iteration == 80
+    assert steps[-1].cost < steps[0].cost
+    np.testing.assert_allclose(steps[-1].weights, [2.0], atol=0.2)
+    assert abs(steps[-1].intercept - 1.0) < 0.4
+
+
+def test_predict_with_parameters_uses_weight_order() -> None:
+    frame = pd.DataFrame({"x1": [1.0, 2.0], "x2": [10.0, 20.0]})
+
+    prediction = predict_with_parameters(frame, weights=[2.0, 0.5], intercept=3.0)
+
+    assert prediction.tolist() == [10.0, 17.0]

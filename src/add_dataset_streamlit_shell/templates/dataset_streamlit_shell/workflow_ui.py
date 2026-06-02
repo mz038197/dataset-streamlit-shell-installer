@@ -3,12 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
-from sklearn.linear_model import LinearRegression
 
 from dataset_streamlit_shell.data_ui import (
     CLEANING_LOG_PATH,
@@ -27,10 +27,13 @@ from dataset_streamlit_shell.data_ui import (
     reset_working_dataset_from_source,
 )
 from dataset_streamlit_shell.regression_model import (
+    GradientDescentStep,
     LinearModelArtifact,
     apply_standard_scaler,
-    compute_cost_j,
     create_standard_scaler,
+    gradient_descent_steps,
+    predict_from_artifact,
+    predict_with_parameters,
     save_model_artifact,
 )
 
@@ -1315,25 +1318,87 @@ def render_simple_linear_regression_page() -> None:
             st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
             return
 
-        model = LinearRegression()
-        model.fit(working[[feature]], working[target])
-        prediction = pd.Series(model.predict(working[[feature]]), index=working.index)
-        cost = compute_cost_j(working[target], prediction)
+        _render_regression_data_intro(
+            working,
+            features=[feature],
+            target=target,
+            dataset_note="每一列是一個城市市場：x 是城市人口，y 是餐廳獲利。目標是找出一條直線來描述兩者關係。",
+        )
 
-        weight = float(model.coef_[0])
-        intercept = float(model.intercept_)
+        st.markdown("##### 訓練設定")
+        c1, c2 = st.columns(2)
+        learning_rate = c1.number_input(
+            "學習率 α",
+            min_value=0.0001,
+            max_value=1.0,
+            value=0.01,
+            step=0.001,
+            format="%.4f",
+            key="simple_regression_learning_rate",
+        )
+        epochs = c2.number_input(
+            "Epoch / 迭代次數",
+            min_value=1,
+            max_value=5000,
+            value=1500,
+            step=100,
+            key="simple_regression_epochs",
+        )
         st.markdown("##### 模型公式")
-        st.latex(r"f_{w,b}(x) = wx + b")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("w", f"{weight:.4f}")
-        c2.metric("b", f"{intercept:.4f}")
-        c3.metric("Cost J", f"{cost:.4f}")
+        st.latex(r"Y = WX + B")
         _render_cost_formula()
 
-        _render_simple_regression_plot(working, feature, target, model)
-        _render_prediction_error_table(working, target, prediction)
-        _render_save_model_button(
-            artifact=LinearModelArtifact(
+        result_key = "simple_regression_last_artifact"
+        signature = (source_label, feature, target, float(learning_rate), int(epochs), len(working))
+        train_clicked = st.button(
+            "開始訓練",
+            type="primary",
+            use_container_width=True,
+            key="train_simple_regression",
+        )
+        if not train_clicked:
+            stored = st.session_state.get(result_key)
+            if isinstance(stored, dict) and stored.get("signature") == signature:
+                artifact = stored["artifact"]
+                prediction = predict_from_artifact(artifact, working[artifact.features])
+                weight = float(artifact.weights[0])
+                intercept = float(artifact.intercept)
+                cost = float(artifact.training_cost)
+                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+            else:
+                st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察回歸線與 Cost 的演進。")
+                return
+        else:
+            steps = gradient_descent_steps(
+                working[[feature]],
+                working[target],
+                learning_rate=float(learning_rate),
+                epochs=int(epochs),
+            )
+            chart_left, chart_right = st.columns(2)
+            line_placeholder = chart_left.empty()
+            cost_placeholder = chart_right.empty()
+            status_placeholder = st.empty()
+            _animate_simple_gradient_descent(
+                working,
+                feature,
+                target,
+                steps,
+                line_placeholder,
+                cost_placeholder,
+                status_placeholder,
+            )
+
+            final_step = steps[-1]
+            prediction = predict_with_parameters(
+                working[[feature]],
+                final_step.weights,
+                final_step.intercept,
+            )
+            weight = float(final_step.weights[0])
+            intercept = float(final_step.intercept)
+            cost = float(final_step.cost)
+            artifact = LinearModelArtifact(
                 model_kind="simple_linear_regression",
                 features=[feature],
                 target=target,
@@ -1342,7 +1407,20 @@ def render_simple_linear_regression_page() -> None:
                 scaler=None,
                 training_cost=cost,
                 data_source=source_label,
-            ),
+            )
+            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+
+        if not train_clicked and "artifact" not in locals():
+            st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察回歸線與 Cost 的演進。")
+            return
+        c1, c2, c3 = st.columns(3)
+        c1.metric("最後 W", f"{weight:.4f}")
+        c2.metric("最後 B", f"{intercept:.4f}")
+        c3.metric("最後 Cost J", f"{cost:.4f}")
+
+        _render_prediction_error_table(working, target, prediction)
+        _render_save_model_button(
+            artifact=artifact,
             filename_prefix="simple_linear_regression",
         )
         _render_regression_prompts(
@@ -1412,41 +1490,119 @@ def render_multiple_linear_regression_page() -> None:
             return
         scaled_features = apply_standard_scaler(working, scaler)
 
-        model = LinearRegression()
-        model.fit(scaled_features, working[target])
-        prediction = pd.Series(model.predict(scaled_features), index=working.index)
-        cost = compute_cost_j(working[target], prediction)
+        _render_regression_data_intro(
+            working,
+            features=selected_features,
+            target=target,
+            dataset_note="每一列是一間房屋：多個 x features 共同預測房價 y。features 會先做 Z-score 縮放，再進行梯度下降。",
+        )
+
+        st.markdown("##### 訓練設定")
+        c1, c2 = st.columns(2)
+        learning_rate = c1.number_input(
+            "學習率 α",
+            min_value=0.0001,
+            max_value=1.0,
+            value=0.1,
+            step=0.001,
+            format="%.4f",
+            key="multiple_regression_learning_rate",
+        )
+        epochs = c2.number_input(
+            "Epoch / 迭代次數",
+            min_value=1,
+            max_value=5000,
+            value=1000,
+            step=100,
+            key="multiple_regression_epochs",
+        )
 
         st.markdown("##### 模型公式")
         st.latex(r"f_{\mathbf{w},b}(\mathbf{x}) = w_1x_1 + w_2x_2 + ... + b")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("features", f"{len(selected_features):,}")
-        c2.metric("b", f"{float(model.intercept_):.4f}")
-        c3.metric("Cost J", f"{cost:.4f}")
         _render_cost_formula()
         st.caption("此處的 w 對應 Z-score 縮放後的 features；保存模型時會一併保存 mean 與 scale。")
+
+        result_key = "multiple_regression_last_artifact"
+        signature = (
+            source_label,
+            tuple(selected_features),
+            target,
+            float(learning_rate),
+            int(epochs),
+            len(working),
+        )
+        train_clicked = st.button(
+            "開始訓練",
+            type="primary",
+            use_container_width=True,
+            key="train_multiple_regression",
+        )
+        if not train_clicked:
+            stored = st.session_state.get(result_key)
+            if isinstance(stored, dict) and stored.get("signature") == signature:
+                artifact = stored["artifact"]
+                prediction = predict_from_artifact(artifact, working[artifact.features])
+                cost = float(artifact.training_cost)
+                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+            else:
+                st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察預測值與 Cost 的演進。")
+                return
+        else:
+            steps = gradient_descent_steps(
+                scaled_features,
+                working[target],
+                learning_rate=float(learning_rate),
+                epochs=int(epochs),
+            )
+            chart_left, chart_right = st.columns(2)
+            prediction_placeholder = chart_left.empty()
+            cost_placeholder = chart_right.empty()
+            status_placeholder = st.empty()
+            _animate_multiple_gradient_descent(
+                scaled_features,
+                working[target],
+                target,
+                steps,
+                prediction_placeholder,
+                cost_placeholder,
+                status_placeholder,
+            )
+
+            final_step = steps[-1]
+            prediction = predict_with_parameters(
+                scaled_features,
+                final_step.weights,
+                final_step.intercept,
+            )
+            cost = float(final_step.cost)
+            artifact = LinearModelArtifact(
+                model_kind="multiple_linear_regression",
+                features=selected_features,
+                target=target,
+                weights=[float(value) for value in final_step.weights],
+                intercept=float(final_step.intercept),
+                scaler=scaler,
+                training_cost=cost,
+                data_source=source_label,
+            )
+            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("features", f"{len(selected_features):,}")
+        c2.metric("最後 B", f"{float(artifact.intercept):.4f}")
+        c3.metric("Cost J", f"{cost:.4f}")
         weights = pd.DataFrame(
             {
                 "feature": selected_features,
-                "w": [float(value) for value in model.coef_],
+                "w": [float(value) for value in artifact.weights],
             }
         )
         st.dataframe(weights, use_container_width=True, hide_index=True)
 
-        _render_actual_prediction_plot(working[target], prediction, target)
         _render_prediction_error_table(working, target, prediction)
         _render_feature_target_overview(working, selected_features, target)
         _render_save_model_button(
-            artifact=LinearModelArtifact(
-                model_kind="multiple_linear_regression",
-                features=selected_features,
-                target=target,
-                weights=[float(value) for value in model.coef_],
-                intercept=float(model.intercept_),
-                scaler=scaler,
-                training_cost=cost,
-                data_source=source_label,
-            ),
+            artifact=artifact,
             filename_prefix="multiple_linear_regression",
         )
         _render_regression_prompts(
@@ -1535,27 +1691,128 @@ def _render_cost_formula() -> None:
         st.caption("本頁以教材中的 Cost J 作為主要指標；Cost 越小，代表整體平方誤差越小。")
 
 
-def _render_simple_regression_plot(
+def _render_regression_data_intro(
+    frame: pd.DataFrame,
+    *,
+    features: list[str],
+    target: str,
+    dataset_note: str,
+) -> None:
+    st.markdown("##### Data 資訊")
+    st.info(dataset_note)
+    role_rows = []
+    for column in features + [target]:
+        series = pd.to_numeric(frame[column], errors="coerce")
+        role_rows.append(
+            {
+                "欄位": column,
+                "角色": "target（y）" if column == target else "feature（x）",
+                "資料型態": str(frame[column].dtype),
+                "缺失值": int(frame[column].isna().sum()),
+                "最小值": float(series.min()),
+                "最大值": float(series.max()),
+                "平均值": float(series.mean()),
+            }
+        )
+    st.dataframe(
+        pd.DataFrame(role_rows).style.format(
+            {"最小值": "{:.4f}", "最大值": "{:.4f}", "平均值": "{:.4f}"}
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
+    with st.expander("資料預覽", expanded=True):
+        st.dataframe(frame[features + [target]].head(10), use_container_width=True, hide_index=True)
+
+
+def _animate_simple_gradient_descent(
     frame: pd.DataFrame,
     feature: str,
     target: str,
-    model: LinearRegression,
+    steps: list[GradientDescentStep],
+    line_placeholder,
+    cost_placeholder,
+    status_placeholder,
+) -> None:
+    rendered_steps = _animation_steps(steps)
+    for step in rendered_steps:
+        _render_simple_step_plot(frame, feature, target, step, line_placeholder)
+        _render_cost_history_plot(steps[: step.iteration + 1], cost_placeholder)
+        status_placeholder.caption(
+            f"Iteration {step.iteration:,} / {steps[-1].iteration:,}，"
+            f"W = {step.weights[0]:.4f}，B = {step.intercept:.4f}，Cost J = {step.cost:.4f}"
+        )
+        time.sleep(0.02)
+
+
+def _animate_multiple_gradient_descent(
+    scaled_features: pd.DataFrame,
+    actual: pd.Series,
+    target: str,
+    steps: list[GradientDescentStep],
+    prediction_placeholder,
+    cost_placeholder,
+    status_placeholder,
+) -> None:
+    rendered_steps = _animation_steps(steps)
+    for step in rendered_steps:
+        prediction = predict_with_parameters(scaled_features, step.weights, step.intercept)
+        _render_actual_prediction_plot(actual, prediction, target, prediction_placeholder)
+        _render_cost_history_plot(steps[: step.iteration + 1], cost_placeholder)
+        status_placeholder.caption(
+            f"Iteration {step.iteration:,} / {steps[-1].iteration:,}，"
+            f"B = {step.intercept:.4f}，Cost J = {step.cost:.4f}"
+        )
+        time.sleep(0.02)
+
+
+def _animation_steps(steps: list[GradientDescentStep]) -> list[GradientDescentStep]:
+    if len(steps) <= 80:
+        return steps
+    stride = max(len(steps) // 80, 1)
+    selected = steps[::stride]
+    if selected[-1] != steps[-1]:
+        selected.append(steps[-1])
+    return selected
+
+
+def _render_simple_step_plot(
+    frame: pd.DataFrame,
+    feature: str,
+    target: str,
+    step: GradientDescentStep,
+    placeholder,
 ) -> None:
     x_values = frame[feature]
     line_x = np.linspace(float(x_values.min()), float(x_values.max()), 100)
-    line_y = model.predict(pd.DataFrame({feature: line_x}))
+    line_y = line_x * step.weights[0] + step.intercept
     fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
     ax.scatter(frame[feature], frame[target], alpha=0.75, label="資料點")
     ax.plot(line_x, line_y, color="red", label="回歸線")
     ax.set_xlabel(feature)
     ax.set_ylabel(target)
-    ax.set_title("資料點與回歸線")
+    ax.set_title(f"Y = WX + B 演進（iteration {step.iteration}）")
     ax.legend()
-    st.pyplot(fig, clear_figure=True)
+    placeholder.pyplot(fig, clear_figure=True)
     plt.close(fig)
 
 
-def _render_actual_prediction_plot(actual: pd.Series, prediction: pd.Series, target: str) -> None:
+def _render_cost_history_plot(steps: list[GradientDescentStep], placeholder) -> None:
+    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    ax.plot([step.iteration for step in steps], [step.cost for step in steps], color="orange")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Cost J")
+    ax.set_title("Cost vs Iteration")
+    placeholder.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
+
+def _render_actual_prediction_plot(
+    actual: pd.Series,
+    prediction: pd.Series,
+    target: str,
+    placeholder,
+) -> None:
     fig, ax = plt.subplots(figsize=(6.6, 5.2), constrained_layout=True)
     ax.scatter(actual, prediction, alpha=0.75)
     lower = float(min(actual.min(), prediction.min()))
@@ -1565,7 +1822,7 @@ def _render_actual_prediction_plot(actual: pd.Series, prediction: pd.Series, tar
     ax.set_ylabel(f"預測 {target}")
     ax.set_title("實際值 vs 預測值")
     ax.legend()
-    st.pyplot(fig, clear_figure=True)
+    placeholder.pyplot(fig, clear_figure=True)
     plt.close(fig)
 
 

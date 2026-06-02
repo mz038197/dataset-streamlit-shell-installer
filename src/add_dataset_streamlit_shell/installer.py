@@ -14,7 +14,6 @@ PROJECT_DEPENDENCIES = (
     "pandas",
     "matplotlib",
     "numpy",
-    "scikit-learn",
     "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
 )
 DependencyRunner = Callable[[list[str]], None]
