@@ -146,20 +146,27 @@ def _normalize_tts_preferences(
     }
 
 
-def _load_user_settings() -> dict[str, object]:
+def _read_user_settings() -> tuple[dict[str, object], bool]:
     defaults = _default_tts_preferences()
     if not USER_SETTINGS_PATH.exists():
-        return defaults
+        return defaults, True
 
     try:
         with USER_SETTINGS_PATH.open(encoding="utf-8") as f:
             raw = json.load(f)
     except (OSError, json.JSONDecodeError):
-        return defaults
+        return defaults, True
 
     if not isinstance(raw, dict):
-        return defaults
-    return _normalize_tts_preferences(raw, defaults)
+        return defaults, True
+
+    normalized = _normalize_tts_preferences(raw, defaults)
+    return normalized, raw != normalized
+
+
+def _load_user_settings() -> dict[str, object]:
+    prefs, _needs_repair = _read_user_settings()
+    return prefs
 
 
 def _save_user_settings(settings: dict[str, object]) -> str | None:
@@ -176,9 +183,10 @@ def _save_user_settings(settings: dict[str, object]) -> str | None:
 
 
 def _ensure_user_settings_file() -> str | None:
-    if USER_SETTINGS_PATH.exists():
+    prefs, needs_repair = _read_user_settings()
+    if not needs_repair:
         return None
-    return _save_user_settings(_default_tts_preferences())
+    return _save_user_settings(prefs)
 
 
 def _should_reload_tts_for_page(last_page: str | None, page_name: str) -> bool:
@@ -187,13 +195,16 @@ def _should_reload_tts_for_page(last_page: str | None, page_name: str) -> bool:
 
 def _sync_tts_preferences_for_page(page_name: str) -> str | None:
     settings_error = _ensure_user_settings_file()
-    last_page = st.session_state.get("_data_tts_page_name")
-    if not _should_reload_tts_for_page(last_page, page_name):
+    if settings_error is not None:
         return settings_error
+
+    persist_error = _persist_tts_preferences_if_changed()
+    if persist_error is not None:
+        return persist_error
 
     _reload_tts_preferences_from_file()
     st.session_state["_data_tts_page_name"] = page_name
-    return settings_error
+    return None
 
 
 def _reload_tts_preferences_from_file() -> None:
@@ -206,6 +217,15 @@ def _reload_tts_preferences_from_file() -> None:
 
 
 def _persist_tts_preferences_if_changed() -> str | None:
+    required_keys = {
+        "data_tts_enabled",
+        "data_tts_voice",
+        "data_tts_instructions",
+        "data_tts_speed",
+    }
+    if not required_keys.issubset(st.session_state):
+        return None
+
     current = {
         "tts_enabled": bool(st.session_state.get("data_tts_enabled", False)),
         "tts_voice": str(st.session_state.get("data_tts_voice", "")),
@@ -214,6 +234,8 @@ def _persist_tts_preferences_if_changed() -> str | None:
     }
     normalized = _normalize_tts_preferences(current, _default_tts_preferences())
     previous = st.session_state.get("_data_user_settings_snapshot")
+    if previous is None:
+        return None
     if previous == normalized:
         return None
 
