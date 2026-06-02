@@ -87,7 +87,7 @@ def _install_dependencies(
 
 def _update_existing(target: Path, template_path: Path) -> None:
     for child in target.iterdir():
-        if child.name in {"data", "sessions", "scripts", "uploads"}:
+        if child.name in {"workspace", "sessions", "scripts", "uploads"}:
             continue
         if child.is_dir():
             shutil.rmtree(child)

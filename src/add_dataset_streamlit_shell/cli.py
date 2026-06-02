@@ -32,7 +32,7 @@ def install(
         False,
         "--update",
         "-u",
-        help="Update shell code in place while preserving data, sessions, and uploads.",
+        help="Update shell code in place while preserving workspace, sessions, and uploads.",
     ),
     require_agent_core: bool = typer.Option(
         False,

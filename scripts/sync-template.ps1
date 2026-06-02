@@ -32,10 +32,10 @@ New-Item -ItemType Directory -Path $templateRoot -Force | Out-Null
 Copy-Item -LiteralPath $sourcePath -Destination $destination -Recurse -Force
 
 # Keep the template clean: ship folders and placeholders, not local runtime data.
-Get-ChildItem -LiteralPath (Join-Path $destination "data") -Filter "*.csv" -File -ErrorAction SilentlyContinue |
+Get-ChildItem -LiteralPath (Join-Path $destination "workspace") -Filter "*.csv" -File -ErrorAction SilentlyContinue |
     Remove-Item -Force
 
-Get-ChildItem -LiteralPath (Join-Path $destination "data") -Filter "*.jsonl" -File -ErrorAction SilentlyContinue |
+Get-ChildItem -LiteralPath (Join-Path $destination "workspace") -Filter "*.jsonl" -File -ErrorAction SilentlyContinue |
     Remove-Item -Force
 
 Get-ChildItem -LiteralPath (Join-Path $destination "sessions") -Filter "*.jsonl" -File -ErrorAction SilentlyContinue |
@@ -57,7 +57,7 @@ if (Test-Path -LiteralPath $runtimeMarker) {
     Remove-Item -LiteralPath $runtimeMarker -Force
 }
 
-foreach ($folder in @("data", "sessions", "scripts")) {
+foreach ($folder in @("workspace", "sessions", "scripts")) {
     $folderPath = Join-Path $destination $folder
     if (-not (Test-Path -LiteralPath $folderPath)) {
         New-Item -ItemType Directory -Path $folderPath -Force | Out-Null

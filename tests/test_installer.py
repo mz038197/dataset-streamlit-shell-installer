@@ -13,7 +13,7 @@ def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> Non
     assert (result.target / "app.py").exists()
     assert (result.target / "data_ui.py").exists()
     assert (result.target / "pages" / "1_Database.py").exists()
-    assert (result.target / "data" / ".gitkeep").exists()
+    assert (result.target / "workspace" / ".gitkeep").exists()
     assert (result.target / "sessions" / ".gitkeep").exists()
 
 
@@ -49,10 +49,10 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
 
     (target / "app.py").write_text("# stale app\n", encoding="utf-8")
     (target / "old_page.py").write_text("# stale page\n", encoding="utf-8")
-    (target / "data" / "original.csv").write_text("a\n1\n", encoding="utf-8")
-    (target / "data" / "working.csv").write_text("a\n2\n", encoding="utf-8")
-    (target / "data" / "ready.csv").write_text("a\n3\n", encoding="utf-8")
-    (target / "data" / "cleaning_log.jsonl").write_text("{}\n", encoding="utf-8")
+    (target / "workspace" / "original.csv").write_text("a\n1\n", encoding="utf-8")
+    (target / "workspace" / "working.csv").write_text("a\n2\n", encoding="utf-8")
+    (target / "workspace" / "ready.csv").write_text("a\n3\n", encoding="utf-8")
+    (target / "workspace" / "cleaning_log.jsonl").write_text("{}\n", encoding="utf-8")
     (target / "sessions" / "session_20260529_000000_abc123.jsonl").write_text(
         "{}\n",
         encoding="utf-8",
@@ -70,10 +70,10 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
     assert updated.backed_up_to is None
     assert (target / "app.py").read_text(encoding="utf-8") == original_app
     assert not (target / "old_page.py").exists()
-    assert (target / "data" / "original.csv").read_text(encoding="utf-8") == "a\n1\n"
-    assert (target / "data" / "working.csv").read_text(encoding="utf-8") == "a\n2\n"
-    assert (target / "data" / "ready.csv").read_text(encoding="utf-8") == "a\n3\n"
-    assert (target / "data" / "cleaning_log.jsonl").read_text(encoding="utf-8") == "{}\n"
+    assert (target / "workspace" / "original.csv").read_text(encoding="utf-8") == "a\n1\n"
+    assert (target / "workspace" / "working.csv").read_text(encoding="utf-8") == "a\n2\n"
+    assert (target / "workspace" / "ready.csv").read_text(encoding="utf-8") == "a\n3\n"
+    assert (target / "workspace" / "cleaning_log.jsonl").read_text(encoding="utf-8") == "{}\n"
     assert (target / "sessions" / "session_20260529_000000_abc123.jsonl").exists()
     assert (scripts_dir / "student_cleanup.py").read_text(encoding="utf-8") == "# keep me\n"
     assert (upload_dir / "image.png").read_bytes() == b"png"

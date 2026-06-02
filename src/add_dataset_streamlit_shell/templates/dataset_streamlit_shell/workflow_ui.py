@@ -77,7 +77,7 @@ def _page_shell(
         _render_recent_log()
     with side:
         extra_context = extra_context_builder(df) if extra_context_builder else ""
-        render_chat_panel(extra_context=extra_context)
+        render_chat_panel(extra_context=extra_context, page_name=title)
 
 
 def _render_refresh_controls() -> None:
@@ -1262,5 +1262,5 @@ def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.Da
             return
         render_main(df)
     with side:
-        render_chat_panel()
+        render_chat_panel(page_name=title)
 

@@ -80,7 +80,7 @@ def overview() -> None:
         )
 
     with side:
-        render_chat_panel()
+        render_chat_panel(page_name="總覽")
 
 
 pages = {

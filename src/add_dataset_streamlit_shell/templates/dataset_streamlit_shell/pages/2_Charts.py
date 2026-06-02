@@ -597,4 +597,4 @@ with main:
                 )
 
 with side:
-    render_chat_panel()
+    render_chat_panel(page_name="通用圖表")

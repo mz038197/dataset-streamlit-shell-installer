@@ -7,19 +7,25 @@ Install the workshop `dataset_streamlit_shell/` UI into a student agent project.
 From the project where you want to add the shell:
 
 ```powershell
+uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell
+```
+
+Local development:
+
+```powershell
 uvx --from . add-dataset-streamlit-shell
 ```
 
 To require `agent_core.py` during installation:
 
 ```powershell
-uvx --from . add-dataset-streamlit-shell --require-agent-core
+uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell --require-agent-core
 ```
 
 To update an existing shell while keeping runtime data:
 
 ```powershell
-uvx --from . add-dataset-streamlit-shell --update
+uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell --update
 ```
 
 By default, installation and update also run this in the target project:
@@ -31,13 +37,14 @@ uv add streamlit pandas matplotlib numpy "openai-tts @ git+https://github.com/mz
 To copy or update the shell without changing project dependencies:
 
 ```powershell
-uvx --from . add-dataset-streamlit-shell --no-install-deps
+uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell --no-install-deps
 ```
 
 This preserves:
 
-- `dataset_streamlit_shell/data/*.csv`
-- `dataset_streamlit_shell/data/*.jsonl`
+- `dataset_streamlit_shell/workspace/*.csv`
+- `dataset_streamlit_shell/workspace/*.jsonl`
+- `dataset_streamlit_shell/workspace/user_settings.json`
 - `dataset_streamlit_shell/sessions/*.jsonl`
 - `dataset_streamlit_shell/scripts/`
 - `dataset_streamlit_shell/uploads/`
@@ -48,11 +55,41 @@ After installation:
 uv run streamlit run dataset_streamlit_shell/app.py
 ```
 
+## TTS settings
+
+The right-side Agent panel reads and writes TTS preferences at:
+
+```text
+dataset_streamlit_shell/workspace/user_settings.json
+```
+
+The file is created automatically with defaults when the panel opens. It uses these keys:
+
+```json
+{
+  "tts_enabled": false,
+  "tts_voice": "nova",
+  "tts_instructions": "用台灣繁體中文說話。",
+  "tts_speed": 1.0
+}
+```
+
+Settings are loaded in this order:
+
+1. `dataset_streamlit_shell/workspace/user_settings.json`
+2. `.env` values read by `openai-tts` (`TTS_VOICE`, `TTS_INSTRUCTIONS`, `TTS_SPEED`)
+3. `openai-tts` built-in defaults
+
+Switching Streamlit pages reloads TTS preferences from `user_settings.json`.
+After manually editing that file, switch to another page and back, or restart the Streamlit session.
+The TTS panel is available even before Agent Core is connected.
+
 ## What It Does
 
 - Copies `dataset_streamlit_shell/` into the current project.
 - Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
 - Installs required project dependencies with `uv add streamlit pandas matplotlib numpy` and `openai-tts` by default.
+- Persists TTS preferences to `dataset_streamlit_shell/workspace/user_settings.json` across page changes and browser restarts.
 - Refuses to overwrite an existing shell unless `--force` is used.
 - Supports `--update` to refresh shell code while preserving runtime data.
 - Prints the Streamlit launch command.

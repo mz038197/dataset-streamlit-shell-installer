@@ -194,4 +194,4 @@ with main:
             st.dataframe(prepare_dataframe_for_display(summary), use_container_width=True)
 
 with side:
-    render_chat_panel()
+    render_chat_panel(page_name="資料上傳與預覽")
