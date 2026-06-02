@@ -100,6 +100,8 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
             [
                 "uv",
                 "add",
+                "--upgrade-package",
+                "openai-tts",
                 "streamlit",
                 "pandas",
                 "matplotlib",

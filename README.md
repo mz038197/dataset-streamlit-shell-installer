@@ -31,7 +31,7 @@ uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git
 By default, installation and update also run this in the target project:
 
 ```powershell
-uv add streamlit pandas matplotlib numpy "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
+uv add --upgrade-package openai-tts streamlit pandas matplotlib numpy "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
 ```
 
 To copy or update the shell without changing project dependencies:

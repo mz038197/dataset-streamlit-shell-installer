@@ -78,7 +78,7 @@ def _install_dependencies(
     dependency_runner: Callable[..., object],
 ) -> tuple[str, ...]:
     dependency_runner(
-        ["uv", "add", *PROJECT_DEPENDENCIES],
+        ["uv", "add", "--upgrade-package", "openai-tts", *PROJECT_DEPENDENCIES],
         cwd=project_root,
         check=True,
     )
