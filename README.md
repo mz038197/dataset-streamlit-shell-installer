@@ -87,6 +87,16 @@ Switching Streamlit pages reloads TTS preferences from `user_settings.json`.
 After manually editing that file, switch to another page and back, or restart the Streamlit session.
 The TTS panel is available even before Agent Core is connected.
 
+## Machine learning pages (shell template)
+
+The installed `dataset_streamlit_shell/` template includes supervised learning pages aligned with the course labs:
+
+- **Linear regression** (built-in restaurant profit and house price CSVs under `built-in-data/regression/`)
+- **Logistic regression** — university admission demo from `built-in-data/classification/university_admission.csv` (Coursera ex2data1)
+- **Regularized logistic regression** — microchip test demo from `built-in-data/classification/microchip_test.csv` (Coursera ex2data2, degree-6 feature map and λ)
+
+Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/`. Training uses hand-written gradient descent and logistic Cost J; classification threshold is adjusted after training and is not stored in the model JSON (regularization λ is stored for the regularized page).
+
 ## What It Does
 
 - Copies `dataset_streamlit_shell/` into the current project.
