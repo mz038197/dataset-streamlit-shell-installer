@@ -39,7 +39,11 @@ from dataset_streamlit_shell.ml.regression import (
     predict_with_parameters,
     save_model_artifact,
 )
-from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
+from dataset_streamlit_shell.plotting import (
+    build_regression_data_figures,
+    configure_matplotlib_for_traditional_chinese,
+    render_figures_in_streamlit,
+)
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -1746,6 +1750,7 @@ def _render_regression_data_intro(
     )
     with st.expander("資料預覽", expanded=True):
         st.dataframe(frame[features + [target]].head(10), use_container_width=True, hide_index=True)
+    render_figures_in_streamlit(build_regression_data_figures(frame, features, target))
 
 
 def _animate_simple_gradient_descent(

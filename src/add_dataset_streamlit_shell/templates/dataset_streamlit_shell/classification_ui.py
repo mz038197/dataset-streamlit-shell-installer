@@ -45,7 +45,11 @@ from dataset_streamlit_shell.ml.regression import (
     apply_standard_scaler,
     create_standard_scaler,
 )
-from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
+from dataset_streamlit_shell.plotting import (
+    build_classification_data_figures,
+    configure_matplotlib_for_traditional_chinese,
+    render_figures_in_streamlit,
+)
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -559,6 +563,7 @@ def _render_classification_data_intro(
     )
     with st.expander("資料預覽", expanded=True):
         st.dataframe(frame[features + [target]].head(10), use_container_width=True, hide_index=True)
+    render_figures_in_streamlit(build_classification_data_figures(frame, features, target))
 
 
 def _render_logistic_cost_formula(*, regularized: bool = False) -> None:
