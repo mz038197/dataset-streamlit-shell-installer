@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+import json
 from pathlib import Path
 import time
 
@@ -32,6 +33,7 @@ from dataset_streamlit_shell.ml.regression import (
     apply_standard_scaler,
     build_regression_agent_context,
     create_standard_scaler,
+    format_prediction_formula,
     gradient_descent_steps,
     predict_from_artifact,
     predict_with_parameters,
@@ -1438,15 +1440,15 @@ def render_simple_linear_regression_page() -> None:
             row_count=len(working),
             artifact=artifact,
         )
-        c1, c2, c3 = st.columns(3)
-        c1.metric("最後 W", f"{weight:.4f}")
-        c2.metric("最後 B", f"{intercept:.4f}")
-        c3.metric("最後 Cost J", f"{cost:.4f}")
-
-        _render_prediction_error_table(working, target, prediction)
-        _render_save_model_button(
+        _render_training_results(artifact, working, target, prediction)
+        _render_regression_save_section(
             artifact=artifact,
             filename_prefix="simple_linear_regression",
+            page_key="simple_regression",
+        )
+        _render_regression_inference_section(
+            page_key="simple_regression",
+            trained_artifact=artifact,
         )
         _render_regression_prompts(
             [
@@ -1635,23 +1637,16 @@ def render_multiple_linear_regression_page() -> None:
             artifact=artifact,
             note="多變量頁會先對 features 做 Z-score 特徵縮放。",
         )
-        c1, c2, c3 = st.columns(3)
-        c1.metric("features", f"{len(selected_features):,}")
-        c2.metric("最後 B", f"{float(artifact.intercept):.4f}")
-        c3.metric("Cost J", f"{cost:.4f}")
-        weights = pd.DataFrame(
-            {
-                "feature": selected_features,
-                "w": [float(value) for value in artifact.weights],
-            }
-        )
-        st.dataframe(weights, use_container_width=True, hide_index=True)
-
-        _render_prediction_error_table(working, target, prediction)
+        _render_training_results(artifact, working, target, prediction)
         _render_feature_target_overview(working, selected_features, target)
-        _render_save_model_button(
+        _render_regression_save_section(
             artifact=artifact,
             filename_prefix="multiple_linear_regression",
+            page_key="multiple_regression",
+        )
+        _render_regression_inference_section(
+            page_key="multiple_regression",
+            trained_artifact=artifact,
         )
         _render_regression_prompts(
             [
@@ -1912,12 +1907,159 @@ def _render_feature_target_overview(
             st.scatter_chart(chart_frame, x="feature", y="target")
 
 
-def _render_save_model_button(artifact: LinearModelArtifact, filename_prefix: str) -> None:
-    if st.button("保存模型 JSON", type="primary", use_container_width=True, key=f"save_{filename_prefix}"):
+def _render_training_results(
+    artifact: LinearModelArtifact,
+    working: pd.DataFrame,
+    target: str,
+    prediction: pd.Series,
+) -> None:
+    st.markdown("##### 訓練結果")
+    if len(artifact.features) == 1:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("最後 W", f"{artifact.weights[0]:.4f}")
+        c2.metric("最後 B", f"{artifact.intercept:.4f}")
+        c3.metric("最後 Cost J", f"{artifact.training_cost:.4f}")
+    else:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("features", f"{len(artifact.features):,}")
+        c2.metric("最後 B", f"{artifact.intercept:.4f}")
+        c3.metric("最後 Cost J", f"{artifact.training_cost:.4f}")
+        weights = pd.DataFrame(
+            {"feature": artifact.features, "w": [float(v) for v in artifact.weights]}
+        )
+        st.dataframe(weights, use_container_width=True, hide_index=True)
+    _render_prediction_error_table(working, target, prediction)
+
+
+def _render_regression_save_section(
+    artifact: LinearModelArtifact,
+    filename_prefix: str,
+    page_key: str,
+) -> None:
+    st.markdown("##### 保存模型 JSON")
+    st.caption(
+        "將目前訓練結果存成 JSON，供之後上傳並做預測。"
+        "檔案會保存到 `dataset_streamlit_shell/workspace/models/regression/`。"
+    )
+    if st.button(
+        "保存模型 JSON",
+        type="primary",
+        use_container_width=True,
+        key=f"save_{page_key}",
+    ):
+        REGRESSION_MODEL_DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = REGRESSION_MODEL_DIR / f"{filename_prefix}_{stamp}.json"
         save_model_artifact(artifact, path)
         st.success(f"已保存模型：`{_display_path(path)}`")
+
+
+def _load_uploaded_model_artifact(uploaded_file) -> LinearModelArtifact:
+    payload = json.loads(uploaded_file.getvalue().decode("utf-8"))
+    return _model_artifact_from_payload(payload)
+
+
+def _model_artifact_from_payload(payload: dict) -> LinearModelArtifact:
+    return LinearModelArtifact(
+        model_kind=str(payload["model_kind"]),
+        features=[str(feature) for feature in payload["features"]],
+        target=str(payload["target"]),
+        weights=[float(weight) for weight in payload["weights"]],
+        intercept=float(payload["intercept"]),
+        scaler=payload.get("scaler"),
+        training_cost=float(payload["training_cost"]),
+        data_source=str(payload["data_source"]),
+        schema_version=int(payload.get("schema_version", 1)),
+        created_at=str(payload.get("created_at", datetime.now().isoformat(timespec="seconds"))),
+    )
+
+
+def _render_regression_inference_section(
+    *,
+    page_key: str,
+    trained_artifact: LinearModelArtifact | None,
+) -> None:
+    st.markdown("##### 手動預測")
+    st.caption(
+        "輸入新的 feature 值，使用已保存或本次訓練的模型權重預測 target。"
+        "可先完成訓練並保存 JSON，或直接上傳先前保存的模型 JSON。"
+    )
+
+    trained_available = trained_artifact is not None
+    source_options: list[str] = []
+    if trained_available:
+        source_options.append("本次訓練結果")
+    source_options.append("上傳模型 JSON")
+
+    if len(source_options) == 1:
+        inference_source = source_options[0]
+    else:
+        inference_source = st.radio(
+            "預測使用的模型",
+            source_options,
+            horizontal=True,
+            key=f"{page_key}_inference_source",
+        )
+
+    active_artifact: LinearModelArtifact | None = None
+    if inference_source == "本次訓練結果" and trained_available:
+        active_artifact = trained_artifact
+        st.success(f"使用本次訓練結果預測 target：`{trained_artifact.target}`")
+    else:
+        uploaded = st.file_uploader(
+            "上傳模型 JSON",
+            type=["json"],
+            key=f"{page_key}_upload",
+        )
+        if uploaded is None:
+            st.info("請上傳先前保存的模型 JSON 檔案。")
+            return
+        try:
+            active_artifact = _load_uploaded_model_artifact(uploaded)
+            st.success(
+                f"已載入模型：`{active_artifact.model_kind}`，"
+                f"target = `{active_artifact.target}`，"
+                f"features = {', '.join(active_artifact.features)}"
+            )
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            st.error(f"無法讀取模型 JSON：{exc}")
+            return
+
+    input_values: dict[str, float] = {}
+    input_cols = st.columns(min(len(active_artifact.features), 3) or 1)
+    for index, feature in enumerate(active_artifact.features):
+        with input_cols[index % len(input_cols)]:
+            default_value = 0.0
+            if active_artifact.scaler is not None:
+                default_value = float(active_artifact.scaler["mean"].get(feature, 0.0))
+            input_values[feature] = st.number_input(
+                feature,
+                value=default_value,
+                format="%.4f",
+                key=f"{page_key}_input_{feature}",
+            )
+
+    if st.button("計算預測", type="primary", use_container_width=True, key=f"{page_key}_predict"):
+        feature_frame = pd.DataFrame([input_values])
+        prediction = float(predict_from_artifact(active_artifact, feature_frame).iloc[0])
+        st.markdown("##### 預測結果")
+        c1, c2 = st.columns(2)
+        c1.metric("預測 target", active_artifact.target)
+        c2.metric("預測值", f"{prediction:.4f}")
+        with st.expander("計算過程", expanded=False):
+            st.write(format_prediction_formula(active_artifact))
+            if active_artifact.scaler is not None:
+                st.caption("多變量模型會先依 JSON 內的 mean/scale 做 Z-score，再代入權重計算。")
+            st.dataframe(
+                pd.DataFrame(
+                    {
+                        "feature": active_artifact.features,
+                        "輸入值": [input_values[feature] for feature in active_artifact.features],
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
 
 
 def _render_regression_prompts(prompts: list[str]) -> None:

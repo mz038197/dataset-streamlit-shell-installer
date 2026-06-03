@@ -177,6 +177,17 @@ def predict_from_artifact(artifact: LinearModelArtifact, frame: pd.DataFrame) ->
     return pd.Series(predictions, index=frame.index, name="prediction")
 
 
+def format_prediction_formula(artifact: LinearModelArtifact) -> str:
+    terms = [
+        f"{weight:g} × {feature}"
+        for feature, weight in zip(artifact.features, artifact.weights)
+    ]
+    formula = " + ".join(terms) + f" + {artifact.intercept:g}"
+    if len(artifact.features) == 1:
+        return f"Y = {artifact.weights[0]:g} × {artifact.features[0]} + {artifact.intercept:g}"
+    return f"Y = {formula}"
+
+
 def build_regression_agent_context(
     *,
     page_name: str,

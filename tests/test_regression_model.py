@@ -22,6 +22,7 @@ from dataset_streamlit_shell.ml.regression import (
     build_regression_agent_context,
     compute_cost_j,
     create_standard_scaler,
+    format_prediction_formula,
     gradient_descent_steps,
     load_model_artifact,
     predict_with_parameters,
@@ -110,6 +111,33 @@ def test_predict_with_parameters_uses_weight_order() -> None:
     prediction = predict_with_parameters(frame, weights=[2.0, 0.5], intercept=3.0)
 
     assert prediction.tolist() == [10.0, 17.0]
+
+
+def test_format_prediction_formula_for_simple_and_multiple() -> None:
+    simple = LinearModelArtifact(
+        model_kind="simple_linear_regression",
+        features=["城市人口_萬人"],
+        target="餐廳獲利_萬美元",
+        weights=[1.25],
+        intercept=-3.0,
+        scaler=None,
+        training_cost=4.2,
+        data_source="demo",
+    )
+    multiple = LinearModelArtifact(
+        model_kind="multiple_linear_regression",
+        features=["面積_平方英尺", "房間數"],
+        target="房價_千美元",
+        weights=[10.0, 5.0],
+        intercept=100.0,
+        scaler=None,
+        training_cost=12.5,
+        data_source="demo",
+    )
+
+    assert format_prediction_formula(simple) == "Y = 1.25 × 城市人口_萬人 + -3"
+    assert "面積_平方英尺" in format_prediction_formula(multiple)
+    assert "房間數" in format_prediction_formula(multiple)
 
 
 def test_build_regression_agent_context_includes_current_settings() -> None:
