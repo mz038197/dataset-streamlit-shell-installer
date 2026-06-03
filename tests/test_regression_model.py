@@ -19,6 +19,7 @@ if str(TEMPLATE_ROOT) not in sys.path:
 from dataset_streamlit_shell.ml.regression import (
     LinearModelArtifact,
     apply_standard_scaler,
+    build_regression_agent_context,
     compute_cost_j,
     create_standard_scaler,
     gradient_descent_steps,
@@ -109,3 +110,35 @@ def test_predict_with_parameters_uses_weight_order() -> None:
     prediction = predict_with_parameters(frame, weights=[2.0, 0.5], intercept=3.0)
 
     assert prediction.tolist() == [10.0, 17.0]
+
+
+def test_build_regression_agent_context_includes_current_settings() -> None:
+    artifact = LinearModelArtifact(
+        model_kind="simple_linear_regression",
+        features=["城市人口_萬人"],
+        target="餐廳獲利_萬美元",
+        weights=[1.25],
+        intercept=-3.0,
+        scaler=None,
+        training_cost=4.2,
+        data_source="內建範例資料：城市人口與餐廳獲利",
+    )
+
+    context = build_regression_agent_context(
+        page_name="單變量線性回歸",
+        data_source="內建範例資料",
+        features=["城市人口_萬人"],
+        target="餐廳獲利_萬美元",
+        learning_rate=0.01,
+        epochs=1500,
+        row_count=97,
+        artifact=artifact,
+    )
+
+    assert "單變量線性回歸" in context
+    assert "城市人口_萬人" in context
+    assert "餐廳獲利_萬美元" in context
+    assert "learning rate α：0.01" in context
+    assert "epoch：1500" in context
+    assert "最後 Cost J：4.2" in context
+    assert "weights：城市人口_萬人=1.25" in context

@@ -175,3 +175,46 @@ def predict_from_artifact(artifact: LinearModelArtifact, frame: pd.DataFrame) ->
     weights = np.asarray(artifact.weights, dtype=float)
     predictions = values @ weights + artifact.intercept
     return pd.Series(predictions, index=frame.index, name="prediction")
+
+
+def build_regression_agent_context(
+    *,
+    page_name: str,
+    data_source: str,
+    features: list[str],
+    target: str,
+    learning_rate: float | None,
+    epochs: int | None,
+    row_count: int,
+    artifact: LinearModelArtifact | None = None,
+    note: str = "",
+) -> str:
+    parts = [
+        f"目前頁面：{page_name}。",
+        f"資料來源：{data_source}。",
+        f"可用訓練資料筆數：{row_count}。",
+        "目前 features：" + "、".join(features) + "。",
+        f"目前 target：{target}。",
+    ]
+    if learning_rate is not None:
+        parts.append(f"learning rate α：{learning_rate:g}。")
+    if epochs is not None:
+        parts.append(f"epoch：{epochs}。")
+    if artifact is None:
+        parts.append("目前尚未完成本組設定的訓練，請引導學生先按「開始訓練」觀察 Cost 與模型演進。")
+    else:
+        weights = "、".join(
+            f"{feature}={weight:g}" for feature, weight in zip(artifact.features, artifact.weights)
+        )
+        parts.extend(
+            [
+                f"最後 intercept/B：{artifact.intercept:g}。",
+                f"最後 Cost J：{artifact.training_cost:g}。",
+                f"weights：{weights}。",
+            ]
+        )
+        if artifact.scaler is not None:
+            parts.append("本模型使用 Z-score 特徵縮放；inference 需使用 JSON 內保存的 mean/scale。")
+    if note:
+        parts.append(note)
+    return "".join(parts)

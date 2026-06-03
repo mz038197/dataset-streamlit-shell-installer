@@ -30,6 +30,7 @@ from dataset_streamlit_shell.ml.regression import (
     GradientDescentStep,
     LinearModelArtifact,
     apply_standard_scaler,
+    build_regression_agent_context,
     create_standard_scaler,
     gradient_descent_steps,
     predict_from_artifact,
@@ -1350,6 +1351,7 @@ def render_simple_linear_regression_page() -> None:
 
         result_key = "simple_regression_last_artifact"
         signature = (source_label, feature, target, float(learning_rate), int(epochs), len(working))
+        context_key = "單變量線性回歸_agent_context"
         train_clicked = st.button(
             "開始訓練",
             type="primary",
@@ -1412,7 +1414,27 @@ def render_simple_linear_regression_page() -> None:
 
         if not train_clicked and "artifact" not in locals():
             st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察回歸線與 Cost 的演進。")
+            st.session_state[context_key] = build_regression_agent_context(
+                page_name="單變量線性回歸",
+                data_source=source_label,
+                features=[feature],
+                target=target,
+                learning_rate=float(learning_rate),
+                epochs=int(epochs),
+                row_count=len(working),
+                artifact=None,
+            )
             return
+        st.session_state[context_key] = build_regression_agent_context(
+            page_name="單變量線性回歸",
+            data_source=source_label,
+            features=[feature],
+            target=target,
+            learning_rate=float(learning_rate),
+            epochs=int(epochs),
+            row_count=len(working),
+            artifact=artifact,
+        )
         c1, c2, c3 = st.columns(3)
         c1.metric("最後 W", f"{weight:.4f}")
         c2.metric("最後 B", f"{intercept:.4f}")
@@ -1523,6 +1545,7 @@ def render_multiple_linear_regression_page() -> None:
         st.caption("此處的 w 對應 Z-score 縮放後的 features；保存模型時會一併保存 mean 與 scale。")
 
         result_key = "multiple_regression_last_artifact"
+        context_key = "多變量線性回歸_agent_context"
         signature = (
             source_label,
             tuple(selected_features),
@@ -1546,6 +1569,17 @@ def render_multiple_linear_regression_page() -> None:
                 st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
             else:
                 st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察預測值與 Cost 的演進。")
+                st.session_state[context_key] = build_regression_agent_context(
+                    page_name="多變量線性回歸",
+                    data_source=source_label,
+                    features=selected_features,
+                    target=target,
+                    learning_rate=float(learning_rate),
+                    epochs=int(epochs),
+                    row_count=len(working),
+                    artifact=None,
+                    note="多變量頁會先對 features 做 Z-score 特徵縮放。",
+                )
                 return
         else:
             steps = gradient_descent_steps(
@@ -1587,6 +1621,17 @@ def render_multiple_linear_regression_page() -> None:
             )
             st.session_state[result_key] = {"signature": signature, "artifact": artifact}
 
+        st.session_state[context_key] = build_regression_agent_context(
+            page_name="多變量線性回歸",
+            data_source=source_label,
+            features=selected_features,
+            target=target,
+            learning_rate=float(learning_rate),
+            epochs=int(epochs),
+            row_count=len(working),
+            artifact=artifact,
+            note="多變量頁會先對 features 做 Z-score 特徵縮放。",
+        )
         c1, c2, c3 = st.columns(3)
         c1.metric("features", f"{len(selected_features):,}")
         c2.metric("最後 B", f"{float(artifact.intercept):.4f}")
@@ -1630,6 +1675,7 @@ def _regression_page_shell(
     render_main: Callable[[pd.DataFrame, str], None],
 ) -> None:
     main, side = st.columns([5, 3], gap="large")
+    context_key = f"{title}_agent_context"
     with main:
         st.title(title)
         st.caption(caption)
@@ -1653,10 +1699,17 @@ def _regression_page_shell(
                 return
             st.info(f"目前使用 `{_display_path(READY_DATASET_PATH)}`。")
         render_dataset_metrics(df)
+        st.session_state[context_key] = f"目前頁面：{title}。資料來源：{source_label}。"
         render_main(df, source_label)
     with side:
+        extra_context = str(
+            st.session_state.get(
+                context_key,
+                f"目前頁面：{title}。資料來源：{source if 'source' in locals() else '未選擇'}。",
+            )
+        )
         render_chat_panel(
-            extra_context=f"目前頁面：{title}。資料來源：{source if 'source' in locals() else '未選擇'}。",
+            extra_context=extra_context,
             page_name=title,
         )
 
