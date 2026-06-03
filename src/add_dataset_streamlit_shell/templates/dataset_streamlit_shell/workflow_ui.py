@@ -1363,19 +1363,9 @@ def render_simple_linear_regression_page() -> None:
             use_container_width=True,
             key="train_simple_regression",
         )
-        if not train_clicked:
-            stored = st.session_state.get(result_key)
-            if isinstance(stored, dict) and stored.get("signature") == signature:
-                artifact = stored["artifact"]
-                prediction = predict_from_artifact(artifact, working[artifact.features])
-                weight = float(artifact.weights[0])
-                intercept = float(artifact.intercept)
-                cost = float(artifact.training_cost)
-                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
-            else:
-                st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察回歸線與 Cost 的演進。")
-                return
-        else:
+        artifact: LinearModelArtifact | None = None
+        prediction: pd.Series | None = None
+        if train_clicked:
             steps = gradient_descent_steps(
                 working[[feature]],
                 working[target],
@@ -1402,34 +1392,26 @@ def render_simple_linear_regression_page() -> None:
                 final_step.weights,
                 final_step.intercept,
             )
-            weight = float(final_step.weights[0])
-            intercept = float(final_step.intercept)
-            cost = float(final_step.cost)
             artifact = LinearModelArtifact(
                 model_kind="simple_linear_regression",
                 features=[feature],
                 target=target,
-                weights=[weight],
-                intercept=intercept,
+                weights=[float(final_step.weights[0])],
+                intercept=float(final_step.intercept),
                 scaler=None,
-                training_cost=cost,
+                training_cost=float(final_step.cost),
                 data_source=source_label,
             )
             st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+        else:
+            stored = st.session_state.get(result_key)
+            if isinstance(stored, dict) and stored.get("signature") == signature:
+                artifact = stored["artifact"]
+                prediction = predict_from_artifact(artifact, working[artifact.features])
+                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+            else:
+                st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察回歸線與 Cost 的演進。")
 
-        if not train_clicked and "artifact" not in locals():
-            st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察回歸線與 Cost 的演進。")
-            st.session_state[context_key] = build_regression_agent_context(
-                page_name="單變量線性回歸",
-                data_source=source_label,
-                features=[feature],
-                target=target,
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-                row_count=len(working),
-                artifact=None,
-            )
-            return
         st.session_state[context_key] = build_regression_agent_context(
             page_name="單變量線性回歸",
             data_source=source_label,
@@ -1440,12 +1422,13 @@ def render_simple_linear_regression_page() -> None:
             row_count=len(working),
             artifact=artifact,
         )
-        _render_training_results(artifact, working, target, prediction)
-        _render_regression_save_section(
-            artifact=artifact,
-            filename_prefix="simple_linear_regression",
-            page_key="simple_regression",
-        )
+        if artifact is not None and prediction is not None:
+            _render_training_results(artifact, working, target, prediction)
+            _render_regression_save_section(
+                artifact=artifact,
+                filename_prefix="simple_linear_regression",
+                page_key="simple_regression",
+            )
         _render_regression_inference_section(
             page_key="simple_regression",
             trained_artifact=artifact,
@@ -1565,28 +1548,9 @@ def render_multiple_linear_regression_page() -> None:
             use_container_width=True,
             key="train_multiple_regression",
         )
-        if not train_clicked:
-            stored = st.session_state.get(result_key)
-            if isinstance(stored, dict) and stored.get("signature") == signature:
-                artifact = stored["artifact"]
-                prediction = predict_from_artifact(artifact, working[artifact.features])
-                cost = float(artifact.training_cost)
-                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
-            else:
-                st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察預測值與 Cost 的演進。")
-                st.session_state[context_key] = build_regression_agent_context(
-                    page_name="多變量線性回歸",
-                    data_source=source_label,
-                    features=selected_features,
-                    target=target,
-                    learning_rate=float(learning_rate),
-                    epochs=int(epochs),
-                    row_count=len(working),
-                    artifact=None,
-                    note="多變量頁會先對 features 做 Z-score 特徵縮放。",
-                )
-                return
-        else:
+        artifact: LinearModelArtifact | None = None
+        prediction: pd.Series | None = None
+        if train_clicked:
             steps = gradient_descent_steps(
                 scaled_features,
                 working[target],
@@ -1613,7 +1577,6 @@ def render_multiple_linear_regression_page() -> None:
                 final_step.weights,
                 final_step.intercept,
             )
-            cost = float(final_step.cost)
             artifact = LinearModelArtifact(
                 model_kind="multiple_linear_regression",
                 features=selected_features,
@@ -1621,10 +1584,18 @@ def render_multiple_linear_regression_page() -> None:
                 weights=[float(value) for value in final_step.weights],
                 intercept=float(final_step.intercept),
                 scaler=scaler,
-                training_cost=cost,
+                training_cost=float(final_step.cost),
                 data_source=source_label,
             )
             st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+        else:
+            stored = st.session_state.get(result_key)
+            if isinstance(stored, dict) and stored.get("signature") == signature:
+                artifact = stored["artifact"]
+                prediction = predict_from_artifact(artifact, working[artifact.features])
+                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+            else:
+                st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察預測值與 Cost 的演進。")
 
         st.session_state[context_key] = build_regression_agent_context(
             page_name="多變量線性回歸",
@@ -1637,13 +1608,14 @@ def render_multiple_linear_regression_page() -> None:
             artifact=artifact,
             note="多變量頁會先對 features 做 Z-score 特徵縮放。",
         )
-        _render_training_results(artifact, working, target, prediction)
-        _render_feature_target_overview(working, selected_features, target)
-        _render_regression_save_section(
-            artifact=artifact,
-            filename_prefix="multiple_linear_regression",
-            page_key="multiple_regression",
-        )
+        if artifact is not None and prediction is not None:
+            _render_training_results(artifact, working, target, prediction)
+            _render_feature_target_overview(working, selected_features, target)
+            _render_regression_save_section(
+                artifact=artifact,
+                filename_prefix="multiple_linear_regression",
+                page_key="multiple_regression",
+            )
         _render_regression_inference_section(
             page_key="multiple_regression",
             trained_artifact=artifact,
@@ -1980,12 +1952,15 @@ def _render_regression_inference_section(
     trained_artifact: LinearModelArtifact | None,
 ) -> None:
     st.markdown("##### 手動預測")
-    st.caption(
-        "輸入新的 feature 值，使用已保存或本次訓練的模型權重預測 target。"
-        "可先完成訓練並保存 JSON，或直接上傳先前保存的模型 JSON。"
-    )
-
     trained_available = trained_artifact is not None
+    if trained_available:
+        st.caption(
+            "輸入新的 feature 值，使用本次訓練結果或上傳的模型 JSON 預測 target。"
+        )
+    else:
+        st.caption(
+            "尚未訓練時，可直接上傳先前保存的模型 JSON，輸入 feature 值後計算預測。"
+        )
     source_options: list[str] = []
     if trained_available:
         source_options.append("本次訓練結果")
