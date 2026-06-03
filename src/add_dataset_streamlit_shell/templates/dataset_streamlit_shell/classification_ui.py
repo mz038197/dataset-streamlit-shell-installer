@@ -49,6 +49,7 @@ from dataset_streamlit_shell.plotting import (
     build_classification_data_figures,
     configure_matplotlib_for_traditional_chinese,
     render_figures_in_streamlit,
+    scatter_binary_classes,
 )
 
 configure_matplotlib_for_traditional_chinese()
@@ -692,8 +693,7 @@ def _render_logistic_boundary_plot(
     fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
     positives = frame[target] == 1
     negatives = frame[target] == 0
-    ax.scatter(x1[negatives], x2[negatives], marker="o", facecolors="none", label="y=0")
-    ax.scatter(x1[positives], x2[positives], marker="x", label="y=1")
+    scatter_binary_classes(ax, x1, x2, positives=positives, negatives=negatives)
     if abs(w2) > 1e-12:
         line_x = np.linspace(float(x1.min()), float(x1.max()), 100)
         line_y = -(w1 * line_x + step.intercept) / w2
@@ -720,18 +720,12 @@ def _render_regularized_contour_plot(
     fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
     positives = frame[target] == 1
     negatives = frame[target] == 0
-    ax.scatter(
-        frame.loc[negatives, x1_name],
-        frame.loc[negatives, x2_name],
-        marker="o",
-        facecolors="none",
-        label="y=0",
-    )
-    ax.scatter(
-        frame.loc[positives, x1_name],
-        frame.loc[positives, x2_name],
-        marker="x",
-        label="y=1",
+    scatter_binary_classes(
+        ax,
+        frame[x1_name].to_numpy(dtype=float),
+        frame[x2_name].to_numpy(dtype=float),
+        positives=positives,
+        negatives=negatives,
     )
     u = np.linspace(CONTOUR_U_MIN, CONTOUR_U_MAX, grid_size)
     v = np.linspace(CONTOUR_U_MIN, CONTOUR_U_MAX, grid_size)

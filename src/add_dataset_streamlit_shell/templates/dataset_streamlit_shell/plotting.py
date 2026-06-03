@@ -43,6 +43,33 @@ def configure_matplotlib_for_traditional_chinese() -> None:
     plt.rcParams["axes.unicode_minus"] = False
 
 
+CLASS_NEGATIVE_STYLE = {
+    "marker": "o",
+    "c": "#f4b400",
+    "edgecolors": "#5f4330",
+    "linewidths": 0.6,
+    "label": "y=0",
+}
+CLASS_POSITIVE_STYLE = {
+    "marker": "x",
+    "c": "#202124",
+    "linewidths": 1.2,
+    "label": "y=1",
+}
+
+
+def scatter_binary_classes(
+    ax,
+    x1,
+    x2,
+    *,
+    positives: np.ndarray,
+    negatives: np.ndarray,
+) -> None:
+    ax.scatter(x1[negatives], x2[negatives], **CLASS_NEGATIVE_STYLE)
+    ax.scatter(x1[positives], x2[positives], **CLASS_POSITIVE_STYLE)
+
+
 def build_regression_data_figures(
     frame: pd.DataFrame,
     features: list[str],
@@ -94,18 +121,6 @@ def build_classification_data_figures(
     positives = labels == 1
     negatives = labels == 0
 
-    fig_balance, ax_balance = plt.subplots(figsize=(5.5, 4.2), constrained_layout=True)
-    class_counts = labels.astype(int).value_counts().sort_index()
-    ax_balance.bar(
-        [f"y={index}" for index in class_counts.index],
-        class_counts.to_numpy(),
-        color=["#f4b400", "#1a73e8"][: len(class_counts)],
-    )
-    ax_balance.set_xlabel(target)
-    ax_balance.set_ylabel("樣本數")
-    ax_balance.set_title(f"{target} 類別分佈")
-    figures.append(("類別分佈", fig_balance))
-
     if len(features) == 1:
         feature = features[0]
         x = pd.to_numeric(frame[feature], errors="coerce")
@@ -113,8 +128,8 @@ def build_classification_data_figures(
             -0.04, 0.04, size=len(frame)
         )
         fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
-        ax.scatter(x[negatives], jitter[negatives], marker="o", facecolors="none", label="y=0")
-        ax.scatter(x[positives], jitter[positives], marker="x", label="y=1")
+        ax.scatter(x[negatives], jitter[negatives], **CLASS_NEGATIVE_STYLE)
+        ax.scatter(x[positives], jitter[positives], **CLASS_POSITIVE_STYLE)
         ax.set_xlabel(feature)
         ax.set_ylabel(target)
         ax.set_yticks([0, 1])
@@ -127,8 +142,7 @@ def build_classification_data_figures(
     x1 = pd.to_numeric(frame[plot_features[0]], errors="coerce")
     x2 = pd.to_numeric(frame[plot_features[1]], errors="coerce")
     fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
-    ax.scatter(x1[negatives], x2[negatives], marker="o", facecolors="none", label="y=0")
-    ax.scatter(x1[positives], x2[positives], marker="x", label="y=1")
+    scatter_binary_classes(ax, x1, x2, positives=positives, negatives=negatives)
     ax.set_xlabel(plot_features[0])
     ax.set_ylabel(plot_features[1])
     title = f"{plot_features[0]} vs {plot_features[1]}"

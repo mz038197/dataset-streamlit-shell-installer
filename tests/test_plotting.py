@@ -60,4 +60,4 @@ def test_build_classification_data_figures_two_features() -> None:
         }
     )
     figures = build_classification_data_figures(frame, ["x1", "x2"], "label")
-    assert len(figures) == 2
+    assert len(figures) == 1
