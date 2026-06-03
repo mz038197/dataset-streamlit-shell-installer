@@ -47,6 +47,7 @@ from dataset_streamlit_shell.ml.regression import (
 )
 from dataset_streamlit_shell.plotting import (
     build_classification_data_figures,
+    build_sigmoid_figure,
     configure_matplotlib_for_traditional_chinese,
     render_figures_in_streamlit,
     scatter_binary_classes,
@@ -141,6 +142,7 @@ def render_logistic_regression_page() -> None:
         st.caption("教案參考：α=0.001、10000 次迭代，Cost 約可降至 0.30。")
         st.markdown("##### 模型公式")
         st.latex(r"f_{\mathbf{w},b}(\mathbf{x})=\mathrm{sigmoid}(\mathbf{w}\cdot\mathbf{x}+b)")
+        _render_sigmoid_visualization()
         _render_logistic_cost_formula()
 
         result_key = "logistic_regression_last_artifact"
@@ -565,6 +567,26 @@ def _render_classification_data_intro(
     with st.expander("資料預覽", expanded=True):
         st.dataframe(frame[features + [target]].head(10), use_container_width=True, hide_index=True)
     render_figures_in_streamlit(build_classification_data_figures(frame, features, target))
+
+
+def _render_sigmoid_visualization() -> None:
+    with st.expander("Sigmoid 函數視覺化", expanded=True):
+        st.caption(
+            "邏輯迴歸先把特徵線性組合成 z，再經 sigmoid 壓到 0～1，作為屬於類別 1 的機率。"
+        )
+        highlight_z = st.slider(
+            "在曲線上標示 z",
+            min_value=-10.0,
+            max_value=10.0,
+            value=0.0,
+            step=0.5,
+            key="logistic_sigmoid_highlight_z",
+        )
+        fig = build_sigmoid_figure(highlight_z=highlight_z)
+        st.pyplot(fig, clear_figure=True)
+        plt.close(fig)
+        prob = float(1.0 / (1.0 + np.exp(-np.clip(highlight_z, -500, 500))))
+        st.caption(f"當 z = {highlight_z:g} 時，σ(z) ≈ {prob:.4f}")
 
 
 def _render_logistic_cost_formula(*, regularized: bool = False) -> None:

@@ -154,6 +154,38 @@ def build_classification_data_figures(
     return figures
 
 
+def build_sigmoid_figure(
+    *,
+    z_min: float = -10.0,
+    z_max: float = 10.0,
+    highlight_z: float | None = None,
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    z = np.linspace(z_min, z_max, 400)
+    clipped = np.clip(z, -500, 500)
+    y = 1.0 / (1.0 + np.exp(-clipped))
+    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    ax.plot(z, y, color="#1a73e8", linewidth=2, label=r"$\sigma(z)=1/(1+e^{-z})$")
+    ax.axhline(0.5, color="#9aa0a6", linestyle="--", linewidth=1, alpha=0.8)
+    ax.axvline(0, color="#9aa0a6", linestyle="--", linewidth=1, alpha=0.8)
+    ax.scatter([0], [0.5], color="#ea4335", zorder=5, label="z=0 → σ(z)=0.5")
+    if highlight_z is not None:
+        hz = float(np.clip(highlight_z, z_min, z_max))
+        hy = float(1.0 / (1.0 + np.exp(-np.clip(hz, -500, 500))))
+        ax.scatter([hz], [hy], color="#34a853", s=80, zorder=6, label=f"z={hz:g}")
+        ax.vlines(hz, 0, hy, colors="#34a853", linestyles=":", linewidth=1)
+        ax.hlines(hy, z_min, hz, colors="#34a853", linestyles=":", linewidth=1)
+    ax.set_xlim(z_min, z_max)
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_xlabel(r"$z=\mathbf{w}\cdot\mathbf{x}+b$")
+    ax.set_ylabel(r"$\sigma(z)$（預測機率）")
+    ax.set_title("Sigmoid 函數")
+    ax.legend(loc="lower right")
+    ax.grid(True, alpha=0.25)
+    return fig
+
+
 def render_figures_in_streamlit(figures: list[tuple[str, Figure]]) -> None:
     import matplotlib.pyplot as plt
     import streamlit as st
