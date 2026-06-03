@@ -37,6 +37,9 @@ from dataset_streamlit_shell.ml.regression import (
     predict_with_parameters,
     save_model_artifact,
 )
+from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
+
+configure_matplotlib_for_traditional_chinese()
 
 
 PromptList = list[str]

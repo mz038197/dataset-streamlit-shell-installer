@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Literal
 
 import matplotlib.pyplot as plt
-from matplotlib import font_manager
 import pandas as pd
 import streamlit as st
 
@@ -27,6 +26,7 @@ from dataset_streamlit_shell.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
 )
+from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 
 
 st.set_page_config(page_title="通用圖表", page_icon="CH", layout="wide")
@@ -35,27 +35,7 @@ inject_style()
 COUNT_ROWS = "資料筆數"
 ChartType = Literal["bar", "pie", "stacked_bar", "line", "radar", "histogram"]
 Aggregation = Literal["count", "sum", "mean", "median"]
-
-
-def _configure_matplotlib_fonts() -> None:
-    preferred_fonts = [
-        "Microsoft JhengHei",
-        "Microsoft YaHei",
-        "Noto Sans TC",
-        "Noto Sans CJK TC",
-        "MingLiU",
-        "SimHei",
-        "Arial Unicode MS",
-    ]
-    available_fonts = {font.name for font in font_manager.fontManager.ttflist}
-    for font_name in preferred_fonts:
-        if font_name in available_fonts:
-            plt.rcParams["font.family"] = font_name
-            break
-    plt.rcParams["axes.unicode_minus"] = False
-
-
-_configure_matplotlib_fonts()
+configure_matplotlib_for_traditional_chinese()
 
 
 def _numeric_columns(df: pd.DataFrame) -> list[str]:
