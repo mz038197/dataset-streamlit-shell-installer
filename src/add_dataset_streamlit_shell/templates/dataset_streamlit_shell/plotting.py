@@ -154,6 +154,84 @@ def build_classification_data_figures(
     return figures
 
 
+def build_svm_paired_data_figure(
+    frame: pd.DataFrame,
+    features: list[str],
+    target: str,
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    x1 = pd.to_numeric(frame[features[0]], errors="coerce")
+    x2 = pd.to_numeric(frame[features[1]], errors="coerce")
+    labels = pd.to_numeric(frame[target], errors="coerce")
+    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    ax.scatter(x1, x2, c=labels, cmap=plt.cm.Paired)
+    ax.set_xlabel(features[0])
+    ax.set_ylabel(features[1])
+    ax.set_title(f"{features[0]} vs {features[1]}（Paired 色圖）")
+    return fig
+
+
+def build_linear_svm_result_figure(
+    frame: pd.DataFrame,
+    features: list[str],
+    target: str,
+    *,
+    coef: np.ndarray | list[float],
+    intercept: float,
+    support_vectors: np.ndarray | list[list[float]],
+    mesh_points: int = 30,
+    paired_scatter: bool = False,
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    x1_name, x2_name = features[0], features[1]
+    x1 = pd.to_numeric(frame[x1_name], errors="coerce").to_numpy(dtype=float)
+    x2 = pd.to_numeric(frame[x2_name], errors="coerce").to_numpy(dtype=float)
+    labels = pd.to_numeric(frame[target], errors="coerce").to_numpy(dtype=float)
+    coef_array = np.asarray(coef, dtype=float).reshape(-1)
+
+    fig, ax = plt.subplots(figsize=(8, 5.2), constrained_layout=True)
+    if paired_scatter:
+        ax.scatter(x1, x2, c=labels, cmap=plt.cm.Paired, zorder=2)
+    else:
+        positives = labels == 1
+        negatives = labels == 0
+        scatter_binary_classes(ax, x1, x2, positives=positives, negatives=negatives)
+
+    x_min, x_max = float(np.min(x1)), float(np.max(x1))
+    y_min, y_max = float(np.min(x2)), float(np.max(x2))
+    pad_x = (x_max - x_min) * 0.08 or 1.0
+    pad_y = (y_max - y_min) * 0.08 or 1.0
+    grid_x = np.linspace(x_min - pad_x, x_max + pad_x, mesh_points)
+    grid_y = np.linspace(y_min - pad_y, y_max + pad_y, mesh_points)
+    mesh_xx, mesh_yy = np.meshgrid(grid_x, grid_y)
+    grid = np.c_[mesh_xx.ravel(), mesh_yy.ravel()]
+    scores = grid @ coef_array + float(intercept)
+    mesh_zz = scores.reshape(mesh_xx.shape)
+    ax.contourf(mesh_xx, mesh_yy, mesh_zz, levels=20, alpha=0.35, cmap="coolwarm")
+    ax.contour(mesh_xx, mesh_yy, mesh_zz, levels=[0.0], colors="black", linewidths=1.5)
+
+    sv = np.asarray(support_vectors, dtype=float)
+    if sv.size:
+        ax.scatter(
+            sv[:, 0],
+            sv[:, 1],
+            s=140,
+            facecolors="none",
+            edgecolors="black",
+            linewidths=1.8,
+            label="support vectors",
+            zorder=4,
+        )
+
+    ax.set_xlabel(x1_name)
+    ax.set_ylabel(x2_name)
+    ax.set_title("線性 SVM 決策邊界與 support vectors")
+    ax.legend(loc="best")
+    return fig
+
+
 def build_sigmoid_figure(
     *,
     z_min: float = -10.0,

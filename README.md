@@ -31,7 +31,7 @@ uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git
 By default, installation and update also run this in the target project:
 
 ```powershell
-uv add --upgrade-package openai-tts streamlit pandas matplotlib numpy "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
+uv add --upgrade-package openai-tts streamlit pandas matplotlib numpy scikit-learn "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
 ```
 
 To copy or update the shell without changing project dependencies:
@@ -94,14 +94,15 @@ The installed `dataset_streamlit_shell/` template includes supervised learning p
 - **Linear regression** (built-in restaurant profit and house price CSVs under `built-in-data/regression/`)
 - **Logistic regression** — university admission demo from `built-in-data/classification/university_admission.csv` (Coursera ex2data1)
 - **Regularized logistic regression** — microchip test demo from `built-in-data/classification/microchip_test.csv` (Coursera ex2data2, degree-6 feature map and λ)
+- **Linear SVM** — `make_blobs` demo from `built-in-data/classification/svm_blobs_80.csv` (80 samples, `random_state=7`; aligns with *用 Python 學 AI* p53). Uses `sklearn.svm.SVC(kernel='linear')`; shows the final decision boundary and support vectors (no step animation). Requires `scikit-learn`.
 
-Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/`. Training uses hand-written gradient descent and logistic Cost J; classification threshold is adjusted after training and is not stored in the model JSON (regularization λ is stored for the regularized page).
+Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/`. Logistic pages use hand-written gradient descent and logistic Cost J; the linear SVM page uses scikit-learn `SVC`. Classification threshold is adjusted after training on logistic pages and is not stored in the model JSON (regularization λ is stored for the regularized page).
 
 ## What It Does
 
 - Copies `dataset_streamlit_shell/` into the current project.
 - Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
-- Installs required project dependencies with `uv add streamlit pandas matplotlib numpy` and `openai-tts` by default.
+- Installs required project dependencies with `uv add streamlit pandas matplotlib numpy scikit-learn` and `openai-tts` by default.
 - Persists TTS preferences to `dataset_streamlit_shell/workspace/user_settings.json` across page changes and browser restarts.
 - Refuses to overwrite an existing shell unless `--force` is used.
 - Supports `--update` to refresh shell code while preserving runtime data.

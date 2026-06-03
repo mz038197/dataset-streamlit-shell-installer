@@ -108,6 +108,7 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "15_Multiple_Linear_Regression.py"), title="多變量線性回歸"),
         st.Page(str(SHELL_ROOT / "pages" / "16_Logistic_Regression.py"), title="邏輯迴歸"),
         st.Page(str(SHELL_ROOT / "pages" / "17_Regularized_Logistic_Regression.py"), title="正則化邏輯迴歸"),
+        st.Page(str(SHELL_ROOT / "pages" / "18_Linear_SVM.py"), title="線性 SVM"),
     ],
     "機器學習 · 非監督式": [
         st.Page(str(SHELL_ROOT / "pages" / "11_Wards_Method.py"), title="Ward's Method（階層分群）"),
