@@ -24,6 +24,7 @@ from dataset_streamlit_shell.ml.coffee_nn import (
     TARGET_COLUMN,
     TrainConfig,
     build_nn_agent_context,
+    configure_tensorflow_runtime,
     estimate_parameter_count,
     format_model_code,
     lab02_default_compile_spec,
@@ -70,6 +71,7 @@ SIGMOID_FORMULA_LATEX = r"\sigma(z) = \dfrac{1}{1 + e^{-z}}"
 
 
 def render_neural_network_page() -> None:
+    configure_tensorflow_runtime()
     frame = load_builtin_frame(BUILTIN_PATH)
     tab_activation, tab_train = st.tabs(["活化函數", "神經網路訓練"])
     with tab_activation:
@@ -366,6 +368,7 @@ def _run_training(
     context_key: str,
 ) -> None:
     try:
+        configure_tensorflow_runtime()
         import tensorflow  # noqa: F401
     except ImportError:
         st.error("找不到 TensorFlow。請重新執行安裝工具以安裝 tensorflow-cpu。")
