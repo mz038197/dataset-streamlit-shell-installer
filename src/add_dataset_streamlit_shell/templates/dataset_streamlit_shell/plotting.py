@@ -573,30 +573,74 @@ def build_nn_1d_probability_figure(
     return fig
 
 
+def activation_curve_y(
+    name: str,
+    z: np.ndarray,
+    *,
+    leaky_alpha: float = 0.01,
+) -> np.ndarray:
+    z_array = np.asarray(z, dtype=float)
+    if name == "ReLU":
+        return np.maximum(0.0, z_array)
+    if name == "Leaky ReLU":
+        return np.where(z_array > 0, z_array, leaky_alpha * z_array)
+    if name == "Sigmoid":
+        clipped = np.clip(z_array, -500, 500)
+        return 1.0 / (1.0 + np.exp(-clipped))
+    if name == "Tanh":
+        return np.tanh(z_array)
+    if name == "Linear":
+        return z_array.copy()
+    raise ValueError(f"不支援的活化函數：{name}")
+
+
+def build_single_activation_curve_figure(
+    name: str,
+    z: np.ndarray,
+    values: np.ndarray,
+    *,
+    title: str | None = None,
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    fig, ax = plt.subplots(figsize=(8, 4.2), constrained_layout=True)
+    ax.plot(z, values, color="#1a73e8", linewidth=2)
+    ax.axhline(0, color="#9aa0a6", linestyle="--", linewidth=1, alpha=0.7)
+    ax.axvline(0, color="#9aa0a6", linestyle="--", linewidth=1, alpha=0.7)
+    ax.set_title(title or name)
+    ax.set_xlabel("z")
+    ax.set_ylabel("f(z)")
+    ax.grid(True, alpha=0.25)
+    return fig
+
+
 def build_activation_curves_figure(
     *,
     z_min: float = -5.0,
     z_max: float = 5.0,
+    leaky_alpha: float = 0.01,
 ) -> Figure:
     plt = importlib.import_module("matplotlib.pyplot")
     configure_matplotlib_for_traditional_chinese()
     z = np.linspace(z_min, z_max, 400)
-    clipped = np.clip(z, -500, 500)
     curves = [
-        ("ReLU", np.maximum(0.0, z)),
-        ("Sigmoid", 1.0 / (1.0 + np.exp(-clipped))),
-        ("Tanh", np.tanh(z)),
-        ("Linear", z.copy()),
+        "ReLU",
+        "Leaky ReLU",
+        "Sigmoid",
+        "Tanh",
+        "Linear",
     ]
-    fig, axes = plt.subplots(2, 2, figsize=(10, 7), constrained_layout=True)
-    for ax, (name, values) in zip(np.ravel(axes), curves):
+    fig, axes = plt.subplots(2, 3, figsize=(12, 7), constrained_layout=True)
+    for ax, curve_name in zip(np.ravel(axes), curves):
+        values = activation_curve_y(curve_name, z, leaky_alpha=leaky_alpha)
         ax.plot(z, values, color="#1a73e8", linewidth=2)
         ax.axhline(0, color="#9aa0a6", linestyle="--", linewidth=1, alpha=0.7)
         ax.axvline(0, color="#9aa0a6", linestyle="--", linewidth=1, alpha=0.7)
-        ax.set_title(name)
+        ax.set_title(curve_name)
         ax.set_xlabel("z")
         ax.set_ylabel("f(z)")
         ax.grid(True, alpha=0.25)
+    axes[-1].set_visible(False)
     fig.suptitle("常見活化函數", fontsize=14)
     return fig
 

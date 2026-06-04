@@ -15,6 +15,8 @@ TEMPLATE_ROOT = (
 if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
+from dataset_streamlit_shell.plotting import activation_curve_y
+
 from dataset_streamlit_shell.ml.coffee_nn import (
     BUILTIN_DATA_PATH_SUFFIX,
     CompileSpec,
@@ -35,6 +37,12 @@ from dataset_streamlit_shell.ml.coffee_nn import (
 )
 
 BUILTIN_PATH = TEMPLATE_ROOT / "dataset_streamlit_shell" / Path(*BUILTIN_DATA_PATH_SUFFIX)
+
+
+def test_activation_curve_y_leaky_relu_negative_slope() -> None:
+    z = np.array([-2.0, 0.0, 3.0], dtype=float)
+    values = activation_curve_y("Leaky ReLU", z, leaky_alpha=0.1)
+    np.testing.assert_allclose(values, [-0.2, 0.0, 3.0])
 
 
 def test_builtin_data_has_400_rows_and_binary_labels() -> None:

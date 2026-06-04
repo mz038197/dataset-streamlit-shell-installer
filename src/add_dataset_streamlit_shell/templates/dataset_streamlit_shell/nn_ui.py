@@ -35,8 +35,9 @@ from dataset_streamlit_shell.ml.coffee_nn import (
     validate_network_spec,
 )
 from dataset_streamlit_shell.plotting import (
-    build_activation_curves_figure,
+    activation_curve_y,
     build_nn_1d_probability_figure,
+    build_single_activation_curve_figure,
     build_nn_data_figures,
     build_nn_decision_boundary_figure,
     build_sigmoid_figure,
@@ -52,6 +53,21 @@ BUILTIN_PATH = SHELL_ROOT.joinpath(*BUILTIN_DATA_PATH_SUFFIX)
 RESULT_KEY = "nn_last_result"
 CONTEXT_KEY = "類神經網路_agent_context"
 
+ACTIVATION_Z_MIN = -5.0
+ACTIVATION_Z_MAX = 5.0
+ACTIVATION_DEMO_ITEMS: tuple[tuple[str, str, str | None], ...] = (
+    ("ReLU", r"f(z) = \max(0,\, z)", None),
+    (
+        "Leaky ReLU",
+        r"f(z) = \begin{cases} z & z > 0 \\ \alpha z & z \le 0 \end{cases}",
+        "α 為負斜率係數；TensorFlow 預設 α = 0.01。",
+    ),
+    ("Sigmoid", r"f(z) = \dfrac{1}{1 + e^{-z}}", None),
+    ("Tanh", r"f(z) = \tanh(z) = \dfrac{e^{z} - e^{-z}}{e^{z} + e^{-z}}", None),
+    ("Linear", r"f(z) = z", "亦稱恆等（identity）活化，不做非線性變換。"),
+)
+SIGMOID_FORMULA_LATEX = r"\sigma(z) = \dfrac{1}{1 + e^{-z}}"
+
 
 def render_neural_network_page() -> None:
     frame = load_builtin_frame(BUILTIN_PATH)
@@ -64,17 +80,50 @@ def render_neural_network_page() -> None:
 
 def _render_activation_tab() -> None:
     st.markdown("##### 常見活化函數")
-    st.caption("觀察 ReLU、Sigmoid、Tanh、Linear 在輸入 z 上的輸出形狀。")
-    fig = build_activation_curves_figure()
-    st.pyplot(fig, clear_figure=True)
-    plt.close(fig)
+    st.caption(
+        "觀察 ReLU、Leaky ReLU、Sigmoid、Tanh、Linear 在輸入 z 上的輸出形狀；"
+        "展開各函數下方的「公式」可對照數學定義。"
+    )
+    z_grid = np.linspace(ACTIVATION_Z_MIN, ACTIVATION_Z_MAX, 400)
+
+    for name, latex, note in ACTIVATION_DEMO_ITEMS:
+        st.markdown(f"###### {name}")
+        leaky_alpha = 0.01
+        if name == "Leaky ReLU":
+            leaky_alpha = st.slider(
+                "Leaky ReLU 的 α（負半軸斜率）",
+                min_value=0.01,
+                max_value=0.5,
+                value=0.01,
+                step=0.01,
+                key="nn_leaky_relu_alpha",
+            )
+        values = activation_curve_y(name, z_grid, leaky_alpha=leaky_alpha)
+        fig = build_single_activation_curve_figure(name, z_grid, values)
+        st.pyplot(fig, clear_figure=True)
+        plt.close(fig)
+        with st.expander("公式", expanded=False):
+            st.latex(latex)
+            if note:
+                st.caption(note)
 
     st.divider()
     st.markdown("##### Sigmoid 重點")
-    z_highlight = st.slider("標示 z 值", min_value=-10.0, max_value=10.0, value=0.0, step=0.5, key="nn_sigmoid_z")
+    st.caption("在 z = 0 時 σ(z) = 0.5，是二元分類輸出層常用的 S 形曲線。")
+    z_highlight = st.slider(
+        "標示 z 值",
+        min_value=-10.0,
+        max_value=10.0,
+        value=0.0,
+        step=0.5,
+        key="nn_sigmoid_z",
+    )
     sigmoid_fig = build_sigmoid_figure(highlight_z=z_highlight)
     st.pyplot(sigmoid_fig, clear_figure=True)
     plt.close(sigmoid_fig)
+    with st.expander("公式", expanded=False):
+        st.latex(SIGMOID_FORMULA_LATEX)
+        st.caption("圖中曲線標示為 σ(z)；與上方 Sigmoid 小節的 f(z) 為同一函數。")
 
 
 def _render_training_tab(frame: pd.DataFrame) -> None:
