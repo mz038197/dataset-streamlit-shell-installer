@@ -116,6 +116,9 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "11_Wards_Method.py"), title="Ward's Method（階層分群）"),
         st.Page(str(SHELL_ROOT / "pages" / "12_KMeans.py"), title="K-Means 分群"),
     ],
+    "深度學習": [
+        st.Page(str(SHELL_ROOT / "pages" / "21_Neural_Network.py"), title="類神經網路"),
+    ],
 }
 
 st.navigation(pages).run()

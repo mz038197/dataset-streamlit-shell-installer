@@ -427,3 +427,195 @@ def render_figures_in_streamlit(figures: list[tuple[str, Figure]]) -> None:
         st.caption(caption)
         st.pyplot(fig, clear_figure=True)
         plt.close(fig)
+
+
+NN_TEACHING_CHART_FIGSIZE = (7, 7)
+
+NN_CLASS_0_STYLE = {
+    "marker": "o",
+    "c": "#f4b400",
+    "edgecolors": "#5f4330",
+    "linewidths": 0.6,
+    "label": "y=0",
+}
+NN_CLASS_1_STYLE = {
+    "marker": "x",
+    "c": "#202124",
+    "linewidths": 1.2,
+    "label": "y=1",
+}
+
+
+def scatter_nn_binary_classes(
+    ax,
+    x1,
+    x2,
+    *,
+    class_0: np.ndarray,
+    class_1: np.ndarray,
+) -> None:
+    ax.scatter(x1[class_0], x2[class_0], **NN_CLASS_0_STYLE)
+    ax.scatter(x1[class_1], x2[class_1], **NN_CLASS_1_STYLE)
+
+
+def build_nn_data_figures(
+    frame: pd.DataFrame,
+    features: list[str],
+    target: str,
+    *,
+    axis_labels: dict[str, str] | None = None,
+    scatter_title: str = "雙特徵二元分類資料",
+) -> list[tuple[str, Figure]]:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    labels = pd.to_numeric(frame[target], errors="coerce")
+    class_0 = labels == 0
+    class_1 = labels == 1
+    label_map = axis_labels or {}
+    figures: list[tuple[str, Figure]] = []
+
+    if len(features) == 1:
+        feature = features[0]
+        x = pd.to_numeric(frame[feature], errors="coerce")
+        jitter = np.where(class_1, 1.02, -0.02) + np.random.default_rng(0).uniform(
+            -0.04, 0.04, size=len(frame)
+        )
+        fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+        ax.scatter(x[class_0], jitter[class_0], **NN_CLASS_0_STYLE)
+        ax.scatter(x[class_1], jitter[class_1], **NN_CLASS_1_STYLE)
+        ax.set_xlabel(label_map.get(feature, feature))
+        ax.set_ylabel(target)
+        ax.set_yticks([0, 1])
+        ax.set_title(f"{label_map.get(feature, feature)} 與 {target}")
+        ax.legend()
+        figures.append((f"{feature} 分佈", fig))
+        return figures
+
+    plot_features = features[:2]
+    x1 = pd.to_numeric(frame[plot_features[0]], errors="coerce")
+    x2 = pd.to_numeric(frame[plot_features[1]], errors="coerce")
+    fig, ax = plt.subplots(figsize=NN_TEACHING_CHART_FIGSIZE, constrained_layout=True)
+    scatter_nn_binary_classes(ax, x1, x2, class_0=class_0, class_1=class_1)
+    ax.set_xlabel(label_map.get(plot_features[0], plot_features[0]))
+    ax.set_ylabel(label_map.get(plot_features[1], plot_features[1]))
+    title = scatter_title
+    if len(features) > 2:
+        title += "（訓練使用全部 features）"
+    ax.set_title(title)
+    ax.legend(loc="best")
+    figures.append((scatter_title, fig))
+    return figures
+
+
+def build_nn_decision_boundary_figure(
+    x1: np.ndarray,
+    x2: np.ndarray,
+    labels: np.ndarray,
+    mesh_xx: np.ndarray,
+    mesh_yy: np.ndarray,
+    mesh_scores: np.ndarray,
+    *,
+    x1_label: str,
+    x2_label: str,
+    title: str = "神經網路決策區域",
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    class_0 = labels == 0
+    class_1 = labels == 1
+    fig, ax = plt.subplots(figsize=NN_TEACHING_CHART_FIGSIZE, constrained_layout=True)
+    scatter_nn_binary_classes(ax, x1, x2, class_0=class_0, class_1=class_1)
+    x_lo, x_hi, y_lo, y_hi = linear_svm_data_axis_limits(x1, x2)
+    ax.set_xlim(x_lo, x_hi)
+    ax.set_ylim(y_lo, y_hi)
+    ax.set_aspect("equal", adjustable="box")
+    score_grid = np.asarray(mesh_scores, dtype=float).reshape(mesh_xx.shape)
+    ax.contourf(mesh_xx, mesh_yy, score_grid, levels=20, alpha=0.35, cmap="coolwarm", zorder=1)
+    ax.contour(
+        mesh_xx,
+        mesh_yy,
+        score_grid,
+        levels=[0.5],
+        colors="black",
+        linewidths=1.5,
+        zorder=2,
+    )
+    ax.set_xlabel(x1_label)
+    ax.set_ylabel(x2_label)
+    ax.set_title(title)
+    ax.legend(loc="best")
+    return fig
+
+
+def build_nn_1d_probability_figure(
+    x_values: np.ndarray,
+    probabilities: np.ndarray,
+    labels: np.ndarray,
+    *,
+    x_label: str,
+    title: str = "單特徵分類機率曲線",
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    class_0 = labels == 0
+    class_1 = labels == 1
+    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    order = np.argsort(x_values)
+    ax.plot(x_values[order], probabilities[order], color="#1a73e8", linewidth=2, label="P(y=1)")
+    ax.scatter(x_values[class_0], labels[class_0], **NN_CLASS_0_STYLE)
+    ax.scatter(x_values[class_1], labels[class_1], **NN_CLASS_1_STYLE)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel("機率 / 類別")
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_title(title)
+    ax.legend(loc="best")
+    ax.grid(True, alpha=0.25)
+    return fig
+
+
+def build_activation_curves_figure(
+    *,
+    z_min: float = -5.0,
+    z_max: float = 5.0,
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    z = np.linspace(z_min, z_max, 400)
+    clipped = np.clip(z, -500, 500)
+    curves = [
+        ("ReLU", np.maximum(0.0, z)),
+        ("Sigmoid", 1.0 / (1.0 + np.exp(-clipped))),
+        ("Tanh", np.tanh(z)),
+        ("Linear", z.copy()),
+    ]
+    fig, axes = plt.subplots(2, 2, figsize=(10, 7), constrained_layout=True)
+    for ax, (name, values) in zip(np.ravel(axes), curves):
+        ax.plot(z, values, color="#1a73e8", linewidth=2)
+        ax.axhline(0, color="#9aa0a6", linestyle="--", linewidth=1, alpha=0.7)
+        ax.axvline(0, color="#9aa0a6", linestyle="--", linewidth=1, alpha=0.7)
+        ax.set_title(name)
+        ax.set_xlabel("z")
+        ax.set_ylabel("f(z)")
+        ax.grid(True, alpha=0.25)
+    fig.suptitle("常見活化函數", fontsize=14)
+    return fig
+
+
+def build_training_loss_figure(
+    history: dict[str, list[float]],
+    *,
+    title: str = "訓練 loss 曲線",
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    losses = history.get("loss", [])
+    fig, ax = plt.subplots(figsize=(8, 4.2), constrained_layout=True)
+    if losses:
+        epochs = list(range(1, len(losses) + 1))
+        ax.plot(epochs, losses, marker="o", color="#1a73e8", label="loss")
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("loss")
+    ax.set_title(title)
+    ax.legend()
+    ax.grid(True, alpha=0.25)
+    return fig

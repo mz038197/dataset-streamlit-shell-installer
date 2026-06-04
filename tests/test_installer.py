@@ -108,6 +108,7 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
                 "numpy",
                 "scikit-learn",
                 "xgboost",
+                "tensorflow-cpu",
                 "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
             ],
             tmp_path.resolve(),
@@ -121,5 +122,6 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
         "numpy",
         "scikit-learn",
         "xgboost",
+        "tensorflow-cpu",
         "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
     )
