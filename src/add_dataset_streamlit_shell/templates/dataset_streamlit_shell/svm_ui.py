@@ -59,6 +59,7 @@ SVM_FEATURES = ["特徵1", "特徵2"]
 SVM_TARGET = "類別"
 SVM_DEMO_FEATURES = ["x1", "x2"]
 SVM_DEMO_TARGET = "y"
+SVM_TEACHING_CHART_FIGSIZE = (7, 7)
 
 
 def render_linear_svm_page() -> None:
@@ -709,7 +710,7 @@ def _build_teaching_svm_figure(
     positives = y == 1
     negatives = y == -1
 
-    fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=SVM_TEACHING_CHART_FIGSIZE, constrained_layout=True)
     ax.scatter(x1[negatives], x2[negatives], label="-1", c="#f4b400", edgecolors="#5f4330", linewidths=0.6)
     ax.scatter(x1[positives], x2[positives], label="+1", c="#202124", marker="x", linewidths=1.2)
 
@@ -737,7 +738,7 @@ def _build_teaching_svm_figure(
 
 
 def _render_svm_cost_history_plot(steps: list[GradientDescentStep], placeholder) -> None:
-    fig, ax = plt.subplots(figsize=(8, 5.2), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=SVM_TEACHING_CHART_FIGSIZE, constrained_layout=True)
     ax.plot([step.iteration for step in steps], [step.cost for step in steps], color="#ff7043")
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Hinge Loss")
