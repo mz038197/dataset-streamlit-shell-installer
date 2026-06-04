@@ -172,6 +172,79 @@ def build_svm_paired_data_figure(
     return fig
 
 
+SVM_HYPERPLANE_SLOPE_EPS = 1e-8
+
+
+def linear_svm_2d_axis_limits(
+    x1: np.ndarray,
+    x2: np.ndarray,
+    coef: np.ndarray | list[float],
+    intercept: float,
+    *,
+    pad_fraction: float = 0.12,
+) -> tuple[float, float, float, float]:
+    coef_array = np.asarray(coef, dtype=float).reshape(-1)
+    w0, w1 = float(coef_array[0]), float(coef_array[1])
+    b = float(intercept)
+    x_min, x_max = float(np.min(x1)), float(np.max(x1))
+    y_min, y_max = float(np.min(x2)), float(np.max(x2))
+    pad_x = (x_max - x_min) * pad_fraction or 1.0
+    pad_y = (y_max - y_min) * pad_fraction or 1.0
+    x_lo, x_hi = x_min - pad_x, x_max + pad_x
+    y_lo, y_hi = y_min - pad_y, y_max + pad_y
+    if abs(w1) > SVM_HYPERPLANE_SLOPE_EPS:
+        xs = np.linspace(x_lo, x_hi, 100)
+        ys = -(w0 * xs + b) / w1
+        ys_margin_pos = -(w0 * xs + b - 1.0) / w1
+        ys_margin_neg = -(w0 * xs + b + 1.0) / w1
+        y_lo = min(y_lo, float(np.min(ys)), float(np.min(ys_margin_pos)), float(np.min(ys_margin_neg)))
+        y_hi = max(y_hi, float(np.max(ys)), float(np.max(ys_margin_pos)), float(np.max(ys_margin_neg)))
+    return x_lo, x_hi, y_lo, y_hi
+
+
+def plot_linear_svm_hyperplanes(
+    ax,
+    coef: np.ndarray | list[float],
+    intercept: float,
+    x1: np.ndarray,
+    x2: np.ndarray,
+    *,
+    pad_fraction: float = 0.12,
+    show_legend: bool = True,
+    set_limits: bool = True,
+) -> None:
+    """Plot f(x)=0 and f(x)=±1 lines for w0*x1 + w1*x2 + b; optionally set equal aspect."""
+    coef_array = np.asarray(coef, dtype=float).reshape(-1)
+    w0, w1 = float(coef_array[0]), float(coef_array[1])
+    b = float(intercept)
+    if abs(w1) > SVM_HYPERPLANE_SLOPE_EPS:
+        if set_limits:
+            x_lo, x_hi, y_lo, y_hi = linear_svm_2d_axis_limits(
+                x1, x2, coef_array, b, pad_fraction=pad_fraction
+            )
+            xs = np.linspace(x_lo, x_hi, 100)
+        else:
+            xs = np.linspace(float(np.min(x1)), float(np.max(x1)), 100)
+        ys = -(w0 * xs + b) / w1
+        ys_margin_pos = -(w0 * xs + b - 1.0) / w1
+        ys_margin_neg = -(w0 * xs + b + 1.0) / w1
+        ax.plot(xs, ys, color="#1a73e8", linewidth=2, label="Decision Boundary", zorder=3)
+        ax.plot(xs, ys_margin_pos, color="#0f9d58", linestyle="--", label="Margin +1", zorder=3)
+        ax.plot(xs, ys_margin_neg, color="#db4437", linestyle="--", label="Margin -1", zorder=3)
+
+    if set_limits:
+        x_lo, x_hi, y_lo, y_hi = linear_svm_2d_axis_limits(
+            x1, x2, coef_array, b, pad_fraction=pad_fraction
+        )
+        ax.set_xlim(x_lo, x_hi)
+        ax.set_ylim(y_lo, y_hi)
+        ax.set_aspect("equal", adjustable="box")
+    if show_legend:
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(loc="best")
+
+
 def build_linear_svm_result_figure(
     frame: pd.DataFrame,
     features: list[str],
@@ -191,7 +264,7 @@ def build_linear_svm_result_figure(
     labels = pd.to_numeric(frame[target], errors="coerce").to_numpy(dtype=float)
     coef_array = np.asarray(coef, dtype=float).reshape(-1)
 
-    fig, ax = plt.subplots(figsize=(8, 5.2), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
     if paired_scatter:
         ax.scatter(x1, x2, c=labels, cmap=plt.cm.Paired, zorder=2)
     else:
@@ -199,18 +272,34 @@ def build_linear_svm_result_figure(
         negatives = labels == -1
         scatter_binary_classes(ax, x1, x2, positives=positives, negatives=negatives)
 
-    x_min, x_max = float(np.min(x1)), float(np.max(x1))
-    y_min, y_max = float(np.min(x2)), float(np.max(x2))
-    pad_x = (x_max - x_min) * 0.08 or 1.0
-    pad_y = (y_max - y_min) * 0.08 or 1.0
-    grid_x = np.linspace(x_min - pad_x, x_max + pad_x, mesh_points)
-    grid_y = np.linspace(y_min - pad_y, y_max + pad_y, mesh_points)
+    x_lo, x_hi, y_lo, y_hi = linear_svm_2d_axis_limits(x1, x2, coef_array, intercept)
+    ax.set_xlim(x_lo, x_hi)
+    ax.set_ylim(y_lo, y_hi)
+    ax.set_aspect("equal", adjustable="box")
+    grid_x = np.linspace(x_lo, x_hi, mesh_points)
+    grid_y = np.linspace(y_lo, y_hi, mesh_points)
     mesh_xx, mesh_yy = np.meshgrid(grid_x, grid_y)
     grid = np.c_[mesh_xx.ravel(), mesh_yy.ravel()]
     scores = grid @ coef_array + float(intercept)
     mesh_zz = scores.reshape(mesh_xx.shape)
-    ax.contourf(mesh_xx, mesh_yy, mesh_zz, levels=20, alpha=0.35, cmap="coolwarm")
-    ax.contour(mesh_xx, mesh_yy, mesh_zz, levels=[0.0], colors="black", linewidths=1.5)
+    ax.contourf(mesh_xx, mesh_yy, mesh_zz, levels=20, alpha=0.35, cmap="coolwarm", zorder=1)
+    ax.contour(
+        mesh_xx,
+        mesh_yy,
+        mesh_zz,
+        levels=[0.0],
+        colors="black",
+        linewidths=1.5,
+        zorder=2,
+    )
+    plot_linear_svm_hyperplanes(
+        ax,
+        coef_array,
+        intercept,
+        x1,
+        x2,
+        set_limits=False,
+    )
 
     sv = np.asarray(support_vectors, dtype=float)
     if sv.size:

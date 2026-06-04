@@ -150,3 +150,19 @@ def test_compute_hinge_loss_matches_margin_formula() -> None:
     y = pd.Series([-1, 1])
     loss = compute_hinge_loss(x, y, [1.0, 1.0], 0.0, C=1.0)
     assert loss == pytest.approx(2.5)
+
+
+def test_linear_svm_hyperplane_lines_satisfy_f_equals_0_and_pm1() -> None:
+    from dataset_streamlit_shell.plotting import SVM_HYPERPLANE_SLOPE_EPS
+
+    w0, w1, b = 0.5, 2.0, -3.0
+    xs = np.linspace(0.0, 4.0, 5)
+    if abs(w1) <= SVM_HYPERPLANE_SLOPE_EPS:
+        pytest.skip("test weights need non-zero w1")
+    ys = -(w0 * xs + b) / w1
+    ys_pos = -(w0 * xs + b - 1.0) / w1
+    ys_neg = -(w0 * xs + b + 1.0) / w1
+    for x_val, y_val, y_pos, y_neg in zip(xs, ys, ys_pos, ys_neg):
+        assert w0 * x_val + w1 * y_val + b == pytest.approx(0.0)
+        assert w0 * x_val + w1 * y_pos + b == pytest.approx(1.0)
+        assert w0 * x_val + w1 * y_neg + b == pytest.approx(-1.0)

@@ -44,6 +44,7 @@ from dataset_streamlit_shell.plotting import (
     build_linear_svm_result_figure,
     build_svm_paired_data_figure,
     configure_matplotlib_for_traditional_chinese,
+    plot_linear_svm_hyperplanes,
     render_figures_in_streamlit,
 )
 
@@ -715,19 +716,12 @@ def _build_teaching_svm_figure(
     positives = y == 1
     negatives = y == -1
 
-    fig, ax = plt.subplots(figsize=(8, 5.2), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
     ax.scatter(x1[negatives], x2[negatives], label="-1", c="#f4b400", edgecolors="#5f4330", linewidths=0.6)
     ax.scatter(x1[positives], x2[positives], label="+1", c="#202124", marker="x", linewidths=1.2)
 
     weights = np.asarray(step.weights, dtype=float)
-    if abs(weights[1]) > 1e-12:
-        xs = np.linspace(float(np.min(x1)), float(np.max(x1)), 100)
-        ys = -(weights[0] * xs + step.intercept) / weights[1]
-        ys_margin_pos = -(weights[0] * xs + step.intercept - 1.0) / weights[1]
-        ys_margin_neg = -(weights[0] * xs + step.intercept + 1.0) / weights[1]
-        ax.plot(xs, ys, color="#1a73e8", linewidth=2, label="Decision Boundary")
-        ax.plot(xs, ys_margin_pos, color="#0f9d58", linestyle="--", label="Margin +1")
-        ax.plot(xs, ys_margin_neg, color="#db4437", linestyle="--", label="Margin -1")
+    plot_linear_svm_hyperplanes(ax, weights, step.intercept, x1, x2)
 
     if np.any(candidate_mask):
         ax.scatter(
