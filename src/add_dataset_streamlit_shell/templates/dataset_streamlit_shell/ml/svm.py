@@ -200,6 +200,25 @@ def linear_svm_gradient_descent_steps(
     return steps
 
 
+def sample_gradient_descent_steps_for_animation(
+    steps: list[GradientDescentStep],
+    *,
+    update_every: int,
+    max_frames: int = 80,
+) -> list[GradientDescentStep]:
+    """Subsample steps for Streamlit animation; larger update_every yields fewer frames."""
+    if not steps:
+        return []
+    stride = max(int(update_every), 1)
+    if len(steps) > max_frames:
+        cap_stride = max(1, (len(steps) + max_frames - 1) // max_frames)
+        stride = max(stride, cap_stride)
+    selected = steps[::stride]
+    if selected[-1] is not steps[-1]:
+        selected.append(steps[-1])
+    return selected
+
+
 def support_vector_candidates(
     feature_frame: pd.DataFrame | np.ndarray,
     target: pd.Series | np.ndarray,
@@ -308,6 +327,7 @@ __all__ = [
     "decision_function_from_artifact",
     "fit_linear_svc",
     "linear_svm_gradient_descent_steps",
+    "sample_gradient_descent_steps_for_animation",
     "load_svm_artifact",
     "predict_binary_class",
     "predict_class_from_artifact",

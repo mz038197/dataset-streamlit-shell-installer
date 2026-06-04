@@ -152,6 +152,30 @@ def test_compute_hinge_loss_matches_margin_formula() -> None:
     assert loss == pytest.approx(2.5)
 
 
+def test_sample_svm_steps_respects_update_every() -> None:
+    from dataset_streamlit_shell.ml.regression import GradientDescentStep
+    from dataset_streamlit_shell.ml.svm import sample_gradient_descent_steps_for_animation
+
+    steps = [
+        GradientDescentStep(iteration=i, weights=[0.0, 0.0], intercept=0.0, cost=float(i))
+        for i in range(201)
+    ]
+    dense = sample_gradient_descent_steps_for_animation(steps, update_every=1)
+    sparse = sample_gradient_descent_steps_for_animation(steps, update_every=10)
+    assert len(dense) > len(sparse)
+    assert steps[-1] in sparse
+    assert steps[-1] in dense
+    assert len(dense) <= 81
+    assert len(sparse) <= 25
+
+    few_epochs = [
+        GradientDescentStep(iteration=i, weights=[0.0, 0.0], intercept=0.0, cost=float(i))
+        for i in range(51)
+    ]
+    every_ten = sample_gradient_descent_steps_for_animation(few_epochs, update_every=10)
+    assert len(every_ten) < len(few_epochs)
+
+
 def test_linear_svm_hyperplane_lines_satisfy_f_equals_0_and_pm1() -> None:
     from dataset_streamlit_shell.plotting import SVM_HYPERPLANE_SLOPE_EPS
 

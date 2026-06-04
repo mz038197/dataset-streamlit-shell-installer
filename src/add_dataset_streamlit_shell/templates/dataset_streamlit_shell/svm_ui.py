@@ -33,6 +33,7 @@ from dataset_streamlit_shell.ml.svm import (
     decision_function_from_artifact,
     fit_linear_svc,
     linear_svm_gradient_descent_steps,
+    sample_gradient_descent_steps_for_animation,
     predict_binary_class,
     predict_class_from_artifact,
     save_svm_artifact,
@@ -315,7 +316,9 @@ def _render_teaching_mode(
         value=10,
         step=1,
         key="svm_demo_update_every",
+        help="動畫每隔幾個 iteration 更新一幀；步數多時最多約 80 幀。",
     )
+    st.caption("更新步長只影響教學動畫速度，不改變實際訓練；數字愈大，動畫愈快、畫面愈少。")
     st.markdown("##### 模型公式")
     st.latex(r"y^{(i)}(\mathbf{w}\cdot\mathbf{x}^{(i)}+b)\ge 1")
     _render_svm_loss_formula(teaching=True)
@@ -660,7 +663,7 @@ def _animate_teaching_svm(
     update_every: int,
     scaler: dict | None,
 ) -> None:
-    for step in _sample_svm_steps(steps, update_every=update_every):
+    for step in sample_gradient_descent_steps_for_animation(steps, update_every=update_every):
         candidate_mask = support_vector_candidates(feature_matrix, frame[target], step.weights, step.intercept)
         fig = _build_teaching_svm_figure(
             frame,
@@ -679,16 +682,6 @@ def _animate_teaching_svm(
             f"Loss = {step.cost:.4f}，w = [{step.weights[0]:.3f}, {step.weights[1]:.3f}]，b = {step.intercept:.3f}"
         )
         time.sleep(0.02)
-
-
-def _sample_svm_steps(steps: list[GradientDescentStep], *, update_every: int) -> list[GradientDescentStep]:
-    if len(steps) <= 80:
-        return steps
-    stride = max(int(update_every), len(steps) // 80, 1)
-    selected = steps[::stride]
-    if selected[-1] != steps[-1]:
-        selected.append(steps[-1])
-    return selected
 
 
 def _build_teaching_svm_figure(
