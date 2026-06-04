@@ -94,7 +94,7 @@ The installed `dataset_streamlit_shell/` template includes supervised learning p
 - **Linear regression** (built-in restaurant profit and house price CSVs under `built-in-data/regression/`)
 - **Logistic regression** — university admission demo from `built-in-data/classification/university_admission.csv` (Coursera ex2data1)
 - **Regularized logistic regression** — microchip test demo from `built-in-data/classification/microchip_test.csv` (Coursera ex2data2, degree-6 feature map and λ)
-- **Linear SVM** — `make_blobs` demo from `built-in-data/classification/svm_blobs_80.csv` (80 samples, `random_state=7`; aligns with *用 Python 學 AI* p53). Uses `sklearn.svm.SVC(kernel='linear')`; shows the final decision boundary and support vectors (no step animation). Requires `scikit-learn`.
+- **Linear SVM** — built-in two-feature binary demo from `built-in-data/classification/svm_blobs_80.csv`. Uses `sklearn.svm.SVC(kernel='linear')`; shows the final decision boundary and support vectors. Requires `scikit-learn`.
 
 Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/`. Logistic pages use hand-written gradient descent and logistic Cost J; the linear SVM page uses scikit-learn `SVC`. Classification threshold is adjusted after training on logistic pages and is not stored in the model JSON (regularization λ is stored for the regularized page).
 

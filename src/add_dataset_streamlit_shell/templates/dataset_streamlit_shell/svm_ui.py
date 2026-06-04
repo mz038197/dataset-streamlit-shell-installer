@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -17,8 +18,8 @@ from dataset_streamlit_shell.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
 )
-from dataset_streamlit_shell.ml.classification import validate_binary_target
 from dataset_streamlit_shell.ml.regression import (
+    GradientDescentStep,
     apply_standard_scaler,
     create_standard_scaler,
 )
@@ -28,10 +29,15 @@ from dataset_streamlit_shell.ml.svm import (
     artifact_from_payload,
     build_linear_svm_artifact,
     build_svm_agent_context,
+    compute_hinge_loss,
     decision_function_from_artifact,
     fit_linear_svc,
+    linear_svm_gradient_descent_steps,
+    predict_binary_class,
     predict_class_from_artifact,
     save_svm_artifact,
+    support_vector_candidates,
+    validate_svm_target,
 )
 from dataset_streamlit_shell.plotting import (
     build_classification_data_figures,
@@ -54,30 +60,30 @@ SVM_TARGET = "類別"
 def render_linear_svm_page() -> None:
     def body(df: pd.DataFrame, source_label: str, *, builtin: bool) -> None:
         st.markdown("##### 線性 SVM")
-        st.info(
-            "使用 scikit-learn 的 `SVC(kernel='linear')` 擬合二元分類；"
-            "訓練完成後顯示決策邊界與 support vectors（對齊《用 Python 學 AI》p53）。"
+        mode = st.radio(
+            "模式",
+            ["標準 SVM（sklearn）", "教學示意（手寫 hinge loss 更新）"],
+            horizontal=True,
+            key="svm_mode",
         )
         if builtin:
             features = list(SVM_FEATURES)
             target = SVM_TARGET
-            working = _training_frame(df, features, target)
+            working = _svm_training_frame(df, features, target, builtin=builtin)
         else:
             numeric_columns = _numeric_columns(df)
-            if len(numeric_columns) < 2:
-                st.warning("至少需要 1 個 target 與 1 個 feature。")
+            if len(numeric_columns) < 3:
+                st.warning("至少需要 2 個 features 與 1 個 target。")
                 return
             default_target = _default_column(numeric_columns, SVM_TARGET)
             target = st.selectbox(
-                "選擇 target（y，0/1）",
+                "選擇 target（y，-1/+1）",
                 numeric_columns,
-                index=numeric_columns.index(default_target)
-                if default_target in numeric_columns
-                else 0,
+                index=numeric_columns.index(default_target) if default_target in numeric_columns else 0,
                 key="svm_target",
             )
-            if not validate_binary_target(df[target]):
-                st.warning("target 必須為 0/1。請在編碼頁先整理，或改用內建範例資料。")
+            if not validate_svm_target(df[target]):
+                st.warning("target 必須剛好包含 -1 與 +1。請先在前處理頁完成轉碼。")
                 return
             feature_options = [column for column in numeric_columns if column != target]
             default_features = [column for column in SVM_FEATURES if column in feature_options]
@@ -89,68 +95,121 @@ def render_linear_svm_page() -> None:
                 default=default_features,
                 key="svm_features",
             )
-            if not features:
+            if len(features) < 1:
                 st.warning("請至少選擇 1 個 feature。")
                 return
-            working = _training_frame(df, features, target)
-            if len(working) < 2:
-                st.warning("可用樣本少於 2 筆，無法訓練。")
-                return
+            working = _svm_training_frame(df, features, target, builtin=builtin)
+
+        if len(working) < 2:
+            st.warning("可用樣本少於 2 筆，無法訓練。")
+            return
 
         _render_svm_data_intro(working, features=features, target=target, builtin=builtin)
         feature_matrix, scaler = _prepare_svm_features(working, features, builtin=builtin)
 
-        st.markdown("##### 訓練設定")
-        C = st.number_input(
-            "懲罰係數 C",
-            min_value=0.01,
-            max_value=100.0,
-            value=1.0,
-            step=0.1,
-            format="%.2f",
-            key="svm_C",
-        )
-        st.markdown("##### 模型")
-        st.code("SVC(kernel='linear', C=...)", language="python")
-
-        result_key = "linear_svm_last_artifact"
-        context_key = "線性 SVM_agent_context"
-        signature = (
-            source_label,
-            tuple(features),
-            target,
-            float(C),
-            len(working),
-            builtin,
-        )
-        can_plot_2d = len(features) == 2
-        if not can_plot_2d:
-            st.caption("目前選超過 2 個 features，訓練後無法繪製 2D 決策邊界圖。")
-
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            use_container_width=True,
-            key="train_linear_svm",
-        )
-        artifact: LinearSvmArtifact | None = None
-        if train_clicked:
-            try:
-                clf = fit_linear_svc(feature_matrix, working[target], C=float(C))
-            except ValueError as exc:
-                st.error(str(exc))
-                return
-            artifact = build_linear_svm_artifact(
-                clf,
-                features=list(features),
+        if mode == "標準 SVM（sklearn）":
+            _render_sklearn_mode(
+                working=working,
+                feature_matrix=feature_matrix,
+                features=features,
                 target=target,
-                C=float(C),
                 scaler=scaler,
-                data_source=source_label,
-                feature_frame=feature_matrix,
-                target_series=working[target],
+                source_label=source_label,
+                builtin=builtin,
             )
-            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+        else:
+            _render_teaching_mode(
+                working=working,
+                feature_matrix=feature_matrix,
+                features=features,
+                target=target,
+                scaler=scaler,
+                source_label=source_label,
+                builtin=builtin,
+            )
+
+    _svm_page_shell(
+        "線性 SVM",
+        "使用內建範例資料或 ready.csv，練習線性支持向量分類。",
+        "內建範例資料：兩特徵二元分類（80 筆）",
+        SVM_BLOBS_PATH,
+        lambda df, label, builtin: body(df, label, builtin=builtin),
+    )
+
+
+def _render_sklearn_mode(
+    *,
+    working: pd.DataFrame,
+    feature_matrix: pd.DataFrame,
+    features: list[str],
+    target: str,
+    scaler: dict | None,
+    source_label: str,
+    builtin: bool,
+) -> None:
+    st.info(
+        "這個模式使用 scikit-learn 的 `SVC(kernel='linear')`。"
+        "資料標記在本頁統一為 -1 / +1，圖上的 support vectors 為求解器回傳的正式結果。"
+    )
+    st.markdown("##### 訓練設定")
+    C = st.number_input(
+        "懲罰係數 C",
+        min_value=0.01,
+        max_value=100.0,
+        value=1.0,
+        step=0.1,
+        format="%.2f",
+        key="svm_C",
+    )
+    st.markdown("##### 模型公式")
+    st.latex(r"f_{\mathbf{w},b}(\mathbf{x})=\mathbf{w}\cdot\mathbf{x}+b")
+    st.caption("預測類別由 f(x) 的正負決定：f(x) ≥ 0 判為 +1，f(x) < 0 判為 -1。")
+    _render_svm_loss_formula()
+
+    result_key = "linear_svm_last_artifact"
+    context_key = "線性 SVM_agent_context"
+    signature = (source_label, tuple(features), target, float(C), len(working), builtin, "sklearn")
+    can_plot_2d = len(features) == 2
+    if not can_plot_2d:
+        st.caption("目前選超過 2 個 features，訓練後無法繪製 2D 決策邊界圖。")
+
+    train_clicked = st.button("開始訓練", type="primary", use_container_width=True, key="train_linear_svm")
+    artifact: LinearSvmArtifact | None = None
+    if train_clicked:
+        try:
+            clf = fit_linear_svc(feature_matrix, working[target], C=float(C))
+        except ValueError as exc:
+            st.error(str(exc))
+            return
+        artifact = build_linear_svm_artifact(
+            clf,
+            features=list(features),
+            target=target,
+            C=float(C),
+            scaler=scaler,
+            data_source=source_label,
+            feature_frame=feature_matrix,
+            target_series=working[target],
+        )
+        st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+        if can_plot_2d:
+            st.markdown("##### 訓練結果圖")
+            fig = build_linear_svm_result_figure(
+                working,
+                features,
+                target,
+                coef=artifact.coef,
+                intercept=artifact.intercept,
+                support_vectors=artifact.support_vectors,
+                paired_scatter=builtin,
+            )
+            st.pyplot(fig, clear_figure=True)
+            plt.close(fig)
+    else:
+        stored = st.session_state.get(result_key)
+        if isinstance(stored, dict) and stored.get("signature") == signature:
+            artifact = stored["artifact"]
+            st.caption("顯示最近一次訓練結果；調整 C 後請重新按「開始訓練」。")
             if can_plot_2d:
                 st.markdown("##### 訓練結果圖")
                 fig = build_linear_svm_result_figure(
@@ -164,68 +223,192 @@ def render_linear_svm_page() -> None:
                 )
                 st.pyplot(fig, clear_figure=True)
                 plt.close(fig)
-                with st.expander("與課本相同的 5×5 採樣格點示意", expanded=False):
-                    st.caption("教材以資料極值各取 5 個等分點建立 meshgrid。")
-                    demo_fig, demo_ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
-                    x1 = working[features[0]].to_numpy(dtype=float)
-                    x2 = working[features[1]].to_numpy(dtype=float)
-                    labels = working[target].to_numpy(dtype=float)
-                    demo_ax.scatter(x1, x2, c=labels, cmap=plt.cm.Paired)
-                    sample_x = np.linspace(np.min(x1), np.max(x1), 5)
-                    sample_y = np.linspace(np.min(x2), np.max(x2), 5)
-                    grid_x, grid_y = np.meshgrid(sample_x, sample_y)
-                    demo_ax.scatter(grid_x, grid_y, c="k", s=20)
-                    demo_ax.set_title("5×5 採樣格點（課本示意）")
-                    st.pyplot(demo_fig, clear_figure=True)
-                    plt.close(demo_fig)
         else:
-            stored = st.session_state.get(result_key)
-            if isinstance(stored, dict) and stored.get("signature") == signature:
-                artifact = stored["artifact"]
-                st.caption("顯示最近一次訓練結果；調整 C 後請重新按「開始訓練」。")
-                if can_plot_2d:
-                    st.markdown("##### 訓練結果圖")
-                    fig = build_linear_svm_result_figure(
-                        working,
-                        features,
-                        target,
-                        coef=artifact.coef,
-                        intercept=artifact.intercept,
-                        support_vectors=artifact.support_vectors,
-                        paired_scatter=builtin,
-                    )
-                    st.pyplot(fig, clear_figure=True)
-                    plt.close(fig)
-            else:
-                st.info("設定 C 後，按下「開始訓練」以顯示決策邊界與 support vectors。")
+            st.info("設定 C 後，按下「開始訓練」以顯示決策邊界與 support vectors。")
 
-        st.session_state[context_key] = build_svm_agent_context(
-            page_name="線性 SVM",
-            data_source=source_label,
-            features=features,
-            target=target,
+    st.session_state[context_key] = build_svm_agent_context(
+        page_name="線性 SVM",
+        data_source=source_label,
+        features=features,
+        target=target,
+        C=float(C),
+        row_count=len(working),
+        artifact=artifact,
+        note="目前模式：標準 SVM（sklearn）。",
+    )
+    if artifact is not None:
+        _render_svm_training_results(artifact, working, target)
+        _render_svm_save_section(artifact)
+    _render_svm_inference_section(trained_artifact=artifact)
+    _render_svm_prompts(
+        [
+            "請解釋 support vector 在這張圖上代表什麼。",
+            "若 C 變大或變小，決策邊界與 margin 可能如何改變？",
+            "請比較線性 SVM 與邏輯迴歸在這份資料上的差異。",
+        ]
+    )
+
+
+def _render_teaching_mode(
+    *,
+    working: pd.DataFrame,
+    feature_matrix: pd.DataFrame,
+    features: list[str],
+    target: str,
+    scaler: dict | None,
+    source_label: str,
+    builtin: bool,
+) -> None:
+    st.warning(
+        "這個模式是教學示意。它用簡化的 hinge loss 逐筆更新來幫助理解 margin 與邊界移動，"
+        "不是標準 SVM 求解器；圖上只標示 support vector candidates。"
+    )
+    if len(features) != 2:
+        st.info("教學示意模式需要恰好 2 個 features 才能顯示決策邊界與 margin。")
+        return
+
+    st.markdown("##### 訓練設定")
+    c1, c2, c3, c4 = st.columns(4)
+    learning_rate = c1.number_input(
+        "學習率 α",
+        min_value=0.0001,
+        max_value=1.0,
+        value=0.001,
+        step=0.0005,
+        format="%.4f",
+        key="svm_demo_lr",
+    )
+    C = c2.number_input(
+        "懲罰係數 C",
+        min_value=0.01,
+        max_value=100.0,
+        value=1.0,
+        step=0.1,
+        format="%.2f",
+        key="svm_demo_C",
+    )
+    epochs = c3.number_input(
+        "Epoch / 迭代次數",
+        min_value=1,
+        max_value=5000,
+        value=200,
+        step=10,
+        key="svm_demo_epochs",
+    )
+    update_every = c4.number_input(
+        "更新步長",
+        min_value=1,
+        max_value=200,
+        value=10,
+        step=1,
+        key="svm_demo_update_every",
+    )
+    st.markdown("##### 模型公式")
+    st.latex(r"y^{(i)}(\mathbf{w}\cdot\mathbf{x}^{(i)}+b)\ge 1")
+    _render_svm_loss_formula(teaching=True)
+
+    result_key = "linear_svm_demo_last_result"
+    context_key = "線性 SVM_agent_context"
+    signature = (
+        source_label,
+        tuple(features),
+        target,
+        float(learning_rate),
+        float(C),
+        int(epochs),
+        len(working),
+        builtin,
+        "demo",
+    )
+    train_clicked = st.button(
+        "開始示意訓練",
+        type="primary",
+        use_container_width=True,
+        key="train_linear_svm_demo",
+    )
+    final_step: GradientDescentStep | None = None
+    candidate_mask: np.ndarray | None = None
+    if train_clicked:
+        steps = linear_svm_gradient_descent_steps(
+            feature_matrix,
+            working[target],
+            learning_rate=float(learning_rate),
             C=float(C),
-            row_count=len(working),
-            artifact=artifact,
+            epochs=int(epochs),
         )
-        if artifact is not None:
-            _render_svm_training_results(artifact, working, target)
-            _render_svm_save_section(artifact)
-        _render_svm_inference_section(trained_artifact=artifact)
-        _render_svm_prompts(
-            [
-                "請解釋 support vector 在這張圖上代表什麼。",
-                "若 C 變大或變小，決策邊界與 margin 可能如何改變？",
-                "請比較線性 SVM 與邏輯迴歸在這份資料上的差異。",
-            ]
+        chart_left, chart_right = st.columns(2)
+        boundary_placeholder = chart_left.empty()
+        cost_placeholder = chart_right.empty()
+        status_placeholder = st.empty()
+        _animate_teaching_svm(
+            working,
+            feature_matrix,
+            features,
+            target,
+            steps,
+            boundary_placeholder,
+            cost_placeholder,
+            status_placeholder,
+            update_every=int(update_every),
+            scaler=scaler,
         )
+        final_step = steps[-1]
+        candidate_mask = support_vector_candidates(
+            feature_matrix,
+            working[target],
+            final_step.weights,
+            final_step.intercept,
+        )
+        st.session_state[result_key] = {
+            "signature": signature,
+            "step": final_step,
+            "candidate_mask": candidate_mask.tolist(),
+        }
+    else:
+        stored = st.session_state.get(result_key)
+        if isinstance(stored, dict) and stored.get("signature") == signature:
+            final_step = stored["step"]
+            candidate_mask = np.asarray(stored["candidate_mask"], dtype=bool)
+            st.caption("顯示最近一次示意訓練結果；調整設定後請重新按「開始示意訓練」。")
+            fig = _build_teaching_svm_figure(
+                working,
+                feature_matrix,
+                features,
+                target,
+                final_step,
+                scaler=scaler,
+                candidate_mask=candidate_mask,
+            )
+            st.pyplot(fig, clear_figure=True)
+            plt.close(fig)
+        else:
+            st.info("設定 α、C、epoch 後，按下「開始示意訓練」觀察邊界與 hinge loss 的演進。")
 
-    _svm_page_shell(
-        "線性 SVM",
-        "使用內建 make_blobs 教學資料或 ready.csv，練習線性支持向量分類。",
-        "內建範例資料：make_blobs（random_state=7, n=80）",
-        SVM_BLOBS_PATH,
-        lambda df, label, builtin: body(df, label, builtin=builtin),
+    st.session_state[context_key] = build_svm_agent_context(
+        page_name="線性 SVM",
+        data_source=source_label,
+        features=features,
+        target=target,
+        C=float(C),
+        row_count=len(working),
+        artifact=None,
+        note="目前模式：教學示意（手寫 hinge loss 更新）。",
+    )
+    if final_step is not None and candidate_mask is not None:
+        _render_teaching_results(
+            working,
+            feature_matrix,
+            target,
+            final_step,
+            C=float(C),
+            candidate_mask=candidate_mask,
+        )
+    _render_svm_prompts(
+        [
+            "請解釋為什麼這個模式只叫教學示意，而不是正式 SVM 求解器。",
+            "margin 條件 y(wx+b) >= 1 在這組資料上代表什麼？",
+            "哪些樣本被標成 support vector candidates，原因是什麼？",
+        ]
     )
 
 
@@ -276,12 +459,21 @@ def _default_column(columns: list[str], preferred: str) -> str:
     return preferred if preferred in columns else columns[0]
 
 
-def _training_frame(df: pd.DataFrame, features: list[str], target: str) -> pd.DataFrame:
+def _svm_training_frame(
+    df: pd.DataFrame,
+    features: list[str],
+    target: str,
+    *,
+    builtin: bool,
+) -> pd.DataFrame:
     columns = features + [target]
     frame = df[columns].copy()
     for column in columns:
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
-    return frame.dropna().reset_index(drop=True)
+    frame = frame.dropna().reset_index(drop=True)
+    if builtin:
+        frame[target] = np.where(frame[target].to_numpy(dtype=int) == 1, 1, -1)
+    return frame
 
 
 def _prepare_svm_features(
@@ -304,11 +496,7 @@ def _render_svm_data_intro(
     builtin: bool,
 ) -> None:
     st.markdown("##### Data 資訊")
-    note = (
-        "每一列是一個二維樣本：兩個特徵為 x，類別為 y（0/1）。"
-        "內建資料由 `make_blobs(n_samples=80, centers=2, random_state=7)` 產生。"
-    )
-    st.info(note)
+    st.info("每一列是一個樣本：特徵為 x，類別為 y（本頁固定使用 -1 / +1）。")
     role_rows = []
     for column in features + [target]:
         series = pd.to_numeric(frame[column], errors="coerce")
@@ -324,9 +512,7 @@ def _render_svm_data_intro(
             }
         )
     st.dataframe(
-        pd.DataFrame(role_rows).style.format(
-            {"最小值": "{:.4f}", "最大值": "{:.4f}", "平均值": "{:.4f}"}
-        ),
+        pd.DataFrame(role_rows).style.format({"最小值": "{:.4f}", "最大值": "{:.4f}", "平均值": "{:.4f}"}),
         use_container_width=True,
         hide_index=True,
     )
@@ -339,7 +525,13 @@ def _render_svm_data_intro(
         st.pyplot(fig, clear_figure=True)
         plt.close(fig)
     else:
-        render_figures_in_streamlit(build_classification_data_figures(frame, features, target))
+        render_figures_in_streamlit(build_classification_data_figures(_classification_view(frame, target), features, target))
+
+
+def _classification_view(frame: pd.DataFrame, target: str) -> pd.DataFrame:
+    view = frame.copy()
+    view[target] = np.where(view[target].to_numpy(dtype=int) == 1, 1, 0)
+    return view
 
 
 def _render_svm_training_results(
@@ -354,17 +546,8 @@ def _render_svm_training_results(
     c3.metric("訓練集正確率", f"{artifact.training_accuracy:.2f}%")
     scores = decision_function_from_artifact(artifact, working)
     predicted = predict_class_from_artifact(artifact, working)
-    preview = pd.DataFrame(
-        {
-            "actual": working[target],
-            "decision_function": scores,
-            "predicted_class": predicted,
-        }
-    )
-    st.dataframe(
-        preview.head(30).style.format({"decision_function": "{:.4f}"}),
-        use_container_width=True,
-    )
+    preview = pd.DataFrame({"actual": working[target], "decision_function": scores, "predicted_class": predicted})
+    st.dataframe(preview.head(30).style.format({"decision_function": "{:.4f}"}), use_container_width=True)
 
 
 def _render_svm_save_section(artifact: LinearSvmArtifact) -> None:
@@ -380,7 +563,7 @@ def _render_svm_save_section(artifact: LinearSvmArtifact) -> None:
 
 def _render_svm_inference_section(*, trained_artifact: LinearSvmArtifact | None) -> None:
     st.markdown("##### 手動預測")
-    st.caption("上傳的 JSON 必須為 `linear_svm`。")
+    st.caption("上傳的 JSON 必須為 `linear_svm`。輸出類別固定為 -1 / +1。")
     active = _resolve_svm_artifact(trained_artifact=trained_artifact)
     if active is None:
         return
@@ -391,15 +574,11 @@ def _render_svm_inference_section(*, trained_artifact: LinearSvmArtifact | None)
             default_value = 0.0
             if active.scaler is not None:
                 default_value = float(active.scaler["mean"].get(feature, 0.0))
-            input_values[feature] = st.number_input(
-                feature,
-                value=default_value,
-                key=f"svm_{feature}",
-            )
+            input_values[feature] = st.number_input(feature, value=default_value, key=f"svm_{feature}")
     if st.button("計算預測", type="primary", key="svm_predict"):
         frame = pd.DataFrame([input_values])
         score = float(decision_function_from_artifact(active, frame)[0])
-        pred_class = int(score >= 0)
+        pred_class = int(predict_binary_class(np.array([score]))[0])
         st.metric("decision function", f"{score:.4f}")
         st.metric("預測類別", str(pred_class))
 
@@ -436,7 +615,159 @@ def _resolve_svm_artifact(*, trained_artifact: LinearSvmArtifact | None) -> Line
         return None
 
 
+def _render_svm_loss_formula(*, teaching: bool = False) -> None:
+    with st.expander("目標函數 Loss(w,b)", expanded=False):
+        st.latex(
+            r"\mathrm{Loss}=\frac{1}{2}\|\mathbf{w}\|^2"
+            r"+ C\sum_i \max\bigl(0,\,1-y^{(i)}(\mathbf{w}\cdot\mathbf{x}^{(i)}+b)\bigr)"
+        )
+        if teaching:
+            st.caption("教學示意模式以逐筆更新近似這個目標函數，用來理解 margin，並非標準 SVM 求解器。")
+        else:
+            st.caption("前半項縮小 ‖w‖ 以拉大 margin；後半項為 hinge loss。C 越大，越重視分對樣本。")
+
+
 def _render_svm_prompts(prompts: list[str]) -> None:
     st.markdown("##### 建議問 Agent")
     for prompt in prompts:
         st.code(prompt, language="text")
+
+
+def _animate_teaching_svm(
+    frame: pd.DataFrame,
+    feature_matrix: pd.DataFrame,
+    features: list[str],
+    target: str,
+    steps: list[GradientDescentStep],
+    boundary_placeholder,
+    cost_placeholder,
+    status_placeholder,
+    *,
+    update_every: int,
+    scaler: dict | None,
+) -> None:
+    for step in _sample_svm_steps(steps, update_every=update_every):
+        candidate_mask = support_vector_candidates(feature_matrix, frame[target], step.weights, step.intercept)
+        fig = _build_teaching_svm_figure(
+            frame,
+            feature_matrix,
+            features,
+            target,
+            step,
+            scaler=scaler,
+            candidate_mask=candidate_mask,
+        )
+        boundary_placeholder.pyplot(fig, clear_figure=True)
+        plt.close(fig)
+        _render_svm_cost_history_plot(steps[: step.iteration + 1], cost_placeholder)
+        status_placeholder.caption(
+            f"Iteration {step.iteration:,} / {steps[-1].iteration:,}，"
+            f"Loss = {step.cost:.4f}，w = [{step.weights[0]:.3f}, {step.weights[1]:.3f}]，b = {step.intercept:.3f}"
+        )
+        time.sleep(0.02)
+
+
+def _sample_svm_steps(steps: list[GradientDescentStep], *, update_every: int) -> list[GradientDescentStep]:
+    if len(steps) <= 80:
+        return steps
+    stride = max(int(update_every), len(steps) // 80, 1)
+    selected = steps[::stride]
+    if selected[-1] != steps[-1]:
+        selected.append(steps[-1])
+    return selected
+
+
+def _build_teaching_svm_figure(
+    frame: pd.DataFrame,
+    feature_matrix: pd.DataFrame,
+    features: list[str],
+    target: str,
+    step: GradientDescentStep,
+    *,
+    scaler: dict | None,
+    candidate_mask: np.ndarray,
+):
+    x1_name, x2_name = features
+    if scaler is not None:
+        plot_frame = apply_standard_scaler(frame[features], scaler)
+        x1_label = f"{x1_name}（scaled）"
+        x2_label = f"{x2_name}（scaled）"
+    else:
+        plot_frame = frame[features]
+        x1_label = x1_name
+        x2_label = x2_name
+    x1 = plot_frame[x1_name].to_numpy(dtype=float)
+    x2 = plot_frame[x2_name].to_numpy(dtype=float)
+    y = frame[target].to_numpy(dtype=int)
+    positives = y == 1
+    negatives = y == -1
+
+    fig, ax = plt.subplots(figsize=(8, 5.2), constrained_layout=True)
+    ax.scatter(x1[negatives], x2[negatives], label="-1", c="#f4b400", edgecolors="#5f4330", linewidths=0.6)
+    ax.scatter(x1[positives], x2[positives], label="+1", c="#202124", marker="x", linewidths=1.2)
+
+    weights = np.asarray(step.weights, dtype=float)
+    if abs(weights[1]) > 1e-12:
+        xs = np.linspace(float(np.min(x1)), float(np.max(x1)), 100)
+        ys = -(weights[0] * xs + step.intercept) / weights[1]
+        ys_margin_pos = -(weights[0] * xs + step.intercept - 1.0) / weights[1]
+        ys_margin_neg = -(weights[0] * xs + step.intercept + 1.0) / weights[1]
+        ax.plot(xs, ys, color="#1a73e8", linewidth=2, label="Decision Boundary")
+        ax.plot(xs, ys_margin_pos, color="#0f9d58", linestyle="--", label="Margin +1")
+        ax.plot(xs, ys_margin_neg, color="#db4437", linestyle="--", label="Margin -1")
+
+    if np.any(candidate_mask):
+        ax.scatter(
+            x1[candidate_mask],
+            x2[candidate_mask],
+            s=140,
+            facecolors="none",
+            edgecolors="black",
+            linewidths=1.8,
+            label="SV candidates",
+            zorder=4,
+        )
+
+    ax.set_xlabel(x1_label)
+    ax.set_ylabel(x2_label)
+    ax.set_title(f"教學示意 SVM（iteration {step.iteration}）")
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="best")
+    return fig
+
+
+def _render_svm_cost_history_plot(steps: list[GradientDescentStep], placeholder) -> None:
+    fig, ax = plt.subplots(figsize=(8, 5.2), constrained_layout=True)
+    ax.plot([step.iteration for step in steps], [step.cost for step in steps], color="#ff7043")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Hinge Loss")
+    ax.set_title("Loss vs Iteration")
+    placeholder.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
+
+def _render_teaching_results(
+    working: pd.DataFrame,
+    feature_matrix: pd.DataFrame,
+    target: str,
+    step: GradientDescentStep,
+    *,
+    C: float,
+    candidate_mask: np.ndarray,
+) -> None:
+    st.markdown("##### 示意訓練結果")
+    scores = feature_matrix.to_numpy(dtype=float) @ np.asarray(step.weights, dtype=float) + float(step.intercept)
+    predicted = predict_binary_class(scores)
+    result = pd.DataFrame(
+        {
+            "actual": working[target],
+            "decision_function": scores,
+            "predicted_class": predicted,
+            "sv_candidate": candidate_mask,
+        }
+    )
+    c1, c2, c3 = st.columns(3)
+    c1.metric("最後 b", f"{step.intercept:.4f}")
+    c2.metric("Support vector candidates", str(int(np.sum(candidate_mask))))
+    c3.metric("最後 hinge loss", f"{compute_hinge_loss(feature_matrix, working[target], step.weights, step.intercept, C=C):.4f}")
+    st.dataframe(result.head(30).style.format({"decision_function": "{:.4f}"}), use_container_width=True)

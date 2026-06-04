@@ -48,13 +48,13 @@ CLASS_NEGATIVE_STYLE = {
     "c": "#f4b400",
     "edgecolors": "#5f4330",
     "linewidths": 0.6,
-    "label": "y=0",
+    "label": "y=-1",
 }
 CLASS_POSITIVE_STYLE = {
     "marker": "x",
     "c": "#202124",
     "linewidths": 1.2,
-    "label": "y=1",
+    "label": "y=+1",
 }
 
 
@@ -196,7 +196,7 @@ def build_linear_svm_result_figure(
         ax.scatter(x1, x2, c=labels, cmap=plt.cm.Paired, zorder=2)
     else:
         positives = labels == 1
-        negatives = labels == 0
+        negatives = labels == -1
         scatter_binary_classes(ax, x1, x2, positives=positives, negatives=negatives)
 
     x_min, x_max = float(np.min(x1)), float(np.max(x1))

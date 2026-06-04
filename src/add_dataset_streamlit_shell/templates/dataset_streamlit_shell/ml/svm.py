@@ -10,8 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn.svm import SVC
 
-from dataset_streamlit_shell.ml.classification import validate_binary_target
-from dataset_streamlit_shell.ml.regression import apply_standard_scaler
+from dataset_streamlit_shell.ml.regression import GradientDescentStep, apply_standard_scaler
 
 MODEL_KIND_LINEAR_SVM = "linear_svm"
 
@@ -33,6 +32,14 @@ class LinearSvmArtifact:
     created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 
+def validate_svm_target(series: pd.Series) -> bool:
+    numeric = pd.to_numeric(series, errors="coerce").dropna()
+    if numeric.empty:
+        return False
+    unique = set(np.unique(numeric.astype(int)))
+    return unique == {-1, 1}
+
+
 def fit_linear_svc(
     feature_frame: pd.DataFrame | np.ndarray,
     target: pd.Series | np.ndarray,
@@ -43,6 +50,8 @@ def fit_linear_svc(
     y = np.asarray(target, dtype=float).reshape(-1)
     if len(np.unique(y)) < 2:
         raise ValueError("target must contain at least two classes")
+    if not validate_svm_target(pd.Series(y)):
+        raise ValueError("target must contain exactly -1 and 1")
     clf = SVC(kernel="linear", C=float(C))
     clf.fit(x, y)
     return clf
@@ -125,6 +134,87 @@ def artifact_from_payload(
     )
 
 
+def compute_hinge_loss(
+    feature_frame: pd.DataFrame | np.ndarray,
+    target: pd.Series | np.ndarray,
+    weights: list[float] | np.ndarray,
+    intercept: float,
+    *,
+    C: float,
+) -> float:
+    x = _as_feature_matrix(feature_frame)
+    y = np.asarray(target, dtype=float).reshape(-1)
+    w = np.asarray(weights, dtype=float).reshape(-1)
+    if x.shape[0] == 0:
+        raise ValueError("feature_frame must contain at least one row")
+    margins = y * (x @ w + float(intercept))
+    hinge = np.maximum(0.0, 1.0 - margins)
+    return float(0.5 * np.dot(w, w) + float(C) * np.mean(hinge))
+
+
+def linear_svm_gradient_descent_steps(
+    feature_frame: pd.DataFrame,
+    target: pd.Series,
+    *,
+    learning_rate: float,
+    C: float,
+    epochs: int,
+    initial_weights: list[float] | np.ndarray | None = None,
+    initial_intercept: float = 0.0,
+) -> list[GradientDescentStep]:
+    if epochs < 1:
+        raise ValueError("epochs must be at least 1")
+    if learning_rate <= 0:
+        raise ValueError("learning_rate must be greater than 0")
+    if C <= 0:
+        raise ValueError("C must be greater than 0")
+
+    x = _as_feature_matrix(feature_frame)
+    y = np.asarray(target, dtype=float).reshape(-1)
+    if x.ndim != 2 or x.shape[0] == 0:
+        raise ValueError("feature_frame must contain at least one row")
+    if x.shape[0] != y.shape[0]:
+        raise ValueError("feature_frame and target must have the same row count")
+    if not validate_svm_target(pd.Series(y)):
+        raise ValueError("target must contain exactly -1 and 1")
+
+    weights = (
+        np.zeros(x.shape[1], dtype=float)
+        if initial_weights is None
+        else np.asarray(initial_weights, dtype=float).reshape(-1)
+    )
+    if weights.shape != (x.shape[1],):
+        raise ValueError("initial_weights must match feature count")
+    intercept = float(initial_intercept)
+
+    steps = [_svm_step_snapshot(0, x, y, weights, intercept, C)]
+    for iteration in range(1, epochs + 1):
+        for xi, yi in zip(x, y):
+            condition = yi * (np.dot(weights, xi) + intercept)
+            if condition >= 1.0:
+                weights = weights - learning_rate * weights
+            else:
+                weights = weights - learning_rate * (weights - float(C) * yi * xi)
+                intercept = intercept + learning_rate * float(C) * yi
+        steps.append(_svm_step_snapshot(iteration, x, y, weights, intercept, C))
+    return steps
+
+
+def support_vector_candidates(
+    feature_frame: pd.DataFrame | np.ndarray,
+    target: pd.Series | np.ndarray,
+    weights: list[float] | np.ndarray,
+    intercept: float,
+    *,
+    tolerance: float = 1e-6,
+) -> np.ndarray:
+    x = _as_feature_matrix(feature_frame)
+    y = np.asarray(target, dtype=float).reshape(-1)
+    w = np.asarray(weights, dtype=float).reshape(-1)
+    margins = y * (x @ w + float(intercept))
+    return margins <= (1.0 + float(tolerance))
+
+
 def _prepare_features(frame: pd.DataFrame, features: list[str], scaler: dict[str, Any] | None) -> pd.DataFrame:
     numeric = frame[features].apply(pd.to_numeric, errors="coerce")
     if scaler is not None:
@@ -139,9 +229,14 @@ def decision_function_from_artifact(artifact: LinearSvmArtifact, frame: pd.DataF
     return (x @ coef.T + artifact.intercept).reshape(-1)
 
 
+def predict_binary_class(scores: pd.Series | np.ndarray) -> np.ndarray:
+    values = np.asarray(scores, dtype=float).reshape(-1)
+    return np.where(values >= 0, 1, -1).astype(int)
+
+
 def predict_class_from_artifact(artifact: LinearSvmArtifact, frame: pd.DataFrame) -> np.ndarray:
     scores = decision_function_from_artifact(artifact, frame)
-    return np.where(scores >= 0, 1, 0).astype(int)
+    return predict_binary_class(scores)
 
 
 def build_svm_agent_context(
@@ -160,7 +255,7 @@ def build_svm_agent_context(
         f"資料來源：{data_source}。",
         f"可用訓練資料筆數：{row_count}。",
         "目前 features：" + "、".join(features) + "。",
-        f"目前 target：{target}。",
+        f"目前 target：{target}（需為 -1 / +1）。",
         f"懲罰係數 C：{C:g}。",
     ]
     if artifact is None:
@@ -181,6 +276,22 @@ def build_svm_agent_context(
     return "\n".join(parts)
 
 
+def _svm_step_snapshot(
+    iteration: int,
+    x: np.ndarray,
+    y: np.ndarray,
+    weights: np.ndarray,
+    intercept: float,
+    C: float,
+) -> GradientDescentStep:
+    return GradientDescentStep(
+        iteration=iteration,
+        weights=[float(weight) for weight in weights],
+        intercept=float(intercept),
+        cost=compute_hinge_loss(x, y, weights, intercept, C=C),
+    )
+
+
 def _as_feature_matrix(feature_frame: pd.DataFrame | np.ndarray) -> np.ndarray:
     if isinstance(feature_frame, pd.DataFrame):
         return feature_frame.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
@@ -193,11 +304,15 @@ __all__ = [
     "artifact_from_payload",
     "build_linear_svm_artifact",
     "build_svm_agent_context",
+    "compute_hinge_loss",
     "decision_function_from_artifact",
     "fit_linear_svc",
+    "linear_svm_gradient_descent_steps",
     "load_svm_artifact",
+    "predict_binary_class",
     "predict_class_from_artifact",
     "save_svm_artifact",
+    "support_vector_candidates",
     "training_accuracy",
-    "validate_binary_target",
+    "validate_svm_target",
 ]
