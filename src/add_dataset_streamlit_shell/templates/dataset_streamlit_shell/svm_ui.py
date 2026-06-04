@@ -55,6 +55,8 @@ SVM_BLOBS_PATH = CLASSIFICATION_DEMO_DIR / "svm_blobs_80.csv"
 
 SVM_FEATURES = ["特徵1", "特徵2"]
 SVM_TARGET = "類別"
+SVM_DEMO_FEATURES = ["x1", "x2"]
+SVM_DEMO_TARGET = "y"
 
 
 def render_linear_svm_page() -> None:
@@ -66,6 +68,27 @@ def render_linear_svm_page() -> None:
             horizontal=True,
             key="svm_mode",
         )
+        if mode == "教學示意（手寫 hinge loss 更新）":
+            demo_frame = _svm_teaching_demo_frame()
+            st.info("教學示意模式固定使用 6 個二維樣本點，不使用目前頁面的資料來源或 ready.csv。")
+            _render_svm_data_intro(
+                demo_frame,
+                features=SVM_DEMO_FEATURES,
+                target=SVM_DEMO_TARGET,
+                builtin=True,
+                note="固定示意資料：3 個 -1 類別樣本與 3 個 +1 類別樣本。",
+            )
+            _render_teaching_mode(
+                working=demo_frame,
+                feature_matrix=demo_frame[SVM_DEMO_FEATURES],
+                features=SVM_DEMO_FEATURES,
+                target=SVM_DEMO_TARGET,
+                scaler=None,
+                source_label="固定 6 點教學示意資料",
+                builtin=True,
+            )
+            return
+
         if builtin:
             features = list(SVM_FEATURES)
             target = SVM_TARGET
@@ -107,26 +130,15 @@ def render_linear_svm_page() -> None:
         _render_svm_data_intro(working, features=features, target=target, builtin=builtin)
         feature_matrix, scaler = _prepare_svm_features(working, features, builtin=builtin)
 
-        if mode == "標準 SVM（sklearn）":
-            _render_sklearn_mode(
-                working=working,
-                feature_matrix=feature_matrix,
-                features=features,
-                target=target,
-                scaler=scaler,
-                source_label=source_label,
-                builtin=builtin,
-            )
-        else:
-            _render_teaching_mode(
-                working=working,
-                feature_matrix=feature_matrix,
-                features=features,
-                target=target,
-                scaler=scaler,
-                source_label=source_label,
-                builtin=builtin,
-            )
+        _render_sklearn_mode(
+            working=working,
+            feature_matrix=feature_matrix,
+            features=features,
+            target=target,
+            scaler=scaler,
+            source_label=source_label,
+            builtin=builtin,
+        )
 
     _svm_page_shell(
         "線性 SVM",
@@ -494,9 +506,10 @@ def _render_svm_data_intro(
     features: list[str],
     target: str,
     builtin: bool,
+    note: str | None = None,
 ) -> None:
     st.markdown("##### Data 資訊")
-    st.info("每一列是一個樣本：特徵為 x，類別為 y（本頁固定使用 -1 / +1）。")
+    st.info(note or "每一列是一個樣本：特徵為 x，類別為 y（本頁固定使用 -1 / +1）。")
     role_rows = []
     for column in features + [target]:
         series = pd.to_numeric(frame[column], errors="coerce")
@@ -771,3 +784,13 @@ def _render_teaching_results(
     c2.metric("Support vector candidates", str(int(np.sum(candidate_mask))))
     c3.metric("最後 hinge loss", f"{compute_hinge_loss(feature_matrix, working[target], step.weights, step.intercept, C=C):.4f}")
     st.dataframe(result.head(30).style.format({"decision_function": "{:.4f}"}), use_container_width=True)
+
+
+def _svm_teaching_demo_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            SVM_DEMO_FEATURES[0]: [1.0, 2.0, 2.0, 6.0, 7.0, 8.0],
+            SVM_DEMO_FEATURES[1]: [2.0, 3.0, 1.0, 5.0, 7.0, 6.0],
+            SVM_DEMO_TARGET: [-1, -1, -1, 1, 1, 1],
+        }
+    )
