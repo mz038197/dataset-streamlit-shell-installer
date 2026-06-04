@@ -264,6 +264,51 @@ def build_sigmoid_figure(
     return fig
 
 
+def build_hyperparam_sweep_figure(
+    *,
+    param_label: str,
+    values: list[float | int],
+    train_accuracy: list[float],
+    val_accuracy: list[float],
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    configure_matplotlib_for_traditional_chinese()
+    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    x_positions = list(range(len(values)))
+    ax.plot(x_positions, train_accuracy, marker="o", label="訓練集")
+    ax.plot(x_positions, val_accuracy, marker="o", label="驗證集")
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels([str(value) for value in values])
+    ax.set_xlabel(param_label)
+    ax.set_ylabel("準確率（%）")
+    ax.set_title(f"準確率 vs {param_label}")
+    ax.legend()
+    ax.grid(True, alpha=0.25)
+    return fig
+
+
+def build_decision_tree_figure(
+    model,
+    *,
+    feature_names: list[str],
+    class_names: list[str],
+) -> Figure:
+    plt = importlib.import_module("matplotlib.pyplot")
+    tree = importlib.import_module("sklearn.tree")
+    configure_matplotlib_for_traditional_chinese()
+    fig, ax = plt.subplots(figsize=(14, 8), constrained_layout=True)
+    tree.plot_tree(
+        model,
+        feature_names=feature_names,
+        class_names=class_names,
+        filled=True,
+        rounded=True,
+        ax=ax,
+    )
+    ax.set_title("決策樹結構")
+    return fig
+
+
 def render_figures_in_streamlit(figures: list[tuple[str, Figure]]) -> None:
     import matplotlib.pyplot as plt
     import streamlit as st

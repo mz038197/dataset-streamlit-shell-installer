@@ -31,7 +31,7 @@ uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git
 By default, installation and update also run this in the target project:
 
 ```powershell
-uv add --upgrade-package openai-tts streamlit pandas matplotlib numpy scikit-learn "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
+uv add --upgrade-package openai-tts streamlit pandas matplotlib numpy scikit-learn xgboost "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
 ```
 
 To copy or update the shell without changing project dependencies:
@@ -95,14 +95,16 @@ The installed `dataset_streamlit_shell/` template includes supervised learning p
 - **Logistic regression** — university admission demo from `built-in-data/classification/university_admission.csv` (Coursera ex2data1)
 - **Regularized logistic regression** — microchip test demo from `built-in-data/classification/microchip_test.csv` (Coursera ex2data2, degree-6 feature map and λ)
 - **Linear SVM** — built-in two-feature binary demo from `built-in-data/classification/svm_blobs_80.csv`. Uses `sklearn.svm.SVC(kernel='linear')`; shows the final decision boundary and support vectors. Requires `scikit-learn`.
+- **Decision tree concepts** — built-in 10-row cat toy CSV from `built-in-data/classification/cat_toy_10.csv`. Shows entropy, information gain table, and `DecisionTreeClassifier` with student-chosen Gini/Entropy criterion and `max_depth` 1–2. Builtin data only; no model JSON save.
+- **XGBoost** — built-in heart disease CSV from `built-in-data/classification/heart_disease.csv` (Traditional Chinese column names). Auto one-hot encoding, 80/20 train/validation split, hyperparameter sweep curves, and final `XGBClassifier` with early stopping. Requires `xgboost`. Builtin data only; no model JSON save.
 
-Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/`. Logistic pages use hand-written gradient descent and logistic Cost J; the linear SVM page uses scikit-learn `SVC`. Classification threshold is adjusted after training on logistic pages and is not stored in the model JSON (regularization λ is stored for the regularized page).
+Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/`. Logistic pages use hand-written gradient descent and logistic Cost J; the linear SVM page uses scikit-learn `SVC`. Classification threshold is adjusted after training on logistic pages and is not stored in the model JSON (regularization λ is stored for the regularized page). Decision tree and XGBoost pages do not save models in this release.
 
 ## What It Does
 
 - Copies `dataset_streamlit_shell/` into the current project.
 - Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
-- Installs required project dependencies with `uv add streamlit pandas matplotlib numpy scikit-learn` and `openai-tts` by default.
+- Installs required project dependencies with `uv add streamlit pandas matplotlib numpy scikit-learn xgboost` and `openai-tts` by default.
 - Persists TTS preferences to `dataset_streamlit_shell/workspace/user_settings.json` across page changes and browser restarts.
 - Refuses to overwrite an existing shell unless `--force` is used.
 - Supports `--update` to refresh shell code while preserving runtime data.
