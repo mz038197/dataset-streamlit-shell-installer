@@ -65,6 +65,18 @@ INSTANCE_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
     ("dog.jpg", "Single dog — one instance mask"),
 )
 
+SAM_DEMO_MANIFEST: tuple[tuple[str, str, str], ...] = (
+    ("dog.jpg", "Single dog — try prompt: dog", "dog"),
+    ("tabby_cat.jpg", "Single cat — try prompt: cat", "cat"),
+    ("cat_and_dog.jpg", "Two animals — try prompts: dog / cat", "dog\ncat"),
+    ("street_scene.jpg", "Street scene — try prompts: person / car", "person\ncar"),
+    ("desk_objects.jpg", "Desk scene — try prompts: laptop / lamp", "laptop\nlamp"),
+    ("coffee_mug.jpg", "Coffee mug — try prompt: cup", "cup"),
+)
+
+SAM3_MODELS_DIR = CV_DATA_DIR / "models"
+SAM3_WEIGHTS_PATH = SAM3_MODELS_DIR / "sam3.pt"
+
 
 @dataclass(frozen=True)
 class DemoImageSpec:
@@ -117,6 +129,40 @@ def instance_demo_specs() -> list[InstanceDemoSpec]:
 
 def instance_examples_ready() -> bool:
     return all((EXAMPLES_DIR / spec.filename).exists() for spec in instance_demo_specs())
+
+
+@dataclass(frozen=True)
+class SamDemoSpec:
+    filename: str
+    hint: str
+    suggested_prompts: str
+
+
+def sam_demo_specs() -> list[SamDemoSpec]:
+    return [
+        SamDemoSpec(filename, hint, suggested_prompts)
+        for filename, hint, suggested_prompts in SAM_DEMO_MANIFEST
+    ]
+
+
+def sam_examples_ready() -> bool:
+    return all((EXAMPLES_DIR / spec.filename).exists() for spec in sam_demo_specs())
+
+
+def sam3_weights_ready() -> bool:
+    if SAM3_WEIGHTS_PATH.exists():
+        return True
+    fallback = SHELL_ROOT / "sam3.pt"
+    return fallback.exists()
+
+
+def sam3_weights_path() -> Path | None:
+    if SAM3_WEIGHTS_PATH.exists():
+        return SAM3_WEIGHTS_PATH
+    fallback = SHELL_ROOT / "sam3.pt"
+    if fallback.exists():
+        return fallback
+    return None
 
 
 def examples_ready() -> bool:
