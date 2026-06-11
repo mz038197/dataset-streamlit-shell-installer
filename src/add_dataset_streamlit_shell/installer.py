@@ -17,6 +17,8 @@ PROJECT_DEPENDENCIES = (
     "scikit-learn",
     "xgboost",
     "tensorflow-cpu",
+    "pillow",
+    "opencv-python-headless",
     "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
 )
 DependencyRunner = Callable[[list[str]], None]

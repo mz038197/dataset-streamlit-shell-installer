@@ -119,6 +119,12 @@ pages = {
     "深度學習": [
         st.Page(str(SHELL_ROOT / "pages" / "21_Neural_Network.py"), title="類神經網路"),
     ],
+    "電腦視覺": [
+        st.Page(
+            str(SHELL_ROOT / "pages" / "22_Image_Classification.py"),
+            title="影像分類（Image Classification）",
+        ),
+    ],
 }
 
 st.navigation(pages).run()
