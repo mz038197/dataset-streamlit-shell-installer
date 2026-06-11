@@ -118,7 +118,7 @@ def _render_concept_tab() -> None:
         with st.expander("與實例分割的差異", expanded=False):
             st.write(
                 "語意分割中，兩個 person 會是同一顏色；"
-                "實例分割則會分成兩塊不同 mask（後續頁面開發中）。"
+                "實例分割則會分成兩塊不同 mask；可到「實例分割」頁觀察。"
             )
         with st.expander("DeepLabv3 簡介", expanded=False):
             st.write(

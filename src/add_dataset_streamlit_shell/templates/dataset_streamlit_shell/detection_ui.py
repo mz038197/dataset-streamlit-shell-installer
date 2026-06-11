@@ -105,7 +105,8 @@ def _render_concept_tab() -> None:
         st.info(
             "影像分類：整張圖 → 一個標籤\n\n"
             "物件偵測：多個 bbox + 類別 + 信心度\n\n"
-            "語意分割（下一頁）：進一步到像素層級"
+            "語意分割：像素級類別\n\n"
+            "實例分割：每個物件獨立 mask"
         )
         cols = st.columns(4)
         steps = ["輸入影像", "Backbone 特徵", "預測框 + 類別", "NMS 過濾"]

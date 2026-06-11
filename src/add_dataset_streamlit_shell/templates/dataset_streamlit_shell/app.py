@@ -132,6 +132,10 @@ pages = {
             str(SHELL_ROOT / "pages" / "24_Semantic_Segmentation.py"),
             title="語意分割（Semantic Segmentation）",
         ),
+        st.Page(
+            str(SHELL_ROOT / "pages" / "25_Instance_Segmentation.py"),
+            title="實例分割（Instance Segmentation）",
+        ),
     ],
 }
 
