@@ -19,6 +19,8 @@ PROJECT_DEPENDENCIES = (
     "tensorflow-cpu",
     "pillow",
     "opencv-python-headless",
+    "ultralytics",
+    "torchvision",
     "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
 )
 DependencyRunner = Callable[[list[str]], None]
