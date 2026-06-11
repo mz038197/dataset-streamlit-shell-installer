@@ -28,9 +28,12 @@ EXTRA_DEMO_URLS: dict[str, str] = {
         "https://upload.wikimedia.org/wikipedia/commons/4/45/A_small_cup_of_coffee.JPG"
     ),
     "street_scene.jpg": (
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/"
-        "Good_Food_Display_-_NCI_Visuals_Online.jpg/1280px-"
-        "Good_Food_Display_-_NCI_Visuals_Online.jpg"
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/"
+        "City_of_London_1.jpg/1280px-City_of_London_1.jpg"
+    ),
+    "desk_objects.jpg": (
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/"
+        "Desk-lamp-and-laptop.jpg/1280px-Desk-lamp-and-laptop.jpg"
     ),
 }
 
@@ -39,6 +42,20 @@ DEMO_MANIFEST: tuple[tuple[str, str, str], ...] = (
     ("tabby_cat.jpg", "Single cat — expect feline label", "cat"),
     ("coffee_mug.jpg", "Everyday object — mug or cup-like label", "extra"),
     ("street_scene.jpg", "Busy scene — lower confidence / mixed context", "extra"),
+)
+
+DETECTION_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
+    ("street_scene.jpg", "Street scene — multiple objects (person, car, …)"),
+    ("cat_and_dog.jpg", "Cat + dog — two subjects in one image"),
+    ("desk_objects.jpg", "Desk scene — laptop, lamp, and nearby objects"),
+    ("dog.jpg", "Single dog — one clear bounding box"),
+)
+
+SEMANTIC_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
+    ("street_scene.jpg", "Street scene — person / car / road regions"),
+    ("desk_objects.jpg", "Desk scene — furniture and object regions"),
+    ("dog.jpg", "Single dog — foreground vs background"),
+    ("cat_and_dog.jpg", "Two animals — same-class pixels merge by label"),
 )
 
 
@@ -51,6 +68,34 @@ class DemoImageSpec:
 
 def demo_image_specs() -> list[DemoImageSpec]:
     return [DemoImageSpec(filename, hint, source) for filename, hint, source in DEMO_MANIFEST]
+
+
+@dataclass(frozen=True)
+class DetectionDemoSpec:
+    filename: str
+    hint: str
+
+
+def detection_demo_specs() -> list[DetectionDemoSpec]:
+    return [DetectionDemoSpec(filename, hint) for filename, hint in DETECTION_DEMO_MANIFEST]
+
+
+def detection_examples_ready() -> bool:
+    return all((EXAMPLES_DIR / spec.filename).exists() for spec in detection_demo_specs())
+
+
+@dataclass(frozen=True)
+class SemanticDemoSpec:
+    filename: str
+    hint: str
+
+
+def semantic_demo_specs() -> list[SemanticDemoSpec]:
+    return [SemanticDemoSpec(filename, hint) for filename, hint in SEMANTIC_DEMO_MANIFEST]
+
+
+def semantic_examples_ready() -> bool:
+    return all((EXAMPLES_DIR / spec.filename).exists() for spec in semantic_demo_specs())
 
 
 def examples_ready() -> bool:
@@ -128,6 +173,7 @@ def download_sample_data(
 
     shutil.copy2(train_dogs[0], EXAMPLES_DIR / "dog.jpg")
     shutil.copy2(train_cats[0], EXAMPLES_DIR / "tabby_cat.jpg")
+    _save_cat_and_dog_composite(train_cats[1], train_dogs[1], EXAMPLES_DIR / "cat_and_dog.jpg")
 
     if progress_callback:
         progress_callback("下載額外示範圖…", 0.55)
@@ -142,6 +188,15 @@ def download_sample_data(
 
     if progress_callback:
         progress_callback("完成", 1.0)
+
+
+def _save_cat_and_dog_composite(cat_path: Path, dog_path: Path, target: Path) -> None:
+    cat = Image.open(cat_path).convert("RGB").resize((320, 320), Image.Resampling.LANCZOS)
+    dog = Image.open(dog_path).convert("RGB").resize((320, 320), Image.Resampling.LANCZOS)
+    composite = Image.new("RGB", (640, 320))
+    composite.paste(cat, (0, 0))
+    composite.paste(dog, (320, 0))
+    composite.save(target, format="JPEG")
 
 
 def _populate_mini_train(train_cats: list[Path], train_dogs: list[Path], *, per_class: int = 40) -> None:
