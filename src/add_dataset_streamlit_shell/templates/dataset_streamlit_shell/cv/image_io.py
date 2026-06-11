@@ -58,6 +58,13 @@ SEMANTIC_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
     ("cat_and_dog.jpg", "Two animals — same-class pixels merge by label"),
 )
 
+INSTANCE_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
+    ("cat_and_dog.jpg", "Cat + dog — two separate instance masks"),
+    ("street_scene.jpg", "Street scene — multiple persons / cars"),
+    ("desk_objects.jpg", "Desk scene — laptop, lamp, nearby objects"),
+    ("dog.jpg", "Single dog — one instance mask"),
+)
+
 
 @dataclass(frozen=True)
 class DemoImageSpec:
@@ -96,6 +103,20 @@ def semantic_demo_specs() -> list[SemanticDemoSpec]:
 
 def semantic_examples_ready() -> bool:
     return all((EXAMPLES_DIR / spec.filename).exists() for spec in semantic_demo_specs())
+
+
+@dataclass(frozen=True)
+class InstanceDemoSpec:
+    filename: str
+    hint: str
+
+
+def instance_demo_specs() -> list[InstanceDemoSpec]:
+    return [InstanceDemoSpec(filename, hint) for filename, hint in INSTANCE_DEMO_MANIFEST]
+
+
+def instance_examples_ready() -> bool:
+    return all((EXAMPLES_DIR / spec.filename).exists() for spec in instance_demo_specs())
 
 
 def examples_ready() -> bool:
