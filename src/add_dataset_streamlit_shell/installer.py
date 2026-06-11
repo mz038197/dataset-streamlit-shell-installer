@@ -19,7 +19,8 @@ PROJECT_DEPENDENCIES = (
     "tensorflow-cpu",
     "pillow",
     "opencv-python-headless",
-    "ultralytics",
+    "ultralytics>=8.3.237",
+    "clip @ git+https://github.com/ultralytics/CLIP.git",
     "torchvision",
     "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
 )
