@@ -100,7 +100,7 @@ def _render_concept_tab() -> None:
     main, side = _page_columns()
     with main:
         st.title(PAGE_TITLE)
-        st.caption("為每個獨立物件產生像素級 mask；此頁是電腦視覺路徑的第四站。")
+        st.caption("為每個獨立物件產生像素級 mask；此頁是電腦視覺路徑的第四站，下一站為提示式分割。")
         st.markdown("##### 什麼是實例分割？")
         st.write(
             "模型同時輸出類別、位置與像素級遮罩。"

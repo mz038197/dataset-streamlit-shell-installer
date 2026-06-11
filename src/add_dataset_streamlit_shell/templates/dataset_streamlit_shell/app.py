@@ -136,6 +136,10 @@ pages = {
             str(SHELL_ROOT / "pages" / "25_Instance_Segmentation.py"),
             title="實例分割（Instance Segmentation）",
         ),
+        st.Page(
+            str(SHELL_ROOT / "pages" / "26_Promptable_Segmentation.py"),
+            title="提示式分割（Promptable Segmentation / SAM）",
+        ),
     ],
 }
 
