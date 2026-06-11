@@ -124,6 +124,14 @@ pages = {
             str(SHELL_ROOT / "pages" / "22_Image_Classification.py"),
             title="影像分類（Image Classification）",
         ),
+        st.Page(
+            str(SHELL_ROOT / "pages" / "23_Object_Detection.py"),
+            title="物件偵測（Object Detection）",
+        ),
+        st.Page(
+            str(SHELL_ROOT / "pages" / "24_Semantic_Segmentation.py"),
+            title="語意分割（Semantic Segmentation）",
+        ),
     ],
 }
 
