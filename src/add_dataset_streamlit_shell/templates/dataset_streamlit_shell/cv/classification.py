@@ -239,7 +239,7 @@ def compute_grad_cam(
     last_conv = last_conv_layer_name(backbone)
 
     grad_model = tf.keras.Model(
-        [classifier.inputs],
+        classifier.input,
         [classifier.get_layer(last_conv).output, classifier.output],
     )
     with tf.GradientTape() as tape:
