@@ -22,6 +22,7 @@ PROJECT_DEPENDENCIES = (
     "ultralytics>=8.3.237",
     "clip @ git+https://github.com/ultralytics/CLIP.git",
     "torchvision",
+    "gdown",
     "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
 )
 DependencyRunner = Callable[[list[str]], None]
@@ -94,6 +95,14 @@ def _install_dependencies(
 
 
 def _update_existing(target: Path, template_path: Path) -> None:
+    models_dir = target / "built-in-data" / "computer-vision" / "models"
+    models_backup: Path | None = None
+    if models_dir.exists() and any(models_dir.glob("*.pt")):
+        models_backup = target.parent / f".{target.name}_models_backup"
+        if models_backup.exists():
+            shutil.rmtree(models_backup)
+        shutil.copytree(models_dir, models_backup)
+
     for child in target.iterdir():
         if child.name in {"workspace", "sessions", "scripts", "uploads"}:
             continue
@@ -102,6 +111,13 @@ def _update_existing(target: Path, template_path: Path) -> None:
         else:
             child.unlink()
     shutil.copytree(template_path, target, dirs_exist_ok=True)
+
+    if models_backup is not None and models_backup.exists():
+        restored = target / "built-in-data" / "computer-vision" / "models"
+        restored.mkdir(parents=True, exist_ok=True)
+        for weight_file in models_backup.glob("*.pt"):
+            shutil.copy2(weight_file, restored / weight_file.name)
+        shutil.rmtree(models_backup)
 
 
 def _backup_existing(target: Path) -> Path:

@@ -11,6 +11,7 @@ from dataset_streamlit_shell.cv.image_io import (
     EXAMPLES_DIR,
     SAM3_MODELS_DIR,
     download_sample_data,
+    download_sam3_weights,
     load_image_bytes,
     load_image_path,
     pil_to_rgb_array,
@@ -33,7 +34,7 @@ from dataset_streamlit_shell.cv.promptable_segmentation import (
     parse_text_prompts,
     predict_text_masks,
 )
-from dataset_streamlit_shell.data_ui import render_chat_panel
+from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
 
 PAGE_TITLE = "提示式分割（Promptable Segmentation / SAM）"
 CONTEXT_KEY = "promptable_segmentation_agent_context"
@@ -51,30 +52,12 @@ def _cached_sam3_predictor(weights_path: str, conf_threshold: float):
 
 
 def render_promptable_segmentation_page() -> None:
-    tab_concept, tab_infer, tab_interpret = st.tabs(["概念說明", "分割推論", "結果解讀"])
-    with tab_concept:
-        _render_concept_tab()
-    with tab_infer:
-        _render_inference_tab()
-    with tab_interpret:
-        _render_interpret_tab()
-
-
-def _page_columns() -> tuple:
-    return st.columns([5, 3], gap="large")
-
-
-def _render_weights_panel() -> bool:
-    if sam3_weights_ready():
-        path = sam3_weights_path()
-        st.caption(f"SAM 3 權重：`{path}`")
-        return True
-    st.error(
-        "找不到 `sam3.pt`。請將權重放到：\n\n"
-        f"`{SAM3_MODELS_DIR / DEFAULT_MODEL}`\n\n"
-        "（需先在 Hugging Face 申請 SAM 3 權限後下載）"
+    render_cv_tabbed_page(
+        page_title=PAGE_TITLE,
+        context_key=CONTEXT_KEY,
+        tab_labels=['概念說明', '分割推論', '結果解讀'],
+        tab_renderers=[_render_concept_tab, _render_inference_tab, _render_interpret_tab],
     )
-    return False
 
 
 def _render_download_panel() -> bool:
@@ -118,150 +101,140 @@ def _resolve_image(
 
 
 def _render_concept_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("輸入文字描述，SAM 3 找出並分割符合概念的區域；此頁是電腦視覺路徑的第五站。")
-        st.markdown("##### 什麼是提示式分割？")
+    st.title(PAGE_TITLE)
+    st.caption("輸入文字描述，SAM 3 找出並分割符合概念的區域；此頁是電腦視覺路徑的第五站。")
+    st.markdown("##### 什麼是提示式分割？")
+    st.write(
+        "不需固定類別表或重新訓練，只要輸入英文提示詞（如 `dog`、`person`），"
+        "模型就會在影像中找出符合描述的區域並輸出 mask 與 bbox。"
+    )
+    st.info(
+        "影像分類：整張圖 → 一個標籤\n\n"
+        "物件偵測：固定 COCO 類別 + bbox\n\n"
+        "語意／實例分割：自動分割全部物件\n\n"
+        "提示式分割：你說要找什麼，模型就分什麼"
+    )
+    cols = st.columns(4)
+    steps = ["輸入影像", "輸入文字提示", "SAM 3 概念匹配", "mask + bbox"]
+    for column, step in zip(cols, steps, strict=True):
+        column.markdown(f"**{step}**")
+    with st.expander("簡短詞 vs 描述句", expanded=False):
         st.write(
-            "不需固定類別表或重新訓練，只要輸入英文提示詞（如 `dog`、`person`），"
-            "模型就會在影像中找出符合描述的區域並輸出 mask 與 bbox。"
+            "簡短名詞（`dog`、`cup`）適合入門；"
+            "較長的描述句（如 `a large bed on the right`）在複雜場景可能更精準，"
+            "但 CPU 推論會更慢，建議先從 1～3 個提示詞開始。"
         )
-        st.info(
-            "影像分類：整張圖 → 一個標籤\n\n"
-            "物件偵測：固定 COCO 類別 + bbox\n\n"
-            "語意／實例分割：自動分割全部物件\n\n"
-            "提示式分割：你說要找什麼，模型就分什麼"
+    with st.expander("SAM 3 與 SAM 2 點擊提示的差異", expanded=False):
+        st.write(
+            "SAM 2 常用手動點擊或框選；"
+            "SAM 3 支援 **Promptable Concept Segmentation**，"
+            "可直接用文字描述概念，一次找出多個符合的區域。"
         )
-        cols = st.columns(4)
-        steps = ["輸入影像", "輸入文字提示", "SAM 3 概念匹配", "mask + bbox"]
-        for column, step in zip(cols, steps, strict=True):
-            column.markdown(f"**{step}**")
-        with st.expander("簡短詞 vs 描述句", expanded=False):
-            st.write(
-                "簡短名詞（`dog`、`cup`）適合入門；"
-                "較長的描述句（如 `a large bed on the right`）在複雜場景可能更精準，"
-                "但 CPU 推論會更慢，建議先從 1～3 個提示詞開始。"
-            )
-        with st.expander("SAM 3 與 SAM 2 點擊提示的差異", expanded=False):
-            st.write(
-                "SAM 2 常用手動點擊或框選；"
-                "SAM 3 支援 **Promptable Concept Segmentation**，"
-                "可直接用文字描述概念，一次找出多個符合的區域。"
-            )
-        with st.expander("CPU 推論與權重", expanded=False):
-            st.write(
-                f"本頁使用 `{DEFAULT_MODEL}`。"
-                "首次推論可能需數十秒至數分鐘（CPU）。"
-                f"權重請放在 `{SAM3_MODELS_DIR / DEFAULT_MODEL}`。"
-            )
-        st.caption(f"本頁使用 SAM 3（{DEFAULT_MODEL}）。")
-    with side:
-        render_chat_panel(page_name=PAGE_TITLE)
+    with st.expander("CPU 推論與權重", expanded=False):
+        st.write(
+            f"本頁使用 `{DEFAULT_MODEL}`。"
+            "首次推論可能需數十秒至數分鐘（CPU）。"
+            f"權重請放在 `{SAM3_MODELS_DIR / DEFAULT_MODEL}`。"
+        )
+    st.caption(f"本頁使用 SAM 3（{DEFAULT_MODEL}）。")
 
 
 def _render_inference_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("輸入英文文字提示詞，SAM 3 產生符合概念的 mask 與 bbox。")
-        weights_ready = _render_weights_panel()
-        ready = _render_download_panel()
-        source_mode = st.radio(
-            "資料來源",
-            ["內建範例圖片", "上傳影像"],
-            horizontal=True,
-            key="cv_sam_source_mode",
-        )
-        uploaded = None
-        selected_example = None
-        selected_spec: SamDemoSpec | None = None
-        if source_mode == "內建範例圖片":
-            if ready:
-                specs = sam_demo_specs()
-                selected_example = st.selectbox(
-                    "選擇示範圖",
-                    options=[spec.filename for spec in specs],
-                    format_func=lambda name: next(
-                        spec.hint for spec in specs if spec.filename == name
-                    ),
-                    key="cv_sam_example",
-                )
-                selected_spec = next(
-                    spec for spec in specs if spec.filename == selected_example
-                )
-            else:
-                st.warning("請先下載範例資料，或改用上傳影像。")
+    st.title(PAGE_TITLE)
+    st.title(PAGE_TITLE)
+    st.caption("輸入英文文字提示詞，SAM 3 產生符合概念的 mask 與 bbox。")
+    weights_ready = _render_weights_panel()
+    ready = _render_download_panel()
+    source_mode = st.radio(
+        "資料來源",
+        ["內建範例圖片", "上傳影像"],
+        horizontal=True,
+        key="cv_sam_source_mode",
+    )
+    uploaded = None
+    selected_example = None
+    selected_spec: SamDemoSpec | None = None
+    if source_mode == "內建範例圖片":
+        if ready:
+            specs = sam_demo_specs()
+            selected_example = st.selectbox(
+                "選擇示範圖",
+                options=[spec.filename for spec in specs],
+                format_func=lambda name: next(
+                    spec.hint for spec in specs if spec.filename == name
+                ),
+                key="cv_sam_example",
+            )
+            selected_spec = next(
+                spec for spec in specs if spec.filename == selected_example
+            )
         else:
-            uploaded = st.file_uploader(
-                "上傳影像",
-                type=["jpg", "jpeg", "png", "webp"],
-                key="cv_sam_upload",
+            st.warning("請先下載範例資料，或改用上傳影像。")
+    else:
+        uploaded = st.file_uploader(
+            "上傳影像",
+            type=["jpg", "jpeg", "png", "webp"],
+            key="cv_sam_upload",
+        )
+
+    image, source_path = _resolve_image(
+        source_mode=source_mode,
+        uploaded_file=uploaded,
+        selected_example=selected_example,
+    )
+    if image is not None:
+        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
+
+    if "cv_sam_prompts_input" not in st.session_state:
+        st.session_state["cv_sam_prompts_input"] = (
+            selected_spec.suggested_prompts if selected_spec else "dog"
+        )
+    if selected_spec is not None and st.button("套用建議提示詞", key="cv_sam_apply_prompts"):
+        st.session_state["cv_sam_prompts_input"] = selected_spec.suggested_prompts
+        st.rerun()
+    prompts_raw = st.text_area(
+        "文字提示詞（一行一個，建議英文）",
+        height=120,
+        key="cv_sam_prompts_input",
+    )
+
+    st.caption("模型：SAM 3（sam3.pt）· CPU 推論請耐心等候")
+    conf_threshold = st.slider(
+        "信心門檻",
+        min_value=0.10,
+        max_value=0.90,
+        value=DEFAULT_CONF,
+        step=0.05,
+        key="cv_sam_conf_threshold",
+    )
+    prompts = parse_text_prompts(prompts_raw)
+    run_disabled = image is None or not prompts or not weights_ready
+    run = st.button("執行分割", key="cv_sam_run", disabled=run_disabled)
+    if not prompts:
+        st.warning("請至少輸入一個文字提示詞。")
+
+    if run and image is not None and prompts and weights_ready:
+        weights = sam3_weights_path()
+        assert weights is not None
+        with st.spinner("SAM 3 分割中…（CPU 可能較久，請稍候）"):
+            predictor = _cached_sam3_predictor(str(weights), conf_threshold)
+            result = predict_text_masks(
+                image,
+                prompts,
+                predictor=predictor,
+                conf_threshold=conf_threshold,
+                source_path=Path(source_path) if source_path else None,
             )
+        st.session_state[RESULT_KEY] = result
+        st.session_state[IMAGE_KEY] = image
+        st.session_state[PROMPTS_KEY] = prompts_raw
+        _update_agent_context(image, result)
 
-        image, source_path = _resolve_image(
-            source_mode=source_mode,
-            uploaded_file=uploaded,
-            selected_example=selected_example,
-        )
-        if image is not None:
-            st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
+    result: PromptableResult | None = st.session_state.get(RESULT_KEY)
+    cached_image = st.session_state.get(IMAGE_KEY)
+    if result is not None and cached_image is not None:
+        _render_promptable_results(cached_image, result)
 
-        if "cv_sam_prompts_input" not in st.session_state:
-            st.session_state["cv_sam_prompts_input"] = (
-                selected_spec.suggested_prompts if selected_spec else "dog"
-            )
-        if selected_spec is not None and st.button("套用建議提示詞", key="cv_sam_apply_prompts"):
-            st.session_state["cv_sam_prompts_input"] = selected_spec.suggested_prompts
-            st.rerun()
-        prompts_raw = st.text_area(
-            "文字提示詞（一行一個，建議英文）",
-            height=120,
-            key="cv_sam_prompts_input",
-        )
-
-        st.caption("模型：SAM 3（sam3.pt）· CPU 推論請耐心等候")
-        conf_threshold = st.slider(
-            "信心門檻",
-            min_value=0.10,
-            max_value=0.90,
-            value=DEFAULT_CONF,
-            step=0.05,
-            key="cv_sam_conf_threshold",
-        )
-        prompts = parse_text_prompts(prompts_raw)
-        run_disabled = image is None or not prompts or not weights_ready
-        run = st.button("執行分割", key="cv_sam_run", disabled=run_disabled)
-        if not prompts:
-            st.warning("請至少輸入一個文字提示詞。")
-
-        if run and image is not None and prompts and weights_ready:
-            weights = sam3_weights_path()
-            assert weights is not None
-            with st.spinner("SAM 3 分割中…（CPU 可能較久，請稍候）"):
-                predictor = _cached_sam3_predictor(str(weights), conf_threshold)
-                result = predict_text_masks(
-                    image,
-                    prompts,
-                    predictor=predictor,
-                    conf_threshold=conf_threshold,
-                    source_path=Path(source_path) if source_path else None,
-                )
-            st.session_state[RESULT_KEY] = result
-            st.session_state[IMAGE_KEY] = image
-            st.session_state[PROMPTS_KEY] = prompts_raw
-            _update_agent_context(image, result)
-
-        result: PromptableResult | None = st.session_state.get(RESULT_KEY)
-        cached_image = st.session_state.get(IMAGE_KEY)
-        if result is not None and cached_image is not None:
-            _render_promptable_results(cached_image, result)
-
-    with side:
-        render_chat_panel(
-            extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
-            page_name=PAGE_TITLE,
-        )
 
 
 def _render_promptable_results(image: np.ndarray, result: PromptableResult) -> None:
@@ -287,84 +260,81 @@ def _render_promptable_results(image: np.ndarray, result: PromptableResult) -> N
 
 
 def _render_interpret_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("調整顯示門檻、檢視單一匹配結果，不需重新推論。")
-        result: PromptableResult | None = st.session_state.get(RESULT_KEY)
-        image = st.session_state.get(IMAGE_KEY)
-        if result is None or image is None:
-            st.info("請先到「分割推論」Tab 執行分割。")
-        else:
-            display_threshold = st.slider(
-                "顯示門檻（過濾快取結果）",
-                min_value=0.10,
-                max_value=0.90,
-                value=float(result.conf_threshold),
-                step=0.05,
-                key="cv_sam_display_threshold",
-            )
-            alpha = st.slider(
-                "遮罩透明度",
-                min_value=0.20,
-                max_value=0.80,
-                value=0.50,
-                step=0.05,
-                key="cv_sam_interpret_alpha",
-            )
-            filtered = filter_promptable_items(result.items, conf_threshold=display_threshold)
-            st.caption(
-                f"原始匹配 {result.raw_count} 個；"
-                f"門檻 {display_threshold:.2f} 後顯示 {len(filtered)} 個。"
-            )
-            if filtered:
-                annotated = draw_promptable_results(image, filtered, alpha=alpha)
-                cols = st.columns(3)
-                cols[0].image(image, caption="原圖")
-                cols[1].image(annotated, caption="疊加圖")
-                cols[2].image(annotated, caption="結果預覽")
+    st.title(PAGE_TITLE)
+    st.title(PAGE_TITLE)
+    st.caption("調整顯示門檻、檢視單一匹配結果，不需重新推論。")
+    result: PromptableResult | None = st.session_state.get(RESULT_KEY)
+    image = st.session_state.get(IMAGE_KEY)
+    if result is None or image is None:
+        st.info("請先到「分割推論」Tab 執行分割。")
+    else:
+        display_threshold = st.slider(
+            "顯示門檻（過濾快取結果）",
+            min_value=0.10,
+            max_value=0.90,
+            value=float(result.conf_threshold),
+            step=0.05,
+            key="cv_sam_display_threshold",
+        )
+        alpha = st.slider(
+            "遮罩透明度",
+            min_value=0.20,
+            max_value=0.80,
+            value=0.50,
+            step=0.05,
+            key="cv_sam_interpret_alpha",
+        )
+        filtered = filter_promptable_items(result.items, conf_threshold=display_threshold)
+        st.caption(
+            f"原始匹配 {result.raw_count} 個；"
+            f"門檻 {display_threshold:.2f} 後顯示 {len(filtered)} 個。"
+        )
+        if filtered:
+            annotated = draw_promptable_results(image, filtered, alpha=alpha)
+            cols = st.columns(3)
+            cols[0].image(image, caption="原圖")
+            cols[1].image(annotated, caption="疊加圖")
+            cols[2].image(annotated, caption="結果預覽")
 
-                options = [
-                    f"{item.rank}. {item.prompt} ({item.confidence:.0%})"
-                    for item in filtered
-                ]
-                selected_option = st.selectbox(
-                    "單一匹配檢視",
-                    options=options,
-                    key="cv_sam_select",
-                )
-                selected_index = options.index(selected_option)
-                selected_item = filtered[selected_index]
-                mask_rgb = np.stack([selected_item.mask.astype(np.uint8) * 255] * 3, axis=-1)
-                highlighted = highlight_prompt_item(image, selected_item)
-                crop = crop_prompt_item(image, selected_item)
-                sub_cols = st.columns(3)
-                sub_cols[0].image(mask_rgb, caption=f"{selected_item.prompt} binary mask")
-                sub_cols[1].image(
-                    highlighted,
-                    caption=f"{selected_item.prompt} highlighted",
-                    use_container_width=True,
-                )
-                sub_cols[2].image(
-                    crop,
-                    caption=f"{selected_item.prompt} bbox crop",
-                    use_container_width=True,
-                )
-                st.caption(
-                    f"提示詞「{selected_item.prompt}」覆蓋 {selected_item.area:,} 像素 "
-                    f"（{selected_item.coverage:.1%}）"
-                )
-                st.dataframe(_promptable_dataframe(filtered), use_container_width=True, hide_index=True)
-            else:
-                st.warning("此門檻下沒有匹配結果。請降低顯示門檻。")
-            with st.expander("文字提示 vs 點擊提示", expanded=False):
-                st.write(
-                    "SAM 2 風格需手動點選位置；"
-                    "SAM 3 可直接用文字描述要找的概念，"
-                    "適合 open-vocabulary 與快速標註流程。"
-                )
-    with side:
-        render_chat_panel(page_name=PAGE_TITLE)
+            options = [
+                f"{item.rank}. {item.prompt} ({item.confidence:.0%})"
+                for item in filtered
+            ]
+            selected_option = st.selectbox(
+                "單一匹配檢視",
+                options=options,
+                key="cv_sam_select",
+            )
+            selected_index = options.index(selected_option)
+            selected_item = filtered[selected_index]
+            mask_rgb = np.stack([selected_item.mask.astype(np.uint8) * 255] * 3, axis=-1)
+            highlighted = highlight_prompt_item(image, selected_item)
+            crop = crop_prompt_item(image, selected_item)
+            sub_cols = st.columns(3)
+            sub_cols[0].image(mask_rgb, caption=f"{selected_item.prompt} binary mask")
+            sub_cols[1].image(
+                highlighted,
+                caption=f"{selected_item.prompt} highlighted",
+                use_container_width=True,
+            )
+            sub_cols[2].image(
+                crop,
+                caption=f"{selected_item.prompt} bbox crop",
+                use_container_width=True,
+            )
+            st.caption(
+                f"提示詞「{selected_item.prompt}」覆蓋 {selected_item.area:,} 像素 "
+                f"（{selected_item.coverage:.1%}）"
+            )
+            st.dataframe(_promptable_dataframe(filtered), use_container_width=True, hide_index=True)
+        else:
+            st.warning("此門檻下沒有匹配結果。請降低顯示門檻。")
+        with st.expander("文字提示 vs 點擊提示", expanded=False):
+            st.write(
+                "SAM 2 風格需手動點選位置；"
+                "SAM 3 可直接用文字描述要找的概念，"
+                "適合 open-vocabulary 與快速標註流程。"
+            )
 
 
 def _promptable_dataframe(items: tuple[TextPromptItem, ...]):

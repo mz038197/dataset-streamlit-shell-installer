@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import shutil
+import threading
 import zipfile
 from dataclasses import dataclass
 from io import BytesIO
@@ -76,6 +77,9 @@ SAM_DEMO_MANIFEST: tuple[tuple[str, str, str], ...] = (
 
 SAM3_MODELS_DIR = CV_DATA_DIR / "models"
 SAM3_WEIGHTS_PATH = SAM3_MODELS_DIR / "sam3.pt"
+SAM3_GDRIVE_FILE_ID = "18aap-5Ky9gQ8DJoh15LnK8JBeOAWi-cj"
+SAM3_MIN_WEIGHT_BYTES = 3_000_000_000
+SAM3_EXPECTED_WEIGHT_BYTES = 3_450_000_000
 
 
 @dataclass(frozen=True)
@@ -150,19 +154,107 @@ def sam_examples_ready() -> bool:
 
 
 def sam3_weights_ready() -> bool:
-    if SAM3_WEIGHTS_PATH.exists():
-        return True
-    fallback = SHELL_ROOT / "sam3.pt"
-    return fallback.exists()
+    return sam3_weights_path() is not None
 
 
 def sam3_weights_path() -> Path | None:
-    if SAM3_WEIGHTS_PATH.exists():
+    if _sam3_weight_file_valid(SAM3_WEIGHTS_PATH):
         return SAM3_WEIGHTS_PATH
     fallback = SHELL_ROOT / "sam3.pt"
-    if fallback.exists():
+    if _sam3_weight_file_valid(fallback):
         return fallback
     return None
+
+
+def _format_gib(size_bytes: int) -> str:
+    return f"{size_bytes / (1024 ** 3):.1f} GB"
+
+
+def _sam3_weight_file_valid(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    if path.stat().st_size < SAM3_MIN_WEIGHT_BYTES:
+        return False
+    with path.open("rb") as handle:
+        return handle.read(2) == b"PK"
+
+
+def _download_gdrive_file(
+    file_id: str,
+    output_path: Path,
+    progress_callback: Callable[[str, float], None] | None,
+) -> None:
+    import gdown
+
+    if progress_callback:
+        progress_callback("連線 Google Drive…", 0.05)
+
+    url = f"https://drive.google.com/uc?id={file_id}"
+    done = threading.Event()
+    errors: list[BaseException] = []
+
+    def run_download() -> None:
+        try:
+            gdown.download(url, str(output_path), quiet=True, resume=True)
+        except BaseException as exc:  # noqa: BLE001 - propagate download failures
+            errors.append(exc)
+        finally:
+            done.set()
+
+    thread = threading.Thread(target=run_download, daemon=True)
+    thread.start()
+
+    last_value = -1.0
+    while not done.wait(timeout=0.5):
+        if progress_callback is None:
+            continue
+        downloaded = output_path.stat().st_size if output_path.exists() else 0
+        ratio = min(downloaded / SAM3_EXPECTED_WEIGHT_BYTES, 0.89)
+        value = 0.05 + ratio * 0.85
+        pct = int(ratio * 100)
+        message = (
+            f"下載中… {_format_gib(downloaded)} / "
+            f"{_format_gib(SAM3_EXPECTED_WEIGHT_BYTES)}（{pct}%）"
+        )
+        if value - last_value >= 0.01:
+            progress_callback(message, value)
+            last_value = value
+
+    thread.join()
+    if errors:
+        output_path.unlink(missing_ok=True)
+        raise errors[0]
+
+    if progress_callback:
+        progress_callback("整理檔案…", 0.92)
+
+
+def download_sam3_weights(
+    *,
+    progress_callback: Callable[[str, float], None] | None = None,
+    gdrive_file_id: str = SAM3_GDRIVE_FILE_ID,
+) -> None:
+    if _sam3_weight_file_valid(SAM3_WEIGHTS_PATH):
+        if progress_callback:
+            progress_callback("SAM 3 權重已存在", 1.0)
+        return
+
+    SAM3_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    partial_path = Path(f"{SAM3_WEIGHTS_PATH}.partial")
+    if partial_path.exists():
+        partial_path.unlink()
+
+    _download_gdrive_file(gdrive_file_id, partial_path, progress_callback)
+
+    if progress_callback:
+        progress_callback("驗證檔案…", 0.97)
+    if not _sam3_weight_file_valid(partial_path):
+        partial_path.unlink(missing_ok=True)
+        raise ValueError("下載的 sam3.pt 大小或格式不正確，請稍後重試或手動放置權重。")
+
+    partial_path.replace(SAM3_WEIGHTS_PATH)
+    if progress_callback:
+        progress_callback("下載完成", 1.0)
 
 
 def examples_ready() -> bool:

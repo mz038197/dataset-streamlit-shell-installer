@@ -7,6 +7,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from dataset_streamlit_shell.cv.image_io import (
+    SAM3_MODELS_DIR,
+    sam3_weights_path,
+    sam3_weights_ready,
+)
+
 DEFAULT_MODEL = "sam3.pt"
 DEFAULT_CONF = 0.5
 
@@ -14,8 +20,6 @@ MASK_COLOR_RGB = (0, 120, 255)
 BBOX_COLOR_RGB = (0, 255, 0)
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
-CV_DATA_DIR = SHELL_ROOT / "built-in-data" / "computer-vision"
-SAM3_MODELS_DIR = CV_DATA_DIR / "models"
 
 
 @dataclass(frozen=True)
@@ -44,25 +48,6 @@ class PromptableResult:
     conf_threshold: float
     model_name: str
     annotated_image: np.ndarray
-
-
-def sam3_weights_candidates() -> tuple[Path, ...]:
-    return (
-        SAM3_MODELS_DIR / DEFAULT_MODEL,
-        SHELL_ROOT / DEFAULT_MODEL,
-        Path(DEFAULT_MODEL),
-    )
-
-
-def sam3_weights_path() -> Path | None:
-    for candidate in sam3_weights_candidates():
-        if candidate.exists():
-            return candidate
-    return None
-
-
-def sam3_weights_ready() -> bool:
-    return sam3_weights_path() is not None
 
 
 def parse_text_prompts(raw: str) -> tuple[str, ...]:
