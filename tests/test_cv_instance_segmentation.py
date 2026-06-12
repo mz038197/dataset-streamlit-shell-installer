@@ -132,5 +132,13 @@ def test_instance_demo_specs_has_four_entries() -> None:
     assert len(instance_demo_specs()) == 4
 
 
-def test_instance_examples_ready_false_when_missing() -> None:
-    assert instance_examples_ready() is False
+def test_instance_bundled_examples_exist() -> None:
+    from dataset_streamlit_shell.cv.image_io import EXAMPLES_DIR
+
+    for spec in instance_demo_specs():
+        path = EXAMPLES_DIR / spec.filename
+        assert path.exists(), f"missing bundled example: {spec.filename}"
+
+
+def test_instance_examples_ready_with_bundled_data() -> None:
+    assert instance_examples_ready() is True

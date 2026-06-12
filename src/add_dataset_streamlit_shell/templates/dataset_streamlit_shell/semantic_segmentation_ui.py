@@ -128,7 +128,6 @@ def _render_concept_tab() -> None:
 
 def _render_inference_tab() -> None:
     st.title(PAGE_TITLE)
-    st.title(PAGE_TITLE)
     st.caption("使用 DeepLabv3-ResNet50 產生像素級語意遮罩。")
     ready = _render_download_panel()
     source_mode = st.radio(
@@ -230,7 +229,6 @@ def _render_legend(class_items: tuple[ClassCoverage, ...]) -> None:
 
 
 def _render_interpret_tab() -> None:
-    st.title(PAGE_TITLE)
     st.title(PAGE_TITLE)
     st.caption("調整遮罩透明度、檢視單一類別 mask，不需重新推論。")
     result: SemanticResult | None = st.session_state.get(RESULT_KEY)

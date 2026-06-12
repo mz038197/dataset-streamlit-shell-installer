@@ -147,7 +147,6 @@ def _render_concept_tab() -> None:
 
 def _render_inference_tab() -> None:
     st.title(PAGE_TITLE)
-    st.title(PAGE_TITLE)
     st.caption("使用 ImageNet 預訓練模型進行 Top-K 分類推論。")
     ready = _render_download_panel()
     source_mode = st.radio(
@@ -323,7 +322,6 @@ def _build_topk_figure(items: tuple[PredictionItem, ...]):
 
 
 def _render_feature_tab() -> None:
-    st.title(PAGE_TITLE)
     st.title(PAGE_TITLE)
     st.caption("觀察 ResNet50 推論時的逐層特徵圖與 Grad-CAM 熱力圖。")
     ready = _render_download_panel()

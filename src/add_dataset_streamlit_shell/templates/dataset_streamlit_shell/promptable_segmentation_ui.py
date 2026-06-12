@@ -82,6 +82,33 @@ def _render_download_panel() -> bool:
     return sam_examples_ready()
 
 
+def _render_weights_panel() -> bool:
+    weights = sam3_weights_path()
+    if sam3_weights_ready() and weights is not None:
+        st.success(f"SAM 3 權重已就緒：`{weights}`")
+        return True
+
+    st.info("首次使用請下載 SAM 3 權重（約 3.4 GB，需穩定網路，請勿關閉分頁）。")
+    if st.button("下載 SAM 3 權重", key="cv_sam_download_weights"):
+        progress = st.progress(0.0, text="準備下載…")
+        status = st.empty()
+
+        def _callback(message: str, value: float) -> None:
+            progress.progress(value, text=message)
+            status.caption(message)
+
+        try:
+            download_sam3_weights(progress_callback=_callback)
+            st.success("SAM 3 權重已下載完成，可以開始分割。")
+            st.rerun()
+        except Exception as exc:  # noqa: BLE001 - surface download issues in UI
+            st.error(f"下載失敗：{exc}")
+            st.warning(
+                f"請手動將 `{DEFAULT_MODEL}` 放到 `{SAM3_MODELS_DIR / DEFAULT_MODEL}`。"
+            )
+    return sam3_weights_ready()
+
+
 def _resolve_image(
     *,
     source_mode: str,
@@ -140,7 +167,6 @@ def _render_concept_tab() -> None:
 
 
 def _render_inference_tab() -> None:
-    st.title(PAGE_TITLE)
     st.title(PAGE_TITLE)
     st.caption("輸入英文文字提示詞，SAM 3 產生符合概念的 mask 與 bbox。")
     weights_ready = _render_weights_panel()
@@ -260,7 +286,6 @@ def _render_promptable_results(image: np.ndarray, result: PromptableResult) -> N
 
 
 def _render_interpret_tab() -> None:
-    st.title(PAGE_TITLE)
     st.title(PAGE_TITLE)
     st.caption("調整顯示門檻、檢視單一匹配結果，不需重新推論。")
     result: PromptableResult | None = st.session_state.get(RESULT_KEY)

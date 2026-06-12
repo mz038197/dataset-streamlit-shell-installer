@@ -60,10 +60,10 @@ SEMANTIC_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
 )
 
 INSTANCE_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
-    ("cat_and_dog.jpg", "Cat + dog — two separate instance masks"),
+    ("dog.jpg", "Three puppies — multiple dog instances"),
+    ("three_cats.jpg", "Three cats — multiple cat instances"),
     ("street_scene.jpg", "Street scene — multiple persons / cars"),
-    ("desk_objects.jpg", "Desk scene — laptop, lamp, nearby objects"),
-    ("dog.jpg", "Single dog — one instance mask"),
+    ("coffee_mug.jpg", "Coffee set — cup, saucer, and spoon"),
 )
 
 SAM_DEMO_MANIFEST: tuple[tuple[str, str, str], ...] = (

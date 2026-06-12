@@ -7,7 +7,6 @@ import streamlit as st
 
 from dataset_streamlit_shell.cv.image_io import (
     EXAMPLES_DIR,
-    download_sample_data,
     instance_demo_specs,
     instance_examples_ready,
     load_image_bytes,
@@ -54,23 +53,11 @@ def render_instance_segmentation_page() -> None:
 def _render_download_panel() -> bool:
     if instance_examples_ready():
         return True
-    st.info("首次使用請先下載教學用示範圖（需網路連線）。")
-    if st.button("下載範例資料", key="cv_instance_download_samples"):
-        progress = st.progress(0.0, text="準備下載…")
-        status = st.empty()
-
-        def _callback(message: str, value: float) -> None:
-            progress.progress(value, text=message)
-            status.caption(message)
-
-        try:
-            download_sample_data(progress_callback=_callback)
-            st.success("範例資料已下載並快取於本機。")
-            st.rerun()
-        except Exception as exc:  # noqa: BLE001 - surface download issues in UI
-            st.error(f"下載失敗：{exc}")
-            st.warning("你仍可使用「上傳影像」進行實例分割。")
-    return instance_examples_ready()
+    st.warning(
+        "找不到內建範例圖。請重新執行 add-dataset-streamlit-shell --update，"
+        "或改用上傳影像。"
+    )
+    return False
 
 
 def _resolve_image(
@@ -113,7 +100,7 @@ def _render_concept_tab() -> None:
         st.write(
             "語意分割中，兩個 person 會是同一顏色；"
             "實例分割則會分成兩塊不同 mask。"
-            "建議用「cat_and_dog」示範圖觀察兩個主體的獨立輪廓。"
+            "建議用「Three puppies」或「Three cats」示範圖觀察多個同類實例的獨立輪廓。"
         )
     with st.expander("YOLOv8n-seg 簡介", expanded=False):
         st.write(
@@ -131,7 +118,6 @@ def _render_concept_tab() -> None:
 
 
 def _render_inference_tab() -> None:
-    st.title(PAGE_TITLE)
     st.title(PAGE_TITLE)
     st.caption("使用 YOLOv8n-seg 產生每個物件的獨立像素遮罩。")
     ready = _render_download_panel()
@@ -155,7 +141,7 @@ def _render_inference_tab() -> None:
                 key="cv_instance_example",
             )
         else:
-            st.warning("請先下載範例資料，或改用上傳影像。")
+            st.warning("找不到內建範例圖，請改用上傳影像。")
     else:
         uploaded = st.file_uploader(
             "上傳影像",
@@ -245,7 +231,6 @@ def _render_legend(items: tuple[InstanceItem, ...]) -> None:
 
 
 def _render_interpret_tab() -> None:
-    st.title(PAGE_TITLE)
     st.title(PAGE_TITLE)
     st.caption("調整顯示門檻、檢視單一實例 mask，不需重新推論。")
     result: InstanceResult | None = st.session_state.get(RESULT_KEY)
