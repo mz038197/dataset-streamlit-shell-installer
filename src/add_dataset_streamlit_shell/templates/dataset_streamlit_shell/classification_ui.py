@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import importlib
-from io import BytesIO
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,8 +8,6 @@ import streamlit as st
 import tensorflow as tf
 
 from dataset_streamlit_shell.cv.classification import (
-    DEFAULT_BACKBONE,
-    BackboneName,
     ClassificationResult,
     PredictionItem,
     StageActivation,
@@ -24,19 +20,14 @@ from dataset_streamlit_shell.cv.classification import (
 from dataset_streamlit_shell.cv.image_io import (
     EXAMPLES_DIR,
     demo_image_specs,
-    dataset_ready,
-    download_sample_data,
     examples_ready,
     load_image_bytes,
     load_image_path,
-    list_mini_train_images,
-    mini_train_ready,
     overlay_heatmap,
     pil_to_rgb_array,
 )
-from dataset_streamlit_shell.cv.mini_cnn import load_mini_train_batch, train_with_history
 from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
-from dataset_streamlit_shell.plotting import build_training_loss_figure, configure_matplotlib_for_traditional_chinese
+from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -45,7 +36,6 @@ CONTEXT_KEY = "image_classification_agent_context"
 RESULT_KEY = "image_classification_last_results"
 STAGES_KEY = "image_classification_stage_cache"
 GRADCAM_KEY = "image_classification_gradcam_cache"
-MINI_RESULT_KEY = "image_classification_mini_train_result"
 
 
 @st.cache_resource(show_spinner="載入 ResNet50（ImageNet 預訓練）…")
@@ -62,31 +52,19 @@ def render_image_classification_page() -> None:
     render_cv_tabbed_page(
         page_title=PAGE_TITLE,
         context_key=CONTEXT_KEY,
-        tab_labels=['概念說明', '分類推論', '特徵歷程', '迷你訓練'],
-        tab_renderers=[_render_concept_tab, _render_inference_tab, _render_feature_tab, _render_mini_train_tab],
+        tab_labels=['概念說明', '分類推論', '特徵歷程'],
+        tab_renderers=[_render_concept_tab, _render_inference_tab, _render_feature_tab],
     )
 
 
-def _render_download_panel(*, widget_key: str) -> bool:
-    if dataset_ready():
+def _render_download_panel() -> bool:
+    if examples_ready():
         return True
-    st.info("首次使用請先下載教學用示範圖與迷你訓練資料（需網路連線）。")
-    if st.button("下載範例資料", key=widget_key):
-        progress = st.progress(0.0, text="準備下載…")
-        status = st.empty()
-
-        def _callback(message: str, value: float) -> None:
-            progress.progress(value, text=message)
-            status.caption(message)
-
-        try:
-            download_sample_data(progress_callback=_callback)
-            st.success("範例資料已下載並快取於本機。")
-            st.rerun()
-        except Exception as exc:  # noqa: BLE001 - surface download issues in UI
-            st.error(f"下載失敗：{exc}")
-            st.warning("你仍可使用「上傳影像」進行分類推論。")
-    return examples_ready()
+    st.warning(
+        "找不到內建範例圖。請重新執行 add-dataset-streamlit-shell --update，"
+        "或改用上傳影像。"
+    )
+    return False
 
 
 def _resolve_image(
@@ -148,7 +126,7 @@ def _render_concept_tab() -> None:
 def _render_inference_tab() -> None:
     st.title(PAGE_TITLE)
     st.caption("使用 ImageNet 預訓練模型進行 Top-K 分類推論。")
-    ready = _render_download_panel(widget_key="cv_class_infer_download_samples")
+    ready = _render_download_panel()
     source_mode = st.radio(
         "資料來源",
         ["內建範例圖片", "上傳影像"],
@@ -169,7 +147,7 @@ def _render_inference_tab() -> None:
                 key="cv_infer_example",
             )
         else:
-            st.warning("請先下載範例資料，或改用上傳影像。")
+            st.warning("找不到內建範例圖，請改用上傳影像。")
     else:
         uploaded = st.file_uploader(
             "上傳影像",
@@ -324,7 +302,7 @@ def _build_topk_figure(items: tuple[PredictionItem, ...]):
 def _render_feature_tab() -> None:
     st.title(PAGE_TITLE)
     st.caption("觀察 ResNet50 推論時的逐層特徵圖與 Grad-CAM 熱力圖。")
-    ready = _render_download_panel(widget_key="cv_class_feature_download_samples")
+    ready = _render_download_panel()
     source_mode = st.radio(
         "資料來源",
         ["沿用分類推論頁", "內建範例圖片", "上傳影像"],
@@ -355,6 +333,8 @@ def _render_feature_tab() -> None:
                 uploaded_file=None,
                 selected_example=selected,
             )
+        else:
+            st.warning("找不到內建範例圖，請改用上傳影像。")
     else:
         uploaded = st.file_uploader(
             "上傳影像",
@@ -448,67 +428,6 @@ def _feature_map_grid(feature_maps: np.ndarray) -> np.ndarray:
         tile = (feature_maps[..., index] * 255.0).astype(np.uint8)
         grid[row * tile_h : (row + 1) * tile_h, col * tile_w : (col + 1) * tile_w] = tile
     return np.stack([grid, grid, grid], axis=-1)
-
-
-def _render_mini_train_tab() -> None:
-    st.title(PAGE_TITLE)
-    st.caption("以簡化 CNN 從頭訓練 cat vs dog 小資料集，觀察 loss 與特徵圖變化。")
-    if not mini_train_ready():
-        _render_download_panel(widget_key="cv_class_mini_download_samples")
-    if not mini_train_ready():
-        st.warning("請先下載範例資料。")
-    else:
-        cats, dogs = list_mini_train_images()
-        st.success(f"迷你訓練資料就緒：cat {len(cats)} 張 · dog {len(dogs)} 張")
-        epochs = st.slider("epochs", min_value=5, max_value=20, value=10, key="cv_mini_epochs")
-        if st.button("開始訓練", key="cv_mini_train_run"):
-            with st.spinner("訓練中…"):
-                batch = load_mini_train_batch(cats, dogs)
-                validation_items = tuple(batch.items[:2])
-                result = train_with_history(batch, epochs=epochs, validation_items=validation_items)
-                st.session_state[MINI_RESULT_KEY] = result
-        result = st.session_state.get(MINI_RESULT_KEY)
-        if result:
-            loss_fig = build_training_loss_figure(
-                {"loss": result.history["loss"]},
-                title="迷你 CNN 訓練 loss",
-            )
-            st.pyplot(loss_fig, clear_figure=True)
-            plt.close(loss_fig)
-            acc_fig = _build_metric_figure(
-                result.history["accuracy"],
-                title="迷你 CNN 訓練 accuracy",
-                ylabel="accuracy",
-            )
-            st.pyplot(acc_fig, clear_figure=True)
-            plt.close(acc_fig)
-            for snapshot in result.snapshots:
-                st.markdown(f"##### Epoch {snapshot.epoch}")
-                st.caption(
-                    f"loss={snapshot.loss:.4f} · accuracy={snapshot.accuracy:.1%}"
-                )
-                grid = _feature_map_grid(snapshot.feature_maps)
-                st.image(grid, caption="第一個 Conv 層 feature maps", use_container_width=True)
-                pred_text = ", ".join(
-                    f"{label} {score:.1%}" for label, score in snapshot.validation_predictions
-                )
-                st.write(f"驗證樣本預測：{pred_text}")
-        st.info(
-            "真實深度模型訓練時，所有層同時透過反向傳播更新；"
-            "此處以簡化 CNN 觀察訓練中特徵與 loss 的變化。"
-        )
-
-
-def _build_metric_figure(values: list[float], *, title: str, ylabel: str):
-    fig, ax = plt.subplots(figsize=(8, 4.2), constrained_layout=True)
-    if values:
-        epochs = list(range(1, len(values) + 1))
-        ax.plot(epochs, values, marker="o", color="#1a73e8")
-    ax.set_xlabel("epoch")
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    ax.grid(True, alpha=0.25)
-    return fig
 
 
 def _update_agent_context(image: np.ndarray, results: dict[str, ClassificationResult]) -> None:

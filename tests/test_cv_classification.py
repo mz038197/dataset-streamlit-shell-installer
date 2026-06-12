@@ -14,7 +14,7 @@ TEMPLATE_ROOT = (
 if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
-from dataset_streamlit_shell.cv.image_io import demo_image_specs, overlay_heatmap, pil_to_rgb_array
+from dataset_streamlit_shell.cv.image_io import demo_image_specs, examples_ready, overlay_heatmap, pil_to_rgb_array
 
 
 def test_format_top_prediction_summary_mentions_runner_up() -> None:
@@ -52,6 +52,18 @@ def test_pil_to_rgb_array_resize() -> None:
 
 def test_demo_image_specs_has_four_entries() -> None:
     assert len(demo_image_specs()) == 4
+
+
+def test_classification_bundled_examples_exist() -> None:
+    from dataset_streamlit_shell.cv.image_io import EXAMPLES_DIR
+
+    for spec in demo_image_specs():
+        path = EXAMPLES_DIR / spec.filename
+        assert path.exists(), f"missing bundled example: {spec.filename}"
+
+
+def test_classification_examples_ready_with_bundled_data() -> None:
+    assert examples_ready() is True
 
 
 def test_build_mini_cnn_output_shape() -> None:

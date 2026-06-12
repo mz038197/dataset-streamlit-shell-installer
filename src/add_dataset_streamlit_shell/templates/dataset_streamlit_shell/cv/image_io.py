@@ -265,10 +265,6 @@ def mini_train_ready() -> bool:
     return len(cats) >= 10 and len(dogs) >= 10
 
 
-def dataset_ready() -> bool:
-    return examples_ready() and mini_train_ready()
-
-
 def load_image_bytes(data: bytes) -> Image.Image:
     return Image.open(BytesIO(data)).convert("RGB")
 
