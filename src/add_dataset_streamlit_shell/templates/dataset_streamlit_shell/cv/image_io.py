@@ -39,10 +39,10 @@ EXTRA_DEMO_URLS: dict[str, str] = {
 }
 
 DEMO_MANIFEST: tuple[tuple[str, str, str], ...] = (
-    ("dog.jpg", "Single dog — expect high-confidence canine label", "dog"),
-    ("tabby_cat.jpg", "Single cat — expect feline label", "cat"),
-    ("coffee_mug.jpg", "Everyday object — mug or cup-like label", "extra"),
-    ("street_scene.jpg", "Busy scene — lower confidence / mixed context", "extra"),
+    ("dog.jpg", "單一狗狗特寫 — 預期高信心犬類標籤", "bundled"),
+    ("police_car.jpg", "警用車輛 — 預期 car / police van 等標籤", "bundled"),
+    ("airplane.jpg", "飛行中的民航機 — 預期 airplane / airliner", "bundled"),
+    ("lamb.jpg", "草场上的小羊 — 預期 sheep / lamb", "bundled"),
 )
 
 DETECTION_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
@@ -84,7 +84,7 @@ SAM3_EXPECTED_WEIGHT_BYTES = 3_450_000_000
 class DemoImageSpec:
     filename: str
     hint: str
-    source: Literal["dataset", "extra"]
+    source: Literal["dataset", "extra", "bundled"]
 
 
 def demo_image_specs() -> list[DemoImageSpec]:
@@ -328,7 +328,9 @@ def download_sample_data(
     if not train_cats or not train_dogs:
         raise FileNotFoundError("cats_and_dogs_filtered archive did not contain expected train images.")
 
-    shutil.copy2(train_dogs[0], EXAMPLES_DIR / "dog.jpg")
+    bundled_names = {spec.filename for spec in demo_image_specs() if spec.source == "bundled"}
+    if "dog.jpg" not in bundled_names or not (EXAMPLES_DIR / "dog.jpg").exists():
+        shutil.copy2(train_dogs[0], EXAMPLES_DIR / "dog.jpg")
     shutil.copy2(train_cats[0], EXAMPLES_DIR / "tabby_cat.jpg")
     _save_cat_and_dog_composite(train_cats[1], train_dogs[1], EXAMPLES_DIR / "cat_and_dog.jpg")
 
