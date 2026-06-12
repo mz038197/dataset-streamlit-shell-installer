@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from add_dataset_streamlit_shell.installer import install_shell
+from add_dataset_streamlit_shell.installer import PROJECT_DEPENDENCIES, install_shell
 
 
 def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> None:
@@ -79,6 +79,20 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
     assert (upload_dir / "image.png").read_bytes() == b"png"
 
 
+def test_install_shell_update_preserves_sam3_weights(tmp_path: Path) -> None:
+    install_shell(tmp_path, install_dependencies=False)
+    target = tmp_path / "dataset_streamlit_shell"
+    models_dir = target / "built-in-data" / "computer-vision" / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    payload = b"PKfake-sam3-weights"
+    (models_dir / "sam3.pt").write_bytes(payload)
+    (target / "app.py").write_text("# stale app\n", encoding="utf-8")
+
+    install_shell(tmp_path, update=True, install_dependencies=False)
+
+    assert (models_dir / "sam3.pt").read_bytes() == payload
+
+
 def test_install_shell_update_installs_when_target_missing(tmp_path: Path) -> None:
     (tmp_path / "agent_core.py").write_text("class Agent: ...\n", encoding="utf-8")
 
@@ -97,31 +111,9 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
 
     assert calls == [
         (
-            [
-                "uv",
-                "add",
-                "--upgrade-package",
-                "openai-tts",
-                "streamlit",
-                "pandas",
-                "matplotlib",
-                "numpy",
-                "scikit-learn",
-                "xgboost",
-                "tensorflow-cpu",
-                "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
-            ],
+            ["uv", "add", "--upgrade-package", "openai-tts", *PROJECT_DEPENDENCIES],
             tmp_path.resolve(),
             True,
         )
     ]
-    assert result.installed_dependencies == (
-        "streamlit",
-        "pandas",
-        "matplotlib",
-        "numpy",
-        "scikit-learn",
-        "xgboost",
-        "tensorflow-cpu",
-        "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
-    )
+    assert result.installed_dependencies == PROJECT_DEPENDENCIES

@@ -14,7 +14,13 @@ TEMPLATE_ROOT = (
 if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
-from dataset_streamlit_shell.cv.image_io import sam3_weights_ready, sam_demo_specs
+from dataset_streamlit_shell.cv.image_io import (
+    SAM3_GDRIVE_FILE_ID,
+    download_sam3_weights,
+    sam3_weights_path,
+    sam3_weights_ready,
+    sam_demo_specs,
+)
 from dataset_streamlit_shell.cv.promptable_segmentation import (
     DEFAULT_CONF,
     DEFAULT_MODEL,
@@ -23,7 +29,6 @@ from dataset_streamlit_shell.cv.promptable_segmentation import (
     filter_promptable_items,
     format_promptable_summary,
     parse_text_prompts,
-    sam3_weights_path,
 )
 
 
@@ -96,6 +101,51 @@ def test_sam_demo_specs_has_six_entries() -> None:
     assert len(sam_demo_specs()) == 6
 
 
-def test_sam3_weights_ready_false_when_missing() -> None:
+def test_sam3_weights_ready_false_when_missing(tmp_path: Path, monkeypatch) -> None:
+    from dataset_streamlit_shell.cv import image_io
+
+    monkeypatch.setattr(image_io, "SAM3_WEIGHTS_PATH", tmp_path / "models" / "sam3.pt")
+    monkeypatch.setattr(image_io, "SHELL_ROOT", tmp_path / "shell")
     assert sam3_weights_ready() is False
     assert sam3_weights_path() is None
+
+
+def test_sam3_gdrive_file_id_is_configured() -> None:
+    assert SAM3_GDRIVE_FILE_ID == "18aap-5Ky9gQ8DJoh15LnK8JBeOAWi-cj"
+
+
+def test_download_sam3_weights_skips_when_valid(tmp_path: Path, monkeypatch) -> None:
+    from dataset_streamlit_shell.cv import image_io
+
+    weights = tmp_path / "sam3.pt"
+    monkeypatch.setattr(image_io, "SAM3_MODELS_DIR", tmp_path)
+    monkeypatch.setattr(image_io, "SAM3_WEIGHTS_PATH", weights)
+    monkeypatch.setattr(image_io, "_sam3_weight_file_valid", lambda path: path == weights)
+
+    messages: list[tuple[str, float]] = []
+    download_sam3_weights(progress_callback=lambda message, value: messages.append((message, value)))
+    assert messages == [("SAM 3 權重已存在", 1.0)]
+
+
+def test_download_sam3_weights_writes_file(tmp_path: Path, monkeypatch) -> None:
+    from dataset_streamlit_shell.cv import image_io
+
+    models_dir = tmp_path / "models"
+    weights = models_dir / "sam3.pt"
+    monkeypatch.setattr(image_io, "SAM3_MODELS_DIR", models_dir)
+    monkeypatch.setattr(image_io, "SAM3_WEIGHTS_PATH", weights)
+    monkeypatch.setattr(image_io, "SAM3_MIN_WEIGHT_BYTES", 10)
+
+    def fake_download(
+        file_id: str,
+        output_path: Path,
+        progress_callback,
+    ) -> None:
+        assert file_id == SAM3_GDRIVE_FILE_ID
+        output_path.write_bytes(b"PK" + b"x" * 10)
+        if progress_callback:
+            progress_callback("整理檔案…", 0.92)
+
+    monkeypatch.setattr(image_io, "_download_gdrive_file", fake_download)
+    download_sam3_weights()
+    assert weights.read_bytes().startswith(b"PK")

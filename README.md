@@ -100,6 +100,16 @@ The installed `dataset_streamlit_shell/` template includes supervised learning p
 
 Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/`. Logistic pages use hand-written gradient descent and logistic Cost J; the linear SVM page uses scikit-learn `SVC`. Classification threshold is adjusted after training on logistic pages and is not stored in the model JSON (regularization λ is stored for the regularized page). Decision tree and XGBoost pages do not save models in this release.
 
+### Promptable segmentation (SAM 3)
+
+The **Promptable Segmentation** page uses SAM 3 (`sam3.pt`, ~3.4 GB). Weights are **not** bundled in git. On first use, open the page and click **Download SAM 3 weights** (course-hosted via Google Drive), or place `sam3.pt` manually at:
+
+```text
+dataset_streamlit_shell/built-in-data/computer-vision/models/sam3.pt
+```
+
+Requires stable network, ~3.4 GB free disk space, and `gdown` (installed with shell dependencies). Weights are for course use only. Running `add-dataset-streamlit-shell --update` preserves downloaded `*.pt` files under `built-in-data/computer-vision/models/`.
+
 ## What It Does
 
 - Copies `dataset_streamlit_shell/` into the current project.
