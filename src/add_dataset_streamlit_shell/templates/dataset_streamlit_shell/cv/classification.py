@@ -7,7 +7,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.applications import MobileNetV2, ResNet50
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input as mobilenet_preprocess
-from tensorflow.keras.applications.imagenet_utils import CLASS_INDEX
 from tensorflow.keras.applications.resnet50 import decode_predictions, preprocess_input as resnet_preprocess
 
 BackboneName = Literal["resnet50", "mobilenet_v2"]
@@ -56,6 +55,12 @@ class StageActivation:
     vector_preview: np.ndarray | None
 
 
+def _top_class_indices(predictions: np.ndarray, k: int) -> tuple[int, ...]:
+    flat = np.asarray(predictions)[0]
+    top_k = min(k, flat.size)
+    return tuple(int(index) for index in np.argsort(flat)[-top_k:][::-1])
+
+
 def _preprocess(image: np.ndarray, backbone: BackboneName) -> np.ndarray:
     resized = tf.image.resize(image, INPUT_SIZE)
     batch = tf.expand_dims(resized, axis=0)
@@ -84,12 +89,14 @@ def predict_top_k(
     classifier = model or load_classifier(backbone)
     batch = _preprocess(image, backbone)
     predictions = classifier.predict(batch, verbose=0)
-    decoded = decode_predictions(predictions, top=max(k, 1))[0]
+    top_k = max(k, 1)
+    decoded = decode_predictions(predictions, top=top_k)[0]
+    class_indices = _top_class_indices(predictions, top_k)
     items = tuple(
         PredictionItem(
             rank=index + 1,
             synset_id=synset_id,
-            class_index=int(CLASS_INDEX[synset_id]),
+            class_index=class_indices[index],
             label=label.replace("_", " "),
             probability=float(score),
         )
@@ -158,7 +165,6 @@ def extract_stage_activations(
             )
             continue
         if stage_id == "predictions":
-            decoded = decode_predictions(predictions, top=5)[0]
             stages.append(
                 StageActivation(
                     stage_id=stage_id,
@@ -167,7 +173,7 @@ def extract_stage_activations(
                     shape_label=f"top-5 from {predictions.shape[-1]} classes",
                     feature_maps=None,
                     vector_preview=np.array(
-                        [CLASS_INDEX[synset_id] for synset_id, _, _ in decoded],
+                        _top_class_indices(predictions, 5),
                         dtype=np.int32,
                     ),
                 )
