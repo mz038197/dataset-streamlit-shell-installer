@@ -121,6 +121,10 @@ pages = {
     ],
     "電腦視覺": [
         st.Page(
+            str(SHELL_ROOT / "pages" / "27_CNN_Introduction.py"),
+            title="卷積神經網路（CNN）",
+        ),
+        st.Page(
             str(SHELL_ROOT / "pages" / "22_Image_Classification.py"),
             title="影像分類（Image Classification）",
         ),
