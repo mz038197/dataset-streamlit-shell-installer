@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -55,6 +57,7 @@ configure_matplotlib_for_traditional_chinese()
 BUILTIN_PATH = SHELL_ROOT.joinpath(*BUILTIN_DATA_PATH_SUFFIX)
 RESULT_KEY = "nn_last_result"
 NN_TRAIN_PROGRESS_KEY = "nn_train_progress"
+NN_TRAIN_CHUNK_SIZE = 10
 CONTEXT_KEY = "類神經網路_agent_context"
 
 ACTIVATION_Z_MIN = -5.0
@@ -174,7 +177,6 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
             )
             if stop_clicked:
                 progress["stop_requested"] = True
-                st.rerun()
         else:
             start_clicked = st.button(
                 "開始訓練",
@@ -195,12 +197,19 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
                     st.rerun()
 
         if progress and progress["status"] == "running":
-            _render_live_training_view(progress, frame)
-            if progress["stop_requested"] or progress["current_epoch"] >= progress["total_epochs"]:
+            current_epoch = int(progress["current_epoch"])
+            total_epochs = int(progress["total_epochs"])
+            if progress["stop_requested"] and current_epoch > 0:
                 _finalize_training_progress(progress, frame, context_key=context_key)
                 st.rerun()
-            _advance_training_epoch(progress)
-            st.rerun()
+            elif current_epoch >= total_epochs:
+                _finalize_training_progress(progress, frame, context_key=context_key)
+                st.rerun()
+            else:
+                _run_training_chunk(progress, frame)
+                if progress["stop_requested"] or int(progress["current_epoch"]) >= total_epochs:
+                    _finalize_training_progress(progress, frame, context_key=context_key)
+                st.rerun()
         elif RESULT_KEY in st.session_state and st.session_state[RESULT_KEY]["signature"] == signature:
             _render_training_results(st.session_state[RESULT_KEY], frame=frame, spec=spec)
         else:
@@ -498,79 +507,84 @@ def _init_training_progress(
     }
 
 
-def _advance_training_epoch(progress: dict) -> None:
-    completed = int(progress["current_epoch"])
-    try:
-        logs = fit_one_training_epoch(
-            progress["model"],
-            progress["x_fit"],
-            progress["y_fit"],
-            completed_epochs=completed,
-        )
-    except Exception as exc:
-        st.error(f"訓練失敗：{exc}")
-        del st.session_state[NN_TRAIN_PROGRESS_KEY]
-        return
-
-    progress["history"] = append_epoch_history(progress["history"], logs)
-    progress["current_epoch"] = completed + 1
-
-
-def _render_live_training_view(progress: dict, frame: pd.DataFrame) -> None:
-    epoch = int(progress["current_epoch"])
-    if epoch <= 0:
-        st.caption("訓練準備中…")
-        return
+def _run_training_chunk(progress: dict, frame: pd.DataFrame) -> None:
+    start = int(progress["current_epoch"])
+    total_epochs = int(progress["total_epochs"])
+    end = min(start + NN_TRAIN_CHUNK_SIZE, total_epochs)
 
     spec = progress["spec"]
     features = progress["features"]
     labels = frame[TARGET_COLUMN].to_numpy(dtype=float)
-    history = progress["history"]
     model = progress["model"]
     feature_normalizer = progress["feature_normalizer"]
     metric_key = progress["metric_key"]
-    total_epochs = int(progress["total_epochs"])
 
     chart_left, chart_right = st.columns(2)
+    boundary_placeholder = chart_left.empty()
+    loss_placeholder = chart_right.empty()
+    status_placeholder = st.empty()
+
+    mesh_xx = mesh_yy = grid = None
+    x = None
     if len(features) == 2:
         _, _, mesh_xx, mesh_yy, grid = _build_decision_mesh(frame, features)
-        _render_epoch_boundary_plot(
-            frame=frame,
-            features=features,
-            labels=labels,
-            spec=spec,
-            model=model,
-            feature_normalizer=feature_normalizer,
-            mesh_xx=mesh_xx,
-            mesh_yy=mesh_yy,
-            grid=grid,
-            epoch=epoch,
-            container=chart_left,
-        )
     elif len(features) == 1:
         x = frame[features].to_numpy(dtype=np.float32)
-        _render_epoch_probability_plot(
-            x=x,
-            labels=labels,
-            spec=spec,
-            model=model,
-            feature_normalizer=feature_normalizer,
-            feature=features[0],
-            epoch=epoch,
-            container=chart_left,
+
+    for completed in range(start, end):
+        try:
+            logs = fit_one_training_epoch(
+                model,
+                progress["x_fit"],
+                progress["y_fit"],
+                completed_epochs=completed,
+            )
+        except Exception as exc:
+            st.error(f"訓練失敗：{exc}")
+            del st.session_state[NN_TRAIN_PROGRESS_KEY]
+            return
+
+        progress["history"] = append_epoch_history(progress["history"], logs)
+        epoch = completed + 1
+        history = progress["history"]
+
+        if len(features) == 2 and grid is not None:
+            _render_epoch_boundary_plot(
+                frame=frame,
+                features=features,
+                labels=labels,
+                spec=spec,
+                model=model,
+                feature_normalizer=feature_normalizer,
+                mesh_xx=mesh_xx,
+                mesh_yy=mesh_yy,
+                grid=grid,
+                epoch=epoch,
+                container=boundary_placeholder,
+            )
+        elif len(features) == 1 and x is not None:
+            _render_epoch_probability_plot(
+                x=x,
+                labels=labels,
+                spec=spec,
+                model=model,
+                feature_normalizer=feature_normalizer,
+                feature=features[0],
+                epoch=epoch,
+                container=boundary_placeholder,
+            )
+
+        _render_epoch_loss_plot(history, epoch=epoch, container=loss_placeholder)
+
+        loss_value = history.get("loss", [float("nan")])[-1]
+        accuracy_value = history.get(metric_key, [0.0])[-1] * 100.0
+        status_placeholder.caption(
+            f"Epoch {epoch:,} / {total_epochs:,} · "
+            f"loss = {loss_value:.4f} · accuracy = {accuracy_value:.2f}%"
         )
+        time.sleep(0.02)
 
-    _render_epoch_loss_plot(history, epoch=epoch, container=chart_right)
-
-    loss_value = history.get("loss", [float("nan")])[-1]
-    accuracy_value = history.get(metric_key, [0.0])[-1] * 100.0
-    if progress.get("stop_requested"):
-        status = f"已於 epoch {epoch:,} 停止"
-    elif epoch >= total_epochs:
-        status = "訓練完成"
-    else:
-        status = f"Epoch {epoch:,} / {total_epochs:,}"
-    st.caption(f"{status} · loss = {loss_value:.4f} · accuracy = {accuracy_value:.2f}%")
+    progress["current_epoch"] = end
 
 
 def _finalize_training_progress(
