@@ -35,7 +35,7 @@ from dataset_streamlit_shell.cv.image_io import (
     pil_to_rgb_array,
 )
 from dataset_streamlit_shell.cv.mini_cnn import load_mini_train_batch, train_with_history
-from dataset_streamlit_shell.data_ui import render_chat_panel
+from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
 from dataset_streamlit_shell.plotting import build_training_loss_figure, configure_matplotlib_for_traditional_chinese
 
 configure_matplotlib_for_traditional_chinese()
@@ -59,21 +59,12 @@ def _cached_mobilenet_v2() -> tf.keras.Model:
 
 
 def render_image_classification_page() -> None:
-    tab_concept, tab_infer, tab_features, tab_train = st.tabs(
-        ["概念說明", "分類推論", "特徵歷程", "迷你訓練"]
+    render_cv_tabbed_page(
+        page_title=PAGE_TITLE,
+        context_key=CONTEXT_KEY,
+        tab_labels=['概念說明', '分類推論', '特徵歷程', '迷你訓練'],
+        tab_renderers=[_render_concept_tab, _render_inference_tab, _render_feature_tab, _render_mini_train_tab],
     )
-    with tab_concept:
-        _render_concept_tab()
-    with tab_infer:
-        _render_inference_tab()
-    with tab_features:
-        _render_feature_tab()
-    with tab_train:
-        _render_mini_train_tab()
-
-
-def _page_columns() -> tuple:
-    return st.columns([5, 3], gap="large")
 
 
 def _render_download_panel() -> bool:
@@ -117,114 +108,104 @@ def _resolve_image(
 
 
 def _render_concept_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("整張圖輸出一個語意標籤；此頁是電腦視覺路徑的第一站。")
-        st.markdown("##### 什麼是影像分類？")
+    st.title(PAGE_TITLE)
+    st.caption("整張圖輸出一個語意標籤；此頁是電腦視覺路徑的第一站。")
+    st.markdown("##### 什麼是影像分類？")
+    st.write(
+        "模型讀入整張圖片，輸出它屬於哪個類別（例如 golden retriever、coffee mug）。"
+        "它回答的是「這是什麼」，還不涉及「在哪裡」。"
+    )
+    st.info(
+        "分類：整張圖 → 一個標籤\n\n"
+        "物件偵測（下一頁）：還要回答在哪裡\n\n"
+        "語意分割（下一頁）：進一步到像素層級"
+    )
+    cols = st.columns(4)
+    steps = ["輸入影像", "CNN 特徵抽取", "Softmax 機率", "Top-1 預測"]
+    for column, step in zip(cols, steps, strict=True):
+        column.markdown(f"**{step}**")
+    with st.expander("ImageNet 是什麼？", expanded=False):
         st.write(
-            "模型讀入整張圖片，輸出它屬於哪個類別（例如 golden retriever、coffee mug）。"
-            "它回答的是「這是什麼」，還不涉及「在哪裡」。"
+            "ImageNet 是含約 1000 類日常物件的資料集／基準。"
+            "本頁模型在其上預訓練，因此可直接辨識常見物件。"
         )
-        st.info(
-            "分類：整張圖 → 一個標籤\n\n"
-            "物件偵測（下一頁）：還要回答在哪裡\n\n"
-            "語意分割（下一頁）：進一步到像素層級"
+    with st.expander("ResNet50 vs MobileNetV2", expanded=False):
+        st.write(
+            "兩者都是 CNN 架構。ResNet50 為本頁預設主骨幹，教科書常見、通常較準；"
+            "MobileNetV2 較輕量，適合快速對照。"
         )
-        cols = st.columns(4)
-        steps = ["輸入影像", "CNN 特徵抽取", "Softmax 機率", "Top-1 預測"]
-        for column, step in zip(cols, steps, strict=True):
-            column.markdown(f"**{step}**")
-        with st.expander("ImageNet 是什麼？", expanded=False):
-            st.write(
-                "ImageNet 是含約 1000 類日常物件的資料集／基準。"
-                "本頁模型在其上預訓練，因此可直接辨識常見物件。"
-            )
-        with st.expander("ResNet50 vs MobileNetV2", expanded=False):
-            st.write(
-                "兩者都是 CNN 架構。ResNet50 為本頁預設主骨幹，教科書常見、通常較準；"
-                "MobileNetV2 較輕量，適合快速對照。"
-            )
-        with st.expander("常見限制", expanded=False):
-            st.write(
-                "整圖只有一個主標籤；無法標出物件位置；"
-                "多主體場景時可能混淆。可到「物件偵測」頁定位、「語意分割」頁看區域，或「實例分割」頁區分每個獨立物件。"
-            )
-        st.caption(
-            "深度學習頁從零訓練小資料；此處使用遷移學習——"
-            "在 ImageNet 上學過特徵的預訓練模型。"
+    with st.expander("常見限制", expanded=False):
+        st.write(
+            "整圖只有一個主標籤；無法標出物件位置；"
+            "多主體場景時可能混淆。可到「物件偵測」頁定位、「語意分割」頁看區域，或「實例分割」頁區分每個獨立物件。"
         )
-    with side:
-        render_chat_panel(page_name=PAGE_TITLE)
+    st.caption(
+        "深度學習頁從零訓練小資料；此處使用遷移學習——"
+        "在 ImageNet 上學過特徵的預訓練模型。"
+    )
 
 
 def _render_inference_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("使用 ImageNet 預訓練模型進行 Top-K 分類推論。")
-        ready = _render_download_panel()
-        source_mode = st.radio(
-            "資料來源",
-            ["內建範例圖片", "上傳影像"],
-            horizontal=True,
-            key="cv_infer_source_mode",
-        )
-        uploaded = None
-        selected_example = None
-        if source_mode == "內建範例圖片":
-            if ready:
-                specs = demo_image_specs()
-                selected_example = st.selectbox(
-                    "選擇示範圖",
-                    options=[spec.filename for spec in specs],
-                    format_func=lambda name: next(
-                        spec.hint for spec in specs if spec.filename == name
-                    ),
-                    key="cv_infer_example",
-                )
-            else:
-                st.warning("請先下載範例資料，或改用上傳影像。")
-        else:
-            uploaded = st.file_uploader(
-                "上傳影像",
-                type=["jpg", "jpeg", "png", "webp"],
-                key="cv_infer_upload",
+    st.title(PAGE_TITLE)
+    st.title(PAGE_TITLE)
+    st.caption("使用 ImageNet 預訓練模型進行 Top-K 分類推論。")
+    ready = _render_download_panel()
+    source_mode = st.radio(
+        "資料來源",
+        ["內建範例圖片", "上傳影像"],
+        horizontal=True,
+        key="cv_infer_source_mode",
+    )
+    uploaded = None
+    selected_example = None
+    if source_mode == "內建範例圖片":
+        if ready:
+            specs = demo_image_specs()
+            selected_example = st.selectbox(
+                "選擇示範圖",
+                options=[spec.filename for spec in specs],
+                format_func=lambda name: next(
+                    spec.hint for spec in specs if spec.filename == name
+                ),
+                key="cv_infer_example",
             )
-
-        image = _resolve_image(
-            source_mode=source_mode,
-            uploaded_file=uploaded,
-            selected_example=selected_example,
+        else:
+            st.warning("請先下載範例資料，或改用上傳影像。")
+    else:
+        uploaded = st.file_uploader(
+            "上傳影像",
+            type=["jpg", "jpeg", "png", "webp"],
+            key="cv_infer_upload",
         )
-        if image is not None:
-            st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
 
-        backbone_mode = st.radio(
-            "模型骨幹",
-            ["ResNet50（預設）", "MobileNetV2（輕量對照）", "兩者比較"],
-            horizontal=True,
-            key="cv_infer_backbone_mode",
-        )
-        top_k = st.slider("Top-K", min_value=1, max_value=5, value=5, key="cv_infer_top_k")
-        run = st.button("執行分類", key="cv_infer_run", disabled=image is None)
+    image = _resolve_image(
+        source_mode=source_mode,
+        uploaded_file=uploaded,
+        selected_example=selected_example,
+    )
+    if image is not None:
+        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
 
-        if run and image is not None:
-            results = _run_classification(image, backbone_mode, top_k)
-            st.session_state[RESULT_KEY] = results
-            st.session_state[STAGES_KEY] = None
-            st.session_state[GRADCAM_KEY] = None
-            _update_agent_context(image, results)
+    backbone_mode = st.radio(
+        "模型骨幹",
+        ["ResNet50（預設）", "MobileNetV2（輕量對照）", "兩者比較"],
+        horizontal=True,
+        key="cv_infer_backbone_mode",
+    )
+    top_k = st.slider("Top-K", min_value=1, max_value=5, value=5, key="cv_infer_top_k")
+    run = st.button("執行分類", key="cv_infer_run", disabled=image is None)
 
-        results = st.session_state.get(RESULT_KEY)
-        if image is not None and results:
-            _render_classification_results(image, results, top_k)
+    if run and image is not None:
+        results = _run_classification(image, backbone_mode, top_k)
+        st.session_state[RESULT_KEY] = results
+        st.session_state[STAGES_KEY] = None
+        st.session_state[GRADCAM_KEY] = None
+        _update_agent_context(image, results)
 
-    with side:
-        render_chat_panel(
-            extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
-            page_name=PAGE_TITLE,
-        )
+    results = st.session_state.get(RESULT_KEY)
+    if image is not None and results:
+        _render_classification_results(image, results, top_k)
+
 
 
 def _run_classification(
@@ -342,122 +323,119 @@ def _build_topk_figure(items: tuple[PredictionItem, ...]):
 
 
 def _render_feature_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("觀察 ResNet50 推論時的逐層特徵圖與 Grad-CAM 熱力圖。")
-        ready = _render_download_panel()
-        source_mode = st.radio(
-            "資料來源",
-            ["沿用分類推論頁", "內建範例圖片", "上傳影像"],
-            horizontal=True,
-            key="cv_feature_source_mode",
+    st.title(PAGE_TITLE)
+    st.title(PAGE_TITLE)
+    st.caption("觀察 ResNet50 推論時的逐層特徵圖與 Grad-CAM 熱力圖。")
+    ready = _render_download_panel()
+    source_mode = st.radio(
+        "資料來源",
+        ["沿用分類推論頁", "內建範例圖片", "上傳影像"],
+        horizontal=True,
+        key="cv_feature_source_mode",
+    )
+    image = None
+    if source_mode == "沿用分類推論頁":
+        last = st.session_state.get(RESULT_KEY)
+        if last:
+            st.info("將使用分類推論頁最近一次執行時的影像設定。")
+        source_mode = st.session_state.get("cv_infer_source_mode", "內建範例圖片")
+        image = _resolve_image(
+            source_mode=source_mode,
+            uploaded_file=st.session_state.get("cv_infer_upload"),
+            selected_example=st.session_state.get("cv_infer_example"),
         )
-        image = None
-        if source_mode == "沿用分類推論頁":
-            last = st.session_state.get(RESULT_KEY)
-            if last:
-                st.info("將使用分類推論頁最近一次執行時的影像設定。")
-            source_mode = st.session_state.get("cv_infer_source_mode", "內建範例圖片")
-            image = _resolve_image(
-                source_mode=source_mode,
-                uploaded_file=st.session_state.get("cv_infer_upload"),
-                selected_example=st.session_state.get("cv_infer_example"),
-            )
-        elif source_mode == "內建範例圖片":
-            if ready:
-                specs = demo_image_specs()
-                selected = st.selectbox(
-                    "選擇示範圖",
-                    options=[spec.filename for spec in specs],
-                    key="cv_feature_example",
-                )
-                image = _resolve_image(
-                    source_mode="內建範例圖片",
-                    uploaded_file=None,
-                    selected_example=selected,
-                )
-        else:
-            uploaded = st.file_uploader(
-                "上傳影像",
-                type=["jpg", "jpeg", "png", "webp"],
-                key="cv_feature_upload",
+    elif source_mode == "內建範例圖片":
+        if ready:
+            specs = demo_image_specs()
+            selected = st.selectbox(
+                "選擇示範圖",
+                options=[spec.filename for spec in specs],
+                key="cv_feature_example",
             )
             image = _resolve_image(
-                source_mode="上傳影像",
-                uploaded_file=uploaded,
-                selected_example=None,
+                source_mode="內建範例圖片",
+                uploaded_file=None,
+                selected_example=selected,
             )
+    else:
+        uploaded = st.file_uploader(
+            "上傳影像",
+            type=["jpg", "jpeg", "png", "webp"],
+            key="cv_feature_upload",
+        )
+        image = _resolve_image(
+            source_mode="上傳影像",
+            uploaded_file=uploaded,
+            selected_example=None,
+        )
 
-        if image is not None:
-            st.image(image, use_container_width=True)
+    if image is not None:
+        st.image(image, use_container_width=True)
 
-        if st.button("擷取特徵歷程", key="cv_feature_extract", disabled=image is None):
-            model = _cached_resnet50()
-            stages = extract_stage_activations(image, "resnet50", model=model)
-            st.session_state[STAGES_KEY] = stages
-            top = predict_top_k(image, "resnet50", k=5, model=model)
-            class_index = top.top_items[0].class_index
-            heatmap = compute_grad_cam(image, "resnet50", class_index, model=model)
-            st.session_state[GRADCAM_KEY] = {
-                "heatmap": heatmap,
-                "class_index": class_index,
-                "label": top.top_items[0].label,
-                "top_items": top.top_items,
-            }
+    if st.button("擷取特徵歷程", key="cv_feature_extract", disabled=image is None):
+        model = _cached_resnet50()
+        stages = extract_stage_activations(image, "resnet50", model=model)
+        st.session_state[STAGES_KEY] = stages
+        top = predict_top_k(image, "resnet50", k=5, model=model)
+        class_index = top.top_items[0].class_index
+        heatmap = compute_grad_cam(image, "resnet50", class_index, model=model)
+        st.session_state[GRADCAM_KEY] = {
+            "heatmap": heatmap,
+            "class_index": class_index,
+            "label": top.top_items[0].label,
+            "top_items": top.top_items,
+        }
 
-        stages: list[StageActivation] | None = st.session_state.get(STAGES_KEY)
-        if stages:
-            stage_index = st.slider(
-                "層級",
-                min_value=0,
-                max_value=len(stages) - 1,
-                value=0,
-                key="cv_feature_stage_slider",
-            )
-            stage = stages[stage_index]
-            st.markdown(f"**{stage.title}** · `{stage.shape_label}`")
-            st.caption(stage.caption)
-            if stage.vector_preview is not None and stage.feature_maps is None:
-                if stage.stage_id == "original":
-                    st.image(stage.vector_preview, use_container_width=True)
-                else:
-                    st.write("Pooled feature vector preview:", stage.vector_preview[:8])
-            if stage.feature_maps is not None:
-                grid = _feature_map_grid(stage.feature_maps)
-                st.image(grid, caption="前 16 個 channel（灰階）", use_container_width=True)
-
-        gradcam = st.session_state.get(GRADCAM_KEY)
-        if gradcam and image is not None:
-            st.divider()
-            st.markdown("##### Grad-CAM")
-            labels = [item.label for item in gradcam["top_items"]]
-            selected_label = st.selectbox(
-                "目標類別",
-                options=labels,
-                key="cv_gradcam_label",
-            )
-            selected_item = next(
-                item for item in gradcam["top_items"] if item.label == selected_label
-            )
-            if selected_item.class_index != gradcam["class_index"]:
-                heatmap = compute_grad_cam(
-                    image,
-                    "resnet50",
-                    selected_item.class_index,
-                    model=_cached_resnet50(),
-                )
+    stages: list[StageActivation] | None = st.session_state.get(STAGES_KEY)
+    if stages:
+        stage_index = st.slider(
+            "層級",
+            min_value=0,
+            max_value=len(stages) - 1,
+            value=0,
+            key="cv_feature_stage_slider",
+        )
+        stage = stages[stage_index]
+        st.markdown(f"**{stage.title}** · `{stage.shape_label}`")
+        st.caption(stage.caption)
+        if stage.vector_preview is not None and stage.feature_maps is None:
+            if stage.stage_id == "original":
+                st.image(stage.vector_preview, use_container_width=True)
             else:
-                heatmap = gradcam["heatmap"]
-            cols = st.columns(3)
-            overlay = overlay_heatmap(image, heatmap)
-            cols[0].image(image, caption="原圖")
-            cols[1].image((heatmap * 255).astype(np.uint8), caption="熱力圖")
-            cols[2].image(overlay, caption="疊加圖")
-            st.caption("顏色越暖表示該區域對此預測貢獻越大。")
+                st.write("Pooled feature vector preview:", stage.vector_preview[:8])
+        if stage.feature_maps is not None:
+            grid = _feature_map_grid(stage.feature_maps)
+            st.image(grid, caption="前 16 個 channel（灰階）", use_container_width=True)
 
-    with side:
-        render_chat_panel(page_name=PAGE_TITLE)
+    gradcam = st.session_state.get(GRADCAM_KEY)
+    if gradcam and image is not None:
+        st.divider()
+        st.markdown("##### Grad-CAM")
+        labels = [item.label for item in gradcam["top_items"]]
+        selected_label = st.selectbox(
+            "目標類別",
+            options=labels,
+            key="cv_gradcam_label",
+        )
+        selected_item = next(
+            item for item in gradcam["top_items"] if item.label == selected_label
+        )
+        if selected_item.class_index != gradcam["class_index"]:
+            heatmap = compute_grad_cam(
+                image,
+                "resnet50",
+                selected_item.class_index,
+                model=_cached_resnet50(),
+            )
+        else:
+            heatmap = gradcam["heatmap"]
+        cols = st.columns(3)
+        overlay = overlay_heatmap(image, heatmap)
+        cols[0].image(image, caption="原圖")
+        cols[1].image((heatmap * 255).astype(np.uint8), caption="熱力圖")
+        cols[2].image(overlay, caption="疊加圖")
+        st.caption("顏色越暖表示該區域對此預測貢獻越大。")
+
 
 
 def _feature_map_grid(feature_maps: np.ndarray) -> np.ndarray:
@@ -475,56 +453,52 @@ def _feature_map_grid(feature_maps: np.ndarray) -> np.ndarray:
 
 
 def _render_mini_train_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("以簡化 CNN 從頭訓練 cat vs dog 小資料集，觀察 loss 與特徵圖變化。")
-        if not mini_train_ready():
-            _render_download_panel()
-        if not mini_train_ready():
-            st.warning("請先下載範例資料。")
-        else:
-            cats, dogs = list_mini_train_images()
-            st.success(f"迷你訓練資料就緒：cat {len(cats)} 張 · dog {len(dogs)} 張")
-            epochs = st.slider("epochs", min_value=5, max_value=20, value=10, key="cv_mini_epochs")
-            if st.button("開始訓練", key="cv_mini_train_run"):
-                with st.spinner("訓練中…"):
-                    batch = load_mini_train_batch(cats, dogs)
-                    validation_items = tuple(batch.items[:2])
-                    result = train_with_history(batch, epochs=epochs, validation_items=validation_items)
-                    st.session_state[MINI_RESULT_KEY] = result
-            result = st.session_state.get(MINI_RESULT_KEY)
-            if result:
-                loss_fig = build_training_loss_figure(
-                    {"loss": result.history["loss"]},
-                    title="迷你 CNN 訓練 loss",
-                )
-                st.pyplot(loss_fig, clear_figure=True)
-                plt.close(loss_fig)
-                acc_fig = _build_metric_figure(
-                    result.history["accuracy"],
-                    title="迷你 CNN 訓練 accuracy",
-                    ylabel="accuracy",
-                )
-                st.pyplot(acc_fig, clear_figure=True)
-                plt.close(acc_fig)
-                for snapshot in result.snapshots:
-                    st.markdown(f"##### Epoch {snapshot.epoch}")
-                    st.caption(
-                        f"loss={snapshot.loss:.4f} · accuracy={snapshot.accuracy:.1%}"
-                    )
-                    grid = _feature_map_grid(snapshot.feature_maps)
-                    st.image(grid, caption="第一個 Conv 層 feature maps", use_container_width=True)
-                    pred_text = ", ".join(
-                        f"{label} {score:.1%}" for label, score in snapshot.validation_predictions
-                    )
-                    st.write(f"驗證樣本預測：{pred_text}")
-            st.info(
-                "真實深度模型訓練時，所有層同時透過反向傳播更新；"
-                "此處以簡化 CNN 觀察訓練中特徵與 loss 的變化。"
+    st.title(PAGE_TITLE)
+    st.caption("以簡化 CNN 從頭訓練 cat vs dog 小資料集，觀察 loss 與特徵圖變化。")
+    if not mini_train_ready():
+        _render_download_panel()
+    if not mini_train_ready():
+        st.warning("請先下載範例資料。")
+    else:
+        cats, dogs = list_mini_train_images()
+        st.success(f"迷你訓練資料就緒：cat {len(cats)} 張 · dog {len(dogs)} 張")
+        epochs = st.slider("epochs", min_value=5, max_value=20, value=10, key="cv_mini_epochs")
+        if st.button("開始訓練", key="cv_mini_train_run"):
+            with st.spinner("訓練中…"):
+                batch = load_mini_train_batch(cats, dogs)
+                validation_items = tuple(batch.items[:2])
+                result = train_with_history(batch, epochs=epochs, validation_items=validation_items)
+                st.session_state[MINI_RESULT_KEY] = result
+        result = st.session_state.get(MINI_RESULT_KEY)
+        if result:
+            loss_fig = build_training_loss_figure(
+                {"loss": result.history["loss"]},
+                title="迷你 CNN 訓練 loss",
             )
-    with side:
-        render_chat_panel(page_name=PAGE_TITLE)
+            st.pyplot(loss_fig, clear_figure=True)
+            plt.close(loss_fig)
+            acc_fig = _build_metric_figure(
+                result.history["accuracy"],
+                title="迷你 CNN 訓練 accuracy",
+                ylabel="accuracy",
+            )
+            st.pyplot(acc_fig, clear_figure=True)
+            plt.close(acc_fig)
+            for snapshot in result.snapshots:
+                st.markdown(f"##### Epoch {snapshot.epoch}")
+                st.caption(
+                    f"loss={snapshot.loss:.4f} · accuracy={snapshot.accuracy:.1%}"
+                )
+                grid = _feature_map_grid(snapshot.feature_maps)
+                st.image(grid, caption="第一個 Conv 層 feature maps", use_container_width=True)
+                pred_text = ", ".join(
+                    f"{label} {score:.1%}" for label, score in snapshot.validation_predictions
+                )
+                st.write(f"驗證樣本預測：{pred_text}")
+        st.info(
+            "真實深度模型訓練時，所有層同時透過反向傳播更新；"
+            "此處以簡化 CNN 觀察訓練中特徵與 loss 的變化。"
+        )
 
 
 def _build_metric_figure(values: list[float], *, title: str, ylabel: str):

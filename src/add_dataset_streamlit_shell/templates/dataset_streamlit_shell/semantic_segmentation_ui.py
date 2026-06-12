@@ -25,7 +25,7 @@ from dataset_streamlit_shell.cv.semantic_segmentation import (
     load_segmentation_model,
     predict_semantic_mask,
 )
-from dataset_streamlit_shell.data_ui import render_chat_panel
+from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
 
 PAGE_TITLE = "語意分割（Semantic Segmentation）"
 CONTEXT_KEY = "semantic_segmentation_agent_context"
@@ -39,17 +39,12 @@ def _cached_segmentation_model():
 
 
 def render_semantic_segmentation_page() -> None:
-    tab_concept, tab_infer, tab_interpret = st.tabs(["概念說明", "分割推論", "結果解讀"])
-    with tab_concept:
-        _render_concept_tab()
-    with tab_infer:
-        _render_inference_tab()
-    with tab_interpret:
-        _render_interpret_tab()
-
-
-def _page_columns() -> tuple:
-    return st.columns([5, 3], gap="large")
+    render_cv_tabbed_page(
+        page_title=PAGE_TITLE,
+        context_key=CONTEXT_KEY,
+        tab_labels=['概念說明', '分割推論', '結果解讀'],
+        tab_renderers=[_render_concept_tab, _render_inference_tab, _render_interpret_tab],
+    )
 
 
 def _render_download_panel() -> bool:
@@ -97,117 +92,107 @@ def _foreground_items(class_items: tuple[ClassCoverage, ...]) -> tuple[ClassCove
 
 
 def _render_concept_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("為每個像素指派語意類別；此頁是電腦視覺路徑的第三站。")
-        st.markdown("##### 什麼是語意分割？")
+    st.title(PAGE_TITLE)
+    st.caption("為每個像素指派語意類別；此頁是電腦視覺路徑的第三站。")
+    st.markdown("##### 什麼是語意分割？")
+    st.write(
+        "模型輸出與原圖同尺寸的像素級類別圖。"
+        "同一語意類別的所有像素使用相同顏色，不區分不同個體。"
+    )
+    st.info(
+        "影像分類：整張圖 → 一個標籤\n\n"
+        "物件偵測：多個 bbox + 類別\n\n"
+        "語意分割：每個像素 → 一個類別"
+    )
+    cols = st.columns(4)
+    steps = ["輸入影像", "Encoder-Decoder", "Per-pixel logits", "Argmax 類別圖"]
+    for column, step in zip(cols, steps, strict=True):
+        column.markdown(f"**{step}**")
+    with st.expander("與實例分割的差異", expanded=False):
         st.write(
-            "模型輸出與原圖同尺寸的像素級類別圖。"
-            "同一語意類別的所有像素使用相同顏色，不區分不同個體。"
+            "語意分割中，兩個 person 會是同一顏色；"
+            "實例分割則會分成兩塊不同 mask；可到「實例分割」頁觀察。"
         )
-        st.info(
-            "影像分類：整張圖 → 一個標籤\n\n"
-            "物件偵測：多個 bbox + 類別\n\n"
-            "語意分割：每個像素 → 一個類別"
+    with st.expander("DeepLabv3 簡介", expanded=False):
+        st.write(
+            "DeepLabv3 使用 encoder-decoder 與 atrous convolution，"
+            "在 COCO 上預訓練，可輸出約 21 類語意區域（含 background）。"
         )
-        cols = st.columns(4)
-        steps = ["輸入影像", "Encoder-Decoder", "Per-pixel logits", "Argmax 類別圖"]
-        for column, step in zip(cols, steps, strict=True):
-            column.markdown(f"**{step}**")
-        with st.expander("與實例分割的差異", expanded=False):
-            st.write(
-                "語意分割中，兩個 person 會是同一顏色；"
-                "實例分割則會分成兩塊不同 mask；可到「實例分割」頁觀察。"
-            )
-        with st.expander("DeepLabv3 簡介", expanded=False):
-            st.write(
-                "DeepLabv3 使用 encoder-decoder 與 atrous convolution，"
-                "在 COCO 上預訓練，可輸出約 21 類語意區域（含 background）。"
-            )
-        with st.expander("與物件偵測的差異", expanded=False):
-            st.write(
-                "偵測框只能框住物件外圍；語意分割能標出道路、天空、人等區域的像素歸屬，"
-                "適合街景與場景理解。"
-            )
-        st.caption(f"本頁使用 {DEFAULT_MODEL}（COCO 預訓練）。")
-    with side:
-        render_chat_panel(page_name=PAGE_TITLE)
+    with st.expander("與物件偵測的差異", expanded=False):
+        st.write(
+            "偵測框只能框住物件外圍；語意分割能標出道路、天空、人等區域的像素歸屬，"
+            "適合街景與場景理解。"
+        )
+    st.caption(f"本頁使用 {DEFAULT_MODEL}（COCO 預訓練）。")
 
 
 def _render_inference_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("使用 DeepLabv3-ResNet50 產生像素級語意遮罩。")
-        ready = _render_download_panel()
-        source_mode = st.radio(
-            "資料來源",
-            ["內建範例圖片", "上傳影像"],
-            horizontal=True,
-            key="cv_semantic_source_mode",
-        )
-        uploaded = None
-        selected_example = None
-        if source_mode == "內建範例圖片":
-            if ready:
-                specs = semantic_demo_specs()
-                selected_example = st.selectbox(
-                    "選擇示範圖",
-                    options=[spec.filename for spec in specs],
-                    format_func=lambda name: next(
-                        spec.hint for spec in specs if spec.filename == name
-                    ),
-                    key="cv_semantic_example",
-                )
-            else:
-                st.warning("請先下載範例資料，或改用上傳影像。")
-        else:
-            uploaded = st.file_uploader(
-                "上傳影像",
-                type=["jpg", "jpeg", "png", "webp"],
-                key="cv_semantic_upload",
+    st.title(PAGE_TITLE)
+    st.title(PAGE_TITLE)
+    st.caption("使用 DeepLabv3-ResNet50 產生像素級語意遮罩。")
+    ready = _render_download_panel()
+    source_mode = st.radio(
+        "資料來源",
+        ["內建範例圖片", "上傳影像"],
+        horizontal=True,
+        key="cv_semantic_source_mode",
+    )
+    uploaded = None
+    selected_example = None
+    if source_mode == "內建範例圖片":
+        if ready:
+            specs = semantic_demo_specs()
+            selected_example = st.selectbox(
+                "選擇示範圖",
+                options=[spec.filename for spec in specs],
+                format_func=lambda name: next(
+                    spec.hint for spec in specs if spec.filename == name
+                ),
+                key="cv_semantic_example",
             )
-
-        image = _resolve_image(
-            source_mode=source_mode,
-            uploaded_file=uploaded,
-            selected_example=selected_example,
+        else:
+            st.warning("請先下載範例資料，或改用上傳影像。")
+    else:
+        uploaded = st.file_uploader(
+            "上傳影像",
+            type=["jpg", "jpeg", "png", "webp"],
+            key="cv_semantic_upload",
         )
-        if image is not None:
-            st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
 
-        st.caption("模型：DeepLabv3-ResNet50（COCO 預訓練）")
-        alpha = st.slider(
-            "遮罩透明度",
-            min_value=0.20,
-            max_value=0.80,
-            value=0.45,
-            step=0.05,
-            key="cv_semantic_alpha",
-        )
-        run = st.button("執行分割", key="cv_semantic_run", disabled=image is None)
+    image = _resolve_image(
+        source_mode=source_mode,
+        uploaded_file=uploaded,
+        selected_example=selected_example,
+    )
+    if image is not None:
+        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
 
-        if run and image is not None:
-            with st.spinner("分割中…"):
-                model, weights = _cached_segmentation_model()
-                result = predict_semantic_mask(image, model=model, weights=weights)
-            st.session_state[RESULT_KEY] = result
-            st.session_state[IMAGE_KEY] = image
-            st.session_state["cv_semantic_alpha_saved"] = alpha
-            _update_agent_context(image, result)
+    st.caption("模型：DeepLabv3-ResNet50（COCO 預訓練）")
+    alpha = st.slider(
+        "遮罩透明度",
+        min_value=0.20,
+        max_value=0.80,
+        value=0.45,
+        step=0.05,
+        key="cv_semantic_alpha",
+    )
+    run = st.button("執行分割", key="cv_semantic_run", disabled=image is None)
 
-        result: SemanticResult | None = st.session_state.get(RESULT_KEY)
-        cached_image = st.session_state.get(IMAGE_KEY)
-        if result is not None and cached_image is not None:
-            display_alpha = float(st.session_state.get("cv_semantic_alpha_saved", alpha))
-            _render_segmentation_results(cached_image, result, display_alpha)
+    if run and image is not None:
+        with st.spinner("分割中…"):
+            model, weights = _cached_segmentation_model()
+            result = predict_semantic_mask(image, model=model, weights=weights)
+        st.session_state[RESULT_KEY] = result
+        st.session_state[IMAGE_KEY] = image
+        st.session_state["cv_semantic_alpha_saved"] = alpha
+        _update_agent_context(image, result)
 
-    with side:
-        render_chat_panel(
-            extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
-            page_name=PAGE_TITLE,
-        )
+    result: SemanticResult | None = st.session_state.get(RESULT_KEY)
+    cached_image = st.session_state.get(IMAGE_KEY)
+    if result is not None and cached_image is not None:
+        display_alpha = float(st.session_state.get("cv_semantic_alpha_saved", alpha))
+        _render_segmentation_results(cached_image, result, display_alpha)
+
 
 
 def _render_segmentation_results(
@@ -245,64 +230,61 @@ def _render_legend(class_items: tuple[ClassCoverage, ...]) -> None:
 
 
 def _render_interpret_tab() -> None:
-    main, side = _page_columns()
-    with main:
-        st.title(PAGE_TITLE)
-        st.caption("調整遮罩透明度、檢視單一類別 mask，不需重新推論。")
-        result: SemanticResult | None = st.session_state.get(RESULT_KEY)
-        image = st.session_state.get(IMAGE_KEY)
-        if result is None or image is None:
-            st.info("請先到「分割推論」Tab 執行分割。")
+    st.title(PAGE_TITLE)
+    st.title(PAGE_TITLE)
+    st.caption("調整遮罩透明度、檢視單一類別 mask，不需重新推論。")
+    result: SemanticResult | None = st.session_state.get(RESULT_KEY)
+    image = st.session_state.get(IMAGE_KEY)
+    if result is None or image is None:
+        st.info("請先到「分割推論」Tab 執行分割。")
+    else:
+        alpha = st.slider(
+            "遮罩透明度",
+            min_value=0.20,
+            max_value=0.80,
+            value=float(st.session_state.get("cv_semantic_alpha_saved", 0.45)),
+            step=0.05,
+            key="cv_semantic_interpret_alpha",
+        )
+        foreground = _foreground_items(result.class_items)
+        if not foreground:
+            st.warning("沒有前景類別可供解讀。")
         else:
-            alpha = st.slider(
-                "遮罩透明度",
-                min_value=0.20,
-                max_value=0.80,
-                value=float(st.session_state.get("cv_semantic_alpha_saved", 0.45)),
-                step=0.05,
-                key="cv_semantic_interpret_alpha",
-            )
-            foreground = _foreground_items(result.class_items)
-            if not foreground:
-                st.warning("沒有前景類別可供解讀。")
-            else:
-                blended = blend_overlay(image, result.color_overlay, alpha=alpha)
-                cols = st.columns(3)
-                cols[0].image(image, caption="原圖")
-                cols[1].image(result.color_overlay, caption="純色塊 mask")
-                cols[2].image(blended, caption="疊加圖")
+            blended = blend_overlay(image, result.color_overlay, alpha=alpha)
+            cols = st.columns(3)
+            cols[0].image(image, caption="原圖")
+            cols[1].image(result.color_overlay, caption="純色塊 mask")
+            cols[2].image(blended, caption="疊加圖")
 
-                options = [
-                    f"{item.label} ({item.coverage:.1%})" for item in foreground
-                ]
-                selected = st.selectbox(
-                    "單類別檢視",
-                    options=options,
-                    key="cv_semantic_class_select",
-                )
-                selected_index = options.index(selected)
-                selected_item = foreground[selected_index]
-                binary_mask = isolate_class_mask(result.label_map, selected_item.class_id)
-                highlighted = highlight_class(image, result.label_map, selected_item.class_id)
-                mask_rgb = np.stack([binary_mask * 255] * 3, axis=-1)
-                sub_cols = st.columns(2)
-                sub_cols[0].image(mask_rgb, caption=f"{selected_item.label} binary mask")
-                sub_cols[1].image(
-                    highlighted,
-                    caption=f"{selected_item.label} highlighted",
-                    use_container_width=True,
-                )
-                st.caption(
-                    f"{selected_item.label} 覆蓋 {selected_item.pixel_count:,} 像素 "
-                    f"（{selected_item.coverage:.1%}）"
-                )
-            with st.expander("為何需要語意分割？", expanded=False):
-                st.write(
-                    "Bounding box 無法描述像素級歸屬；"
-                    "語意分割適合街景、道路、室內場景等需要理解「區域」的任務。"
-                )
-    with side:
-        render_chat_panel(page_name=PAGE_TITLE)
+            options = [
+                f"{item.label} ({item.coverage:.1%})" for item in foreground
+            ]
+            selected = st.selectbox(
+                "單類別檢視",
+                options=options,
+                key="cv_semantic_class_select",
+            )
+            selected_index = options.index(selected)
+            selected_item = foreground[selected_index]
+            binary_mask = isolate_class_mask(result.label_map, selected_item.class_id)
+            highlighted = highlight_class(image, result.label_map, selected_item.class_id)
+            mask_rgb = np.stack([binary_mask * 255] * 3, axis=-1)
+            sub_cols = st.columns(2)
+            sub_cols[0].image(mask_rgb, caption=f"{selected_item.label} binary mask")
+            sub_cols[1].image(
+                highlighted,
+                caption=f"{selected_item.label} highlighted",
+                use_container_width=True,
+            )
+            st.caption(
+                f"{selected_item.label} 覆蓋 {selected_item.pixel_count:,} 像素 "
+                f"（{selected_item.coverage:.1%}）"
+            )
+        with st.expander("為何需要語意分割？", expanded=False):
+            st.write(
+                "Bounding box 無法描述像素級歸屬；"
+                "語意分割適合街景、道路、室內場景等需要理解「區域」的任務。"
+            )
 
 
 def _coverage_dataframe(class_items: tuple[ClassCoverage, ...]):
