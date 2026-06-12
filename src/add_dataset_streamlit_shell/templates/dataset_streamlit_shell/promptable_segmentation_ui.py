@@ -10,7 +10,6 @@ from dataset_streamlit_shell.cv.image_io import (
     SamDemoSpec,
     EXAMPLES_DIR,
     SAM3_MODELS_DIR,
-    download_sample_data,
     download_sam3_weights,
     load_image_bytes,
     load_image_path,
@@ -63,23 +62,11 @@ def render_promptable_segmentation_page() -> None:
 def _render_download_panel() -> bool:
     if sam_examples_ready():
         return True
-    st.info("首次使用請先下載教學用示範圖（需網路連線）。")
-    if st.button("下載範例資料", key="cv_sam_download_samples"):
-        progress = st.progress(0.0, text="準備下載…")
-        status = st.empty()
-
-        def _callback(message: str, value: float) -> None:
-            progress.progress(value, text=message)
-            status.caption(message)
-
-        try:
-            download_sample_data(progress_callback=_callback)
-            st.success("範例資料已下載並快取於本機。")
-            st.rerun()
-        except Exception as exc:  # noqa: BLE001 - surface download issues in UI
-            st.error(f"下載失敗：{exc}")
-            st.warning("你仍可使用「上傳影像」進行提示式分割。")
-    return sam_examples_ready()
+    st.warning(
+        "找不到內建範例圖。請重新執行 add-dataset-streamlit-shell --update，"
+        "或改用上傳影像。"
+    )
+    return False
 
 
 def _render_weights_panel() -> bool:
@@ -195,7 +182,7 @@ def _render_inference_tab() -> None:
                 spec for spec in specs if spec.filename == selected_example
             )
         else:
-            st.warning("請先下載範例資料，或改用上傳影像。")
+            st.warning("找不到內建範例圖，請改用上傳影像。")
     else:
         uploaded = st.file_uploader(
             "上傳影像",
@@ -213,7 +200,7 @@ def _render_inference_tab() -> None:
 
     if "cv_sam_prompts_input" not in st.session_state:
         st.session_state["cv_sam_prompts_input"] = (
-            selected_spec.suggested_prompts if selected_spec else "dog"
+            selected_spec.suggested_prompts if selected_spec else "person"
         )
     if selected_spec is not None and st.button("套用建議提示詞", key="cv_sam_apply_prompts"):
         st.session_state["cv_sam_prompts_input"] = selected_spec.suggested_prompts

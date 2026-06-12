@@ -67,12 +67,10 @@ INSTANCE_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
 )
 
 SAM_DEMO_MANIFEST: tuple[tuple[str, str, str], ...] = (
-    ("dog.jpg", "Single dog — try prompt: dog", "dog"),
-    ("tabby_cat.jpg", "Single cat — try prompt: cat", "cat"),
-    ("cat_and_dog.jpg", "Two animals — try prompts: dog / cat", "dog\ncat"),
-    ("street_scene.jpg", "Street scene — try prompts: person / car", "person\ncar"),
-    ("desk_objects.jpg", "Desk scene — try prompts: laptop / lamp", "laptop\nlamp"),
-    ("coffee_mug.jpg", "Coffee mug — try prompt: cup", "cup"),
+    ("motorcycle_family.jpg", "Family with motorcycle — try prompts: motorcycle / person / helmet", "motorcycle\nperson\nhelmet"),
+    ("wine_dinner.jpg", "Dinner scene — try prompts: person / bottle / wine glass", "person\nbottle\nwine glass"),
+    ("soccer_stadium.jpg", "Soccer stadium — try prompts: person / jersey", "person\njersey"),
+    ("pony_ride.jpg", "Pony ride — try prompts: horse / person", "horse\nperson"),
 )
 
 SAM3_MODELS_DIR = CV_DATA_DIR / "models"

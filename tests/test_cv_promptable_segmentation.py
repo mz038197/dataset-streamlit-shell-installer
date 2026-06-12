@@ -15,11 +15,13 @@ if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
 from dataset_streamlit_shell.cv.image_io import (
+    EXAMPLES_DIR,
     SAM3_GDRIVE_FILE_ID,
     download_sam3_weights,
     sam3_weights_path,
     sam3_weights_ready,
     sam_demo_specs,
+    sam_examples_ready,
 )
 from dataset_streamlit_shell.cv.promptable_segmentation import (
     DEFAULT_CONF,
@@ -97,8 +99,18 @@ def test_format_promptable_summary_lists_prompts() -> None:
     assert "2 region" in summary
 
 
-def test_sam_demo_specs_has_six_entries() -> None:
-    assert len(sam_demo_specs()) == 6
+def test_sam_demo_specs_has_four_entries() -> None:
+    assert len(sam_demo_specs()) == 4
+
+
+def test_sam_bundled_examples_exist() -> None:
+    for spec in sam_demo_specs():
+        path = EXAMPLES_DIR / spec.filename
+        assert path.exists(), f"missing bundled example: {spec.filename}"
+
+
+def test_sam_examples_ready_with_bundled_data() -> None:
+    assert sam_examples_ready() is True
 
 
 def test_sam3_weights_ready_false_when_missing(tmp_path: Path, monkeypatch) -> None:
