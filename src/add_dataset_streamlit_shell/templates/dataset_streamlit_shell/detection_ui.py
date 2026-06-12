@@ -20,7 +20,6 @@ from dataset_streamlit_shell.cv.image_io import (
     EXAMPLES_DIR,
     detection_demo_specs,
     detection_examples_ready,
-    download_sample_data,
     load_image_bytes,
     load_image_path,
     pil_to_rgb_array,
@@ -51,23 +50,11 @@ def render_object_detection_page() -> None:
 def _render_download_panel() -> bool:
     if detection_examples_ready():
         return True
-    st.info("首次使用請先下載教學用示範圖（需網路連線）。")
-    if st.button("下載範例資料", key="cv_detection_download_samples"):
-        progress = st.progress(0.0, text="準備下載…")
-        status = st.empty()
-
-        def _callback(message: str, value: float) -> None:
-            progress.progress(value, text=message)
-            status.caption(message)
-
-        try:
-            download_sample_data(progress_callback=_callback)
-            st.success("範例資料已下載並快取於本機。")
-            st.rerun()
-        except Exception as exc:  # noqa: BLE001 - surface download issues in UI
-            st.error(f"下載失敗：{exc}")
-            st.warning("你仍可使用「上傳影像」進行物件偵測。")
-    return detection_examples_ready()
+    st.warning(
+        "找不到內建範例圖。請重新執行 add-dataset-streamlit-shell --update，"
+        "或改用上傳影像。"
+    )
+    return False
 
 
 def _resolve_image(
@@ -148,7 +135,7 @@ def _render_inference_tab() -> None:
                 key="cv_detection_example",
             )
         else:
-            st.warning("請先下載範例資料，或改用上傳影像。")
+            st.warning("找不到內建範例圖，請改用上傳影像。")
     else:
         uploaded = st.file_uploader(
             "上傳影像",
@@ -194,21 +181,17 @@ def _render_inference_tab() -> None:
 
 def _render_detection_results(image: np.ndarray, result: DetectionResult) -> None:
     items = result.items
-    left, right = st.columns(2)
-    with left:
-        if items:
-            annotated = draw_detections(image, items)
-            st.image(annotated, caption="偵測結果", use_container_width=True)
-        else:
-            st.image(image, caption="原圖（無偵測結果）", use_container_width=True)
-            st.warning("未偵測到物件。試著降低信心門檻後重新執行偵測。")
-    with right:
-        st.markdown("##### 偵測清單")
-        if items:
-            st.dataframe(_detection_dataframe(items), use_container_width=True, hide_index=True)
-            st.caption(format_detection_summary(items))
-        else:
-            st.write("目前沒有任何偵測框。")
+    if items:
+        annotated = draw_detections(image, items)
+        st.image(annotated, caption="偵測結果", use_container_width=True)
+    else:
+        st.image(image, caption="原圖（無偵測結果）", use_container_width=True)
+        st.warning("未偵測到物件。試著降低信心門檻後重新執行偵測。")
+        return
+
+    st.markdown("##### 偵測清單")
+    st.dataframe(_detection_dataframe(items), use_container_width=True, hide_index=True)
+    st.caption(format_detection_summary(items))
 
 
 def _render_interpret_tab() -> None:

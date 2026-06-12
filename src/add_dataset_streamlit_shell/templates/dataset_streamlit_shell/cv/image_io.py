@@ -46,10 +46,10 @@ DEMO_MANIFEST: tuple[tuple[str, str, str], ...] = (
 )
 
 DETECTION_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
-    ("street_scene.jpg", "Street scene — multiple objects (person, car, …)"),
-    ("cat_and_dog.jpg", "Cat + dog — two subjects in one image"),
-    ("desk_objects.jpg", "Desk scene — laptop, lamp, and nearby objects"),
-    ("dog.jpg", "Single dog — one clear bounding box"),
+    ("cattle_show.jpg", "Livestock show — multiple persons and cows"),
+    ("car_and_bus.jpg", "Road scene — car and bus"),
+    ("horse_rider.jpg", "Equestrian scene — person and horse"),
+    ("airplanes.jpg", "Air show — multiple airplanes"),
 )
 
 SEMANTIC_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
