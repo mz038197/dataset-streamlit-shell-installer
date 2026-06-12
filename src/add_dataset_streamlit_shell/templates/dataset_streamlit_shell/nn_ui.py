@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import time
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -32,9 +30,12 @@ from dataset_streamlit_shell.ml.coffee_nn import (
     lab02_default_compile_spec,
     lab02_default_network_spec,
     load_builtin_frame,
+    append_epoch_history,
+    build_train_artifacts_from_history,
+    fit_one_training_epoch,
     predict_class_labels,
     predict_scores,
-    train_model,
+    prepare_training_runtime,
     validate_network_spec,
 )
 from dataset_streamlit_shell.plotting import (
@@ -53,6 +54,7 @@ configure_matplotlib_for_traditional_chinese()
 
 BUILTIN_PATH = SHELL_ROOT.joinpath(*BUILTIN_DATA_PATH_SUFFIX)
 RESULT_KEY = "nn_last_result"
+NN_TRAIN_PROGRESS_KEY = "nn_train_progress"
 CONTEXT_KEY = "類神經網路_agent_context"
 
 ACTIVATION_Z_MIN = -5.0
@@ -158,22 +160,47 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
 
         signature = _training_signature(spec, compile_spec, train_config, len(frame))
         train_disabled = bool(validation_errors)
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            use_container_width=True,
-            key="train_neural_network",
-            disabled=train_disabled,
-        )
-        if train_clicked:
-            _run_training(
-                frame,
-                spec=spec,
-                compile_spec=compile_spec,
-                train_config=train_config,
-                signature=signature,
-                context_key=context_key,
+        progress = st.session_state.get(NN_TRAIN_PROGRESS_KEY)
+        if progress and progress.get("signature") != signature:
+            del st.session_state[NN_TRAIN_PROGRESS_KEY]
+            progress = None
+
+        if progress and progress["status"] == "running":
+            stop_clicked = st.button(
+                "停止訓練",
+                type="primary",
+                use_container_width=True,
+                key="stop_neural_network",
             )
+            if stop_clicked:
+                progress["stop_requested"] = True
+                st.rerun()
+        else:
+            start_clicked = st.button(
+                "開始訓練",
+                type="primary",
+                use_container_width=True,
+                key="train_neural_network",
+                disabled=train_disabled,
+            )
+            if start_clicked:
+                if _ensure_tensorflow_available():
+                    _init_training_progress(
+                        frame,
+                        spec=spec,
+                        compile_spec=compile_spec,
+                        train_config=train_config,
+                        signature=signature,
+                    )
+                    st.rerun()
+
+        if progress and progress["status"] == "running":
+            _render_live_training_view(progress, frame)
+            if progress["stop_requested"] or progress["current_epoch"] >= progress["total_epochs"]:
+                _finalize_training_progress(progress, frame, context_key=context_key)
+                st.rerun()
+            _advance_training_epoch(progress)
+            st.rerun()
         elif RESULT_KEY in st.session_state and st.session_state[RESULT_KEY]["signature"] == signature:
             _render_training_results(st.session_state[RESULT_KEY], frame=frame, spec=spec)
         else:
@@ -329,13 +356,14 @@ def _training_signature(
     )
 
 
-def _nn_animation_epochs(total_epochs: int) -> set[int]:
-    if total_epochs <= 80:
-        return set(range(1, total_epochs + 1))
-    stride = max(total_epochs // 80, 1)
-    selected = set(range(1, total_epochs + 1, stride))
-    selected.add(total_epochs)
-    return selected
+def _ensure_tensorflow_available() -> bool:
+    try:
+        configure_tensorflow_runtime()
+        import tensorflow  # noqa: F401
+    except ImportError:
+        st.error("找不到 TensorFlow。請重新執行安裝工具以安裝 tensorflow-cpu。")
+        return False
+    return True
 
 
 def _scores_to_probabilities(scores: np.ndarray, spec: NetworkSpec) -> np.ndarray:
@@ -369,10 +397,10 @@ def _render_epoch_loss_plot(
     history: dict[str, list[float]],
     *,
     epoch: int,
-    placeholder,
+    container,
 ) -> None:
     fig = build_training_loss_figure(history, title=f"訓練 loss 曲線（epoch {epoch}）")
-    placeholder.pyplot(fig, clear_figure=True)
+    container.pyplot(fig, clear_figure=True, use_container_width=True)
     plt.close(fig)
 
 
@@ -388,7 +416,7 @@ def _render_epoch_boundary_plot(
     mesh_yy: np.ndarray,
     grid: np.ndarray,
     epoch: int,
-    placeholder,
+    container,
 ) -> None:
     x1_name, x2_name = features[0], features[1]
     x1 = frame[x1_name].to_numpy(dtype=float)
@@ -406,7 +434,7 @@ def _render_epoch_boundary_plot(
         x2_label=AXIS_LABELS.get(x2_name, x2_name),
         title=f"神經網路決策區域（epoch {epoch}）",
     )
-    placeholder.pyplot(fig, clear_figure=True)
+    container.pyplot(fig, clear_figure=True, use_container_width=True)
     plt.close(fig)
 
 
@@ -419,7 +447,7 @@ def _render_epoch_probability_plot(
     feature_normalizer,
     feature: str,
     epoch: int,
-    placeholder,
+    container,
 ) -> None:
     scores = predict_scores(model, x, spec, feature_normalizer=feature_normalizer)
     probs = _scores_to_probabilities(scores, spec)
@@ -431,130 +459,147 @@ def _render_epoch_probability_plot(
         x_label=x_label,
         title=f"單特徵分類機率曲線（epoch {epoch}）",
     )
-    placeholder.pyplot(fig, clear_figure=True)
+    container.pyplot(fig, clear_figure=True, use_container_width=True)
     plt.close(fig)
 
 
-def _render_training_metrics(
-    artifacts,
-    *,
-    frame: pd.DataFrame,
-    spec: NetworkSpec,
-    features: list[str],
-) -> None:
-    result = artifacts.result
-    st.markdown("##### 訓練結果")
-    st.metric("最終 loss", f"{result.final_loss:.4f}")
-    st.metric("訓練準確率", f"{result.train_accuracy:.2f}%")
-    st.caption(f"參數數量：{result.parameter_count:,}")
-
-    x = frame[features].to_numpy(dtype=np.float32)
-    labels = frame[TARGET_COLUMN].to_numpy(dtype=float)
-    scores = predict_scores(
-        artifacts.model,
-        x,
-        spec,
-        feature_normalizer=artifacts.feature_normalizer,
-    )
-    predicted = predict_class_labels(scores, spec)
-    mismatch = int(np.sum(predicted != labels.astype(int)))
-    st.caption(f"訓練集預測與標籤不一致：{mismatch} 筆。")
-
-
-def _run_training(
+def _init_training_progress(
     frame: pd.DataFrame,
     *,
     spec: NetworkSpec,
     compile_spec: CompileSpec,
     train_config: TrainConfig,
     signature: tuple,
-    context_key: str,
 ) -> None:
-    try:
-        configure_tensorflow_runtime()
-        import tensorflow  # noqa: F401
-    except ImportError:
-        st.error("找不到 TensorFlow。請重新執行安裝工具以安裝 tensorflow-cpu。")
-        return
-
     features = list(spec.input_features)
     x = frame[features].to_numpy(dtype=np.float32)
     y = frame[TARGET_COLUMN].to_numpy(dtype=np.float32)
-    labels = frame[TARGET_COLUMN].to_numpy(dtype=float)
-
-    chart_left, chart_right = st.columns(2)
-    boundary_placeholder = chart_left.empty()
-    loss_placeholder = chart_right.empty()
-    status_placeholder = st.empty()
-
-    mesh_xx = mesh_yy = grid = None
-    if len(features) == 2:
-        _, _, mesh_xx, mesh_yy, grid = _build_decision_mesh(frame, features)
-
-    animation_epochs = _nn_animation_epochs(train_config.epochs)
-    metric_key = "accuracy" if spec.output_units == 1 else "sparse_categorical_accuracy"
-
-    def on_epoch_end(
-        epoch: int,
-        history: dict[str, list[float]],
-        model,
-        feature_normalizer,
-    ) -> None:
-        if epoch not in animation_epochs:
-            return
-        _render_epoch_loss_plot(history, epoch=epoch, placeholder=loss_placeholder)
-        if len(features) == 2 and grid is not None:
-            _render_epoch_boundary_plot(
-                frame=frame,
-                features=features,
-                labels=labels,
-                spec=spec,
-                model=model,
-                feature_normalizer=feature_normalizer,
-                mesh_xx=mesh_xx,
-                mesh_yy=mesh_yy,
-                grid=grid,
-                epoch=epoch,
-                placeholder=boundary_placeholder,
-            )
-        elif len(features) == 1:
-            _render_epoch_probability_plot(
-                x=x,
-                labels=labels,
-                spec=spec,
-                model=model,
-                feature_normalizer=feature_normalizer,
-                feature=features[0],
-                epoch=epoch,
-                placeholder=boundary_placeholder,
-            )
-        loss_value = history.get("loss", [float("nan")])[-1]
-        accuracy_value = history.get(metric_key, [0.0])[-1] * 100.0
-        status_placeholder.caption(
-            f"Epoch {epoch:,} / {train_config.epochs:,} · "
-            f"loss = {loss_value:.4f} · accuracy = {accuracy_value:.2f}%"
-        )
-        time.sleep(0.02)
-
     try:
-        artifacts = train_model(
-            spec,
-            compile_spec,
-            train_config,
-            x,
-            y,
-            epoch_callback=on_epoch_end,
+        runtime = prepare_training_runtime(spec, compile_spec, x, y)
+    except Exception as exc:
+        st.error(f"訓練初始化失敗：{exc}")
+        return
+
+    st.session_state[NN_TRAIN_PROGRESS_KEY] = {
+        "status": "running",
+        "current_epoch": 0,
+        "total_epochs": int(train_config.epochs),
+        "history": {},
+        "model": runtime.model,
+        "feature_normalizer": runtime.feature_normalizer,
+        "x_fit": runtime.x_fit,
+        "y_fit": runtime.y_fit,
+        "metric_key": runtime.metric_key,
+        "spec": spec,
+        "compile_spec": compile_spec,
+        "signature": signature,
+        "features": features,
+        "stop_requested": False,
+    }
+
+
+def _advance_training_epoch(progress: dict) -> None:
+    completed = int(progress["current_epoch"])
+    try:
+        logs = fit_one_training_epoch(
+            progress["model"],
+            progress["x_fit"],
+            progress["y_fit"],
+            completed_epochs=completed,
         )
     except Exception as exc:
         st.error(f"訓練失敗：{exc}")
+        del st.session_state[NN_TRAIN_PROGRESS_KEY]
         return
 
+    progress["history"] = append_epoch_history(progress["history"], logs)
+    progress["current_epoch"] = completed + 1
+
+
+def _render_live_training_view(progress: dict, frame: pd.DataFrame) -> None:
+    epoch = int(progress["current_epoch"])
+    if epoch <= 0:
+        st.caption("訓練準備中…")
+        return
+
+    spec = progress["spec"]
+    features = progress["features"]
+    labels = frame[TARGET_COLUMN].to_numpy(dtype=float)
+    history = progress["history"]
+    model = progress["model"]
+    feature_normalizer = progress["feature_normalizer"]
+    metric_key = progress["metric_key"]
+    total_epochs = int(progress["total_epochs"])
+
+    chart_left, chart_right = st.columns(2)
+    if len(features) == 2:
+        _, _, mesh_xx, mesh_yy, grid = _build_decision_mesh(frame, features)
+        _render_epoch_boundary_plot(
+            frame=frame,
+            features=features,
+            labels=labels,
+            spec=spec,
+            model=model,
+            feature_normalizer=feature_normalizer,
+            mesh_xx=mesh_xx,
+            mesh_yy=mesh_yy,
+            grid=grid,
+            epoch=epoch,
+            container=chart_left,
+        )
+    elif len(features) == 1:
+        x = frame[features].to_numpy(dtype=np.float32)
+        _render_epoch_probability_plot(
+            x=x,
+            labels=labels,
+            spec=spec,
+            model=model,
+            feature_normalizer=feature_normalizer,
+            feature=features[0],
+            epoch=epoch,
+            container=chart_left,
+        )
+
+    _render_epoch_loss_plot(history, epoch=epoch, container=chart_right)
+
+    loss_value = history.get("loss", [float("nan")])[-1]
+    accuracy_value = history.get(metric_key, [0.0])[-1] * 100.0
+    if progress.get("stop_requested"):
+        status = f"已於 epoch {epoch:,} 停止"
+    elif epoch >= total_epochs:
+        status = "訓練完成"
+    else:
+        status = f"Epoch {epoch:,} / {total_epochs:,}"
+    st.caption(f"{status} · loss = {loss_value:.4f} · accuracy = {accuracy_value:.2f}%")
+
+
+def _finalize_training_progress(
+    progress: dict,
+    frame: pd.DataFrame,
+    *,
+    context_key: str,
+) -> None:
+    spec = progress["spec"]
+    compile_spec = progress["compile_spec"]
+    signature = progress["signature"]
+    features = progress["features"]
+    stopped_early = bool(progress.get("stop_requested"))
+
+    artifacts = build_train_artifacts_from_history(
+        progress["model"],
+        progress["history"],
+        progress["feature_normalizer"],
+        spec,
+        progress["metric_key"],
+    )
     st.session_state[RESULT_KEY] = {
         "signature": signature,
         "artifacts": artifacts,
         "spec": spec,
         "compile_spec": compile_spec,
         "features": features,
+        "stopped_early": stopped_early,
+        "stopped_at_epoch": int(progress["current_epoch"]),
     }
     st.session_state[context_key] = build_nn_agent_context(
         spec=spec,
@@ -562,12 +607,7 @@ def _run_training(
         train_result=artifacts.result,
         row_count=len(frame),
     )
-    _render_training_metrics(
-        artifacts,
-        frame=frame,
-        spec=spec,
-        features=features,
-    )
+    del st.session_state[NN_TRAIN_PROGRESS_KEY]
 
 
 def _render_training_results(
@@ -581,6 +621,8 @@ def _render_training_results(
     features = cached["features"]
 
     st.markdown("##### 訓練結果")
+    if cached.get("stopped_early"):
+        st.caption(f"已於 epoch {cached.get('stopped_at_epoch', 0):,} 提早停止。")
     st.metric("最終 loss", f"{result.final_loss:.4f}")
     st.metric("訓練準確率", f"{result.train_accuracy:.2f}%")
     st.caption(f"參數數量：{result.parameter_count:,}")

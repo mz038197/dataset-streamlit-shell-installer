@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
 
+NN_TRAINING_CHART_FIGSIZE = (8, 4.8)
+
 TRADITIONAL_CHINESE_FONT_CANDIDATES = [
     "Microsoft JhengHei",
     "Microsoft YaHei",
@@ -523,7 +525,7 @@ def build_nn_decision_boundary_figure(
     configure_matplotlib_for_traditional_chinese()
     class_0 = labels == 0
     class_1 = labels == 1
-    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=NN_TRAINING_CHART_FIGSIZE, constrained_layout=True)
     scatter_nn_binary_classes(ax, x1, x2, class_0=class_0, class_1=class_1)
     x_lo, x_hi, y_lo, y_hi = linear_svm_data_axis_limits(x1, x2)
     ax.set_xlim(x_lo, x_hi)
@@ -558,7 +560,7 @@ def build_nn_1d_probability_figure(
     configure_matplotlib_for_traditional_chinese()
     class_0 = labels == 0
     class_1 = labels == 1
-    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=NN_TRAINING_CHART_FIGSIZE, constrained_layout=True)
     order = np.argsort(x_values)
     ax.plot(x_values[order], probabilities[order], color="#1a73e8", linewidth=2, label="P(y=1)")
     ax.scatter(x_values[class_0], labels[class_0], **NN_CLASS_0_STYLE)
@@ -652,7 +654,7 @@ def build_training_loss_figure(
     plt = importlib.import_module("matplotlib.pyplot")
     configure_matplotlib_for_traditional_chinese()
     losses = history.get("loss", [])
-    fig, ax = plt.subplots(figsize=(8, 4.2), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=NN_TRAINING_CHART_FIGSIZE, constrained_layout=True)
     if losses:
         epochs = list(range(1, len(losses) + 1))
         ax.plot(epochs, losses, marker="o", color="#1a73e8", label="loss")

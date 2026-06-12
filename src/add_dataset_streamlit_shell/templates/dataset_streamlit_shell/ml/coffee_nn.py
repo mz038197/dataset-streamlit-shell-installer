@@ -85,6 +85,15 @@ class TrainArtifacts:
     feature_normalizer: Any | None
 
 
+@dataclass(frozen=True)
+class TrainingRuntime:
+    model: Any
+    x_fit: np.ndarray
+    y_fit: np.ndarray
+    feature_normalizer: Any | None
+    metric_key: str
+
+
 def lab02_default_network_spec() -> NetworkSpec:
     return NetworkSpec(
         input_features=("溫度", "時間"),
@@ -283,15 +292,16 @@ def _find_normalization_layer(model: Any):
     raise ValueError("模型中找不到 Normalization 層。")
 
 
-def train_model(
+def resolve_metric_key(spec: NetworkSpec) -> str:
+    return "accuracy" if spec.output_units == 1 else "sparse_categorical_accuracy"
+
+
+def prepare_training_runtime(
     spec: NetworkSpec,
     compile_spec: CompileSpec,
-    train_config: TrainConfig,
     x: np.ndarray,
     y: np.ndarray,
-    *,
-    epoch_callback: Callable[[int, dict[str, list[float]], Any, Any | None], None] | None = None,
-) -> TrainArtifacts:
+) -> TrainingRuntime:
     tf = _import_tf()
     tf.random.set_seed(DEFAULT_RANDOM_SEED)
 
@@ -303,9 +313,7 @@ def train_model(
         x_fit = x_array
     else:
         feature_normalizer = fit_feature_normalizer(x_array)
-        x_fit = feature_normalizer(x_array).numpy()
-
-    y_fit = y_encoded
+        x_fit = np.asarray(feature_normalizer(x_array).numpy(), dtype=np.float32)
 
     model = build_sequential_model(spec)
     if spec.use_normalization_layer:
@@ -313,39 +321,54 @@ def train_model(
 
     loss = resolve_loss(spec)
     optimizer = build_optimizer(compile_spec)
-    metrics = ["accuracy"] if spec.output_units == 1 else ["sparse_categorical_accuracy"]
-    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+    metric_key = resolve_metric_key(spec)
+    model.compile(loss=loss, optimizer=optimizer, metrics=[metric_key])
 
-    callbacks: list[Any] = []
-    if epoch_callback is not None:
-        accumulated: dict[str, list[float]] = {}
+    return TrainingRuntime(
+        model=model,
+        x_fit=x_fit,
+        y_fit=y_encoded,
+        feature_normalizer=feature_normalizer,
+        metric_key=metric_key,
+    )
 
-        class _EpochProgressCallback(tf.keras.callbacks.Callback):
-            def on_epoch_end(self, epoch: int, logs: dict[str, float] | None = None) -> None:
-                logs = logs or {}
-                for key, value in logs.items():
-                    accumulated.setdefault(key, []).append(float(value))
-                epoch_callback(
-                    epoch + 1,
-                    {key: list(values) for key, values in accumulated.items()},
-                    self.model,
-                    feature_normalizer,
-                )
 
-        callbacks.append(_EpochProgressCallback())
+def append_epoch_history(
+    history: dict[str, list[float]],
+    logs: dict[str, float],
+) -> dict[str, list[float]]:
+    updated = {key: list(values) for key, values in history.items()}
+    for key, value in logs.items():
+        updated.setdefault(key, []).append(float(value))
+    return updated
 
+
+def fit_one_training_epoch(
+    model: Any,
+    x_fit: np.ndarray,
+    y_fit: np.ndarray,
+    *,
+    completed_epochs: int,
+) -> dict[str, float]:
     history_obj = model.fit(
         x_fit,
         y_fit,
-        epochs=int(train_config.epochs),
+        epochs=completed_epochs + 1,
+        initial_epoch=completed_epochs,
         verbose=0,
-        callbacks=callbacks,
     )
-    history = {key: [float(value) for value in values] for key, values in history_obj.history.items()}
-    final_loss = float(history.get("loss", [float("nan")])[-1])
-    metric_key = metrics[0]
-    train_accuracy = float(history.get(metric_key, [0.0])[-1]) * 100.0
+    return {key: float(values[-1]) for key, values in history_obj.history.items()}
 
+
+def build_train_artifacts_from_history(
+    model: Any,
+    history: dict[str, list[float]],
+    feature_normalizer: Any | None,
+    spec: NetworkSpec,
+    metric_key: str,
+) -> TrainArtifacts:
+    final_loss = float(history.get("loss", [float("nan")])[-1])
+    train_accuracy = float(history.get(metric_key, [0.0])[-1]) * 100.0
     result = TrainResult(
         history=history,
         final_loss=final_loss,
@@ -353,6 +376,42 @@ def train_model(
         parameter_count=int(model.count_params()),
     )
     return TrainArtifacts(model=model, result=result, feature_normalizer=feature_normalizer)
+
+
+def train_model(
+    spec: NetworkSpec,
+    compile_spec: CompileSpec,
+    train_config: TrainConfig,
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    epoch_callback: Callable[[int, dict[str, list[float]], Any, Any | None], None] | None = None,
+) -> TrainArtifacts:
+    runtime = prepare_training_runtime(spec, compile_spec, x, y)
+    history: dict[str, list[float]] = {}
+    total_epochs = int(train_config.epochs)
+    for epoch in range(total_epochs):
+        logs = fit_one_training_epoch(
+            runtime.model,
+            runtime.x_fit,
+            runtime.y_fit,
+            completed_epochs=epoch,
+        )
+        history = append_epoch_history(history, logs)
+        if epoch_callback is not None:
+            epoch_callback(
+                epoch + 1,
+                history,
+                runtime.model,
+                runtime.feature_normalizer,
+            )
+    return build_train_artifacts_from_history(
+        runtime.model,
+        history,
+        runtime.feature_normalizer,
+        spec,
+        runtime.metric_key,
+    )
 
 
 def predict_scores(

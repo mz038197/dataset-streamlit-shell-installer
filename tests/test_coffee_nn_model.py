@@ -25,14 +25,19 @@ from dataset_streamlit_shell.ml.coffee_nn import (
     LOSS_AUTO,
     NetworkSpec,
     TrainConfig,
+    append_epoch_history,
     build_sequential_model,
+    build_train_artifacts_from_history,
     estimate_parameter_count,
+    fit_one_training_epoch,
     format_model_code,
     lab02_default_compile_spec,
     lab02_default_network_spec,
     load_builtin_frame,
     predict_class_labels,
     predict_scores,
+    prepare_training_runtime,
+    resolve_metric_key,
     train_model,
     validate_network_spec,
 )
@@ -138,6 +143,46 @@ def test_train_model_with_in_model_normalization_layer() -> None:
     artifacts = train_model(spec, compile_spec, train_config, x, y)
     assert artifacts.feature_normalizer is None
     assert len(artifacts.result.history.get("loss", [])) == 2
+
+
+def test_append_epoch_history_accumulates_epochs() -> None:
+    history = append_epoch_history({}, {"loss": 0.5, "accuracy": 0.8})
+    history = append_epoch_history(history, {"loss": 0.3, "accuracy": 0.9})
+    assert history["loss"] == [0.5, 0.3]
+    assert history["accuracy"] == [0.8, 0.9]
+
+
+def test_prepare_and_fit_one_epoch() -> None:
+    pytest.importorskip("tensorflow")
+    frame = load_builtin_frame(BUILTIN_PATH)
+    spec = NetworkSpec(
+        input_features=("溫度", "時間"),
+        hidden_layers=(HiddenLayerSpec(2, "relu"),),
+        output_units=1,
+        output_activation="sigmoid",
+        loss_choice=LOSS_AUTO,
+    )
+    compile_spec = CompileSpec(optimizer_name="Adam", learning_rate=0.05)
+    x = frame[["溫度", "時間"]].to_numpy(dtype=np.float32)
+    y = frame["類別"].to_numpy(dtype=np.float32)
+    runtime = prepare_training_runtime(spec, compile_spec, x, y)
+    assert resolve_metric_key(spec) == "accuracy"
+    logs = fit_one_training_epoch(
+        runtime.model,
+        runtime.x_fit,
+        runtime.y_fit,
+        completed_epochs=0,
+    )
+    history = append_epoch_history({}, logs)
+    artifacts = build_train_artifacts_from_history(
+        runtime.model,
+        history,
+        runtime.feature_normalizer,
+        spec,
+        runtime.metric_key,
+    )
+    assert len(artifacts.result.history.get("loss", [])) == 1
+    assert artifacts.result.parameter_count > 0
 
 
 def test_train_model_epoch_callback_invoked() -> None:
