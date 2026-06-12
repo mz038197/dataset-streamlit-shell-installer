@@ -67,11 +67,11 @@ def render_image_classification_page() -> None:
     )
 
 
-def _render_download_panel() -> bool:
+def _render_download_panel(*, widget_key: str) -> bool:
     if dataset_ready():
         return True
     st.info("首次使用請先下載教學用示範圖與迷你訓練資料（需網路連線）。")
-    if st.button("下載範例資料", key="cv_download_samples"):
+    if st.button("下載範例資料", key=widget_key):
         progress = st.progress(0.0, text="準備下載…")
         status = st.empty()
 
@@ -148,7 +148,7 @@ def _render_concept_tab() -> None:
 def _render_inference_tab() -> None:
     st.title(PAGE_TITLE)
     st.caption("使用 ImageNet 預訓練模型進行 Top-K 分類推論。")
-    ready = _render_download_panel()
+    ready = _render_download_panel(widget_key="cv_class_infer_download_samples")
     source_mode = st.radio(
         "資料來源",
         ["內建範例圖片", "上傳影像"],
@@ -324,7 +324,7 @@ def _build_topk_figure(items: tuple[PredictionItem, ...]):
 def _render_feature_tab() -> None:
     st.title(PAGE_TITLE)
     st.caption("觀察 ResNet50 推論時的逐層特徵圖與 Grad-CAM 熱力圖。")
-    ready = _render_download_panel()
+    ready = _render_download_panel(widget_key="cv_class_feature_download_samples")
     source_mode = st.radio(
         "資料來源",
         ["沿用分類推論頁", "內建範例圖片", "上傳影像"],
@@ -454,7 +454,7 @@ def _render_mini_train_tab() -> None:
     st.title(PAGE_TITLE)
     st.caption("以簡化 CNN 從頭訓練 cat vs dog 小資料集，觀察 loss 與特徵圖變化。")
     if not mini_train_ready():
-        _render_download_panel()
+        _render_download_panel(widget_key="cv_class_mini_download_samples")
     if not mini_train_ready():
         st.warning("請先下載範例資料。")
     else:
