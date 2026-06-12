@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import logging
-import os
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -10,7 +7,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-_TF_RUNTIME_CONFIGURED = False
+from dataset_streamlit_shell.ml.tf_runtime import configure_tensorflow_runtime, import_tensorflow
+
+_import_tf = import_tensorflow
 
 FEATURE_OPTIONS = ("溫度", "時間")
 TARGET_COLUMN = "類別"
@@ -491,28 +490,3 @@ def build_nn_agent_context(
             f"最後訓練 loss={train_result.final_loss:.4f}，accuracy≈{train_result.train_accuracy:.2f}%"
         )
     return "\n".join(lines)
-
-
-def configure_tensorflow_runtime() -> None:
-    """Reduce TensorFlow / oneDNN / Keras noise on stderr before first import."""
-    global _TF_RUNTIME_CONFIGURED
-    if _TF_RUNTIME_CONFIGURED:
-        return
-    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
-    os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-    warnings.filterwarnings(
-        "ignore",
-        message=r".*tf\.reset_default_graph.*",
-    )
-    warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"keras.*")
-    _TF_RUNTIME_CONFIGURED = True
-
-
-def _import_tf():
-    configure_tensorflow_runtime()
-    import tensorflow as tf
-
-    for logger_name in ("tensorflow", "keras", "absl"):
-        logging.getLogger(logger_name).setLevel(logging.ERROR)
-    tf.get_logger().setLevel("ERROR")
-    return tf

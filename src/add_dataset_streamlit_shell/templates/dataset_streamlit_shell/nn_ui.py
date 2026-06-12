@@ -26,7 +26,6 @@ from dataset_streamlit_shell.ml.coffee_nn import (
     TARGET_COLUMN,
     TrainConfig,
     build_nn_agent_context,
-    configure_tensorflow_runtime,
     estimate_parameter_count,
     format_model_code,
     lab02_default_compile_spec,
@@ -37,6 +36,7 @@ from dataset_streamlit_shell.ml.coffee_nn import (
     train_model,
     validate_network_spec,
 )
+from dataset_streamlit_shell.ml.tf_runtime import configure_tensorflow_runtime
 from dataset_streamlit_shell.plotting import (
     activation_curve_y,
     build_nn_1d_probability_figure,
