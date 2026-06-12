@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -41,7 +43,6 @@ from dataset_streamlit_shell.plotting import (
     build_single_activation_curve_figure,
     build_nn_data_figures,
     build_nn_decision_boundary_figure,
-    build_sigmoid_figure,
     build_training_loss_figure,
     configure_matplotlib_for_traditional_chinese,
     linear_svm_data_axis_limits,
@@ -67,7 +68,6 @@ ACTIVATION_DEMO_ITEMS: tuple[tuple[str, str, str | None], ...] = (
     ("Tanh", r"f(z) = \tanh(z) = \dfrac{e^{z} - e^{-z}}{e^{z} + e^{-z}}", None),
     ("Linear", r"f(z) = z", "亦稱恆等（identity）活化，不做非線性變換。"),
 )
-SIGMOID_FORMULA_LATEX = r"\sigma(z) = \dfrac{1}{1 + e^{-z}}"
 
 
 def render_neural_network_page() -> None:
@@ -109,23 +109,14 @@ def _render_activation_tab() -> None:
             if note:
                 st.caption(note)
 
-    st.divider()
-    st.markdown("##### Sigmoid 重點")
-    st.caption("在 z = 0 時 σ(z) = 0.5，是二元分類輸出層常用的 S 形曲線。")
-    z_highlight = st.slider(
-        "標示 z 值",
-        min_value=-10.0,
-        max_value=10.0,
-        value=0.0,
-        step=0.5,
-        key="nn_sigmoid_z",
-    )
-    sigmoid_fig = build_sigmoid_figure(highlight_z=z_highlight)
-    st.pyplot(sigmoid_fig, clear_figure=True)
-    plt.close(sigmoid_fig)
-    with st.expander("公式", expanded=False):
-        st.latex(SIGMOID_FORMULA_LATEX)
-        st.caption("圖中曲線標示為 σ(z)；與上方 Sigmoid 小節的 f(z) 為同一函數。")
+
+def _sanitize_feature_session() -> None:
+    stored = st.session_state.get("nn_features")
+    if not isinstance(stored, list):
+        return
+    valid = [feature for feature in stored if feature in FEATURE_OPTIONS]
+    if valid != stored:
+        st.session_state["nn_features"] = valid or list(FEATURE_OPTIONS)
 
 
 def _render_training_tab(frame: pd.DataFrame) -> None:
@@ -185,6 +176,10 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
             )
         elif RESULT_KEY in st.session_state and st.session_state[RESULT_KEY]["signature"] == signature:
             _render_training_results(st.session_state[RESULT_KEY], frame=frame, spec=spec)
+        else:
+            st.info(
+                "設定 epochs 與 learning rate 後，按下「開始訓練」觀察 loss 與決策區域的演進。"
+            )
 
     with side:
         render_chat_panel(page_name="類神經網路")
@@ -209,6 +204,7 @@ def _apply_lab02_defaults() -> None:
 
 def _render_network_form(frame: pd.DataFrame) -> tuple[NetworkSpec, CompileSpec, TrainConfig]:
     st.markdown("##### 輸入與架構")
+    _sanitize_feature_session()
     selected_features = st.multiselect(
         "輸入特徵（1～2 個）",
         list(FEATURE_OPTIONS),
@@ -333,6 +329,138 @@ def _training_signature(
     )
 
 
+def _nn_animation_epochs(total_epochs: int) -> set[int]:
+    if total_epochs <= 80:
+        return set(range(1, total_epochs + 1))
+    stride = max(total_epochs // 80, 1)
+    selected = set(range(1, total_epochs + 1, stride))
+    selected.add(total_epochs)
+    return selected
+
+
+def _scores_to_probabilities(scores: np.ndarray, spec: NetworkSpec) -> np.ndarray:
+    if spec.output_units == 1:
+        if spec.output_activation == "linear":
+            return 1.0 / (1.0 + np.exp(-np.clip(scores.reshape(-1), -500, 500)))
+        return scores.reshape(-1)
+    if scores.ndim > 1 and scores.shape[1] > 1:
+        return scores[:, 1]
+    return scores.reshape(-1)
+
+
+def _build_decision_mesh(
+    frame: pd.DataFrame,
+    features: list[str],
+    *,
+    mesh_points: int = 40,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    x1_name, x2_name = features[0], features[1]
+    x1 = frame[x1_name].to_numpy(dtype=float)
+    x2 = frame[x2_name].to_numpy(dtype=float)
+    x_lo, x_hi, y_lo, y_hi = linear_svm_data_axis_limits(x1, x2)
+    grid_x = np.linspace(x_lo, x_hi, mesh_points)
+    grid_y = np.linspace(y_lo, y_hi, mesh_points)
+    mesh_xx, mesh_yy = np.meshgrid(grid_x, grid_y)
+    grid = np.c_[mesh_xx.ravel(), mesh_yy.ravel()].astype(np.float32)
+    return x1, x2, mesh_xx, mesh_yy, grid
+
+
+def _render_epoch_loss_plot(
+    history: dict[str, list[float]],
+    *,
+    epoch: int,
+    placeholder,
+) -> None:
+    fig = build_training_loss_figure(history, title=f"訓練 loss 曲線（epoch {epoch}）")
+    placeholder.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
+
+def _render_epoch_boundary_plot(
+    *,
+    frame: pd.DataFrame,
+    features: list[str],
+    labels: np.ndarray,
+    spec: NetworkSpec,
+    model,
+    feature_normalizer,
+    mesh_xx: np.ndarray,
+    mesh_yy: np.ndarray,
+    grid: np.ndarray,
+    epoch: int,
+    placeholder,
+) -> None:
+    x1_name, x2_name = features[0], features[1]
+    x1 = frame[x1_name].to_numpy(dtype=float)
+    x2 = frame[x2_name].to_numpy(dtype=float)
+    mesh_scores = predict_scores(model, grid, spec, feature_normalizer=feature_normalizer)
+    prob_grid = _scores_to_probabilities(mesh_scores, spec)
+    fig = build_nn_decision_boundary_figure(
+        x1,
+        x2,
+        labels,
+        mesh_xx,
+        mesh_yy,
+        prob_grid,
+        x1_label=AXIS_LABELS.get(x1_name, x1_name),
+        x2_label=AXIS_LABELS.get(x2_name, x2_name),
+        title=f"神經網路決策區域（epoch {epoch}）",
+    )
+    placeholder.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
+
+def _render_epoch_probability_plot(
+    *,
+    x: np.ndarray,
+    labels: np.ndarray,
+    spec: NetworkSpec,
+    model,
+    feature_normalizer,
+    feature: str,
+    epoch: int,
+    placeholder,
+) -> None:
+    scores = predict_scores(model, x, spec, feature_normalizer=feature_normalizer)
+    probs = _scores_to_probabilities(scores, spec)
+    x_label = AXIS_LABELS.get(feature, feature)
+    fig = build_nn_1d_probability_figure(
+        x[:, 0],
+        probs,
+        labels,
+        x_label=x_label,
+        title=f"單特徵分類機率曲線（epoch {epoch}）",
+    )
+    placeholder.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
+
+def _render_training_metrics(
+    artifacts,
+    *,
+    frame: pd.DataFrame,
+    spec: NetworkSpec,
+    features: list[str],
+) -> None:
+    result = artifacts.result
+    st.markdown("##### 訓練結果")
+    st.metric("最終 loss", f"{result.final_loss:.4f}")
+    st.metric("訓練準確率", f"{result.train_accuracy:.2f}%")
+    st.caption(f"參數數量：{result.parameter_count:,}")
+
+    x = frame[features].to_numpy(dtype=np.float32)
+    labels = frame[TARGET_COLUMN].to_numpy(dtype=float)
+    scores = predict_scores(
+        artifacts.model,
+        x,
+        spec,
+        feature_normalizer=artifacts.feature_normalizer,
+    )
+    predicted = predict_class_labels(scores, spec)
+    mismatch = int(np.sum(predicted != labels.astype(int)))
+    st.caption(f"訓練集預測與標籤不一致：{mismatch} 筆。")
+
+
 def _run_training(
     frame: pd.DataFrame,
     *,
@@ -352,13 +480,74 @@ def _run_training(
     features = list(spec.input_features)
     x = frame[features].to_numpy(dtype=np.float32)
     y = frame[TARGET_COLUMN].to_numpy(dtype=np.float32)
+    labels = frame[TARGET_COLUMN].to_numpy(dtype=float)
 
-    with st.spinner("正在訓練神經網路…"):
-        try:
-            artifacts = train_model(spec, compile_spec, train_config, x, y)
-        except Exception as exc:
-            st.error(f"訓練失敗：{exc}")
+    chart_left, chart_right = st.columns(2)
+    boundary_placeholder = chart_left.empty()
+    loss_placeholder = chart_right.empty()
+    status_placeholder = st.empty()
+
+    mesh_xx = mesh_yy = grid = None
+    if len(features) == 2:
+        _, _, mesh_xx, mesh_yy, grid = _build_decision_mesh(frame, features)
+
+    animation_epochs = _nn_animation_epochs(train_config.epochs)
+    metric_key = "accuracy" if spec.output_units == 1 else "sparse_categorical_accuracy"
+
+    def on_epoch_end(
+        epoch: int,
+        history: dict[str, list[float]],
+        model,
+        feature_normalizer,
+    ) -> None:
+        if epoch not in animation_epochs:
             return
+        _render_epoch_loss_plot(history, epoch=epoch, placeholder=loss_placeholder)
+        if len(features) == 2 and grid is not None:
+            _render_epoch_boundary_plot(
+                frame=frame,
+                features=features,
+                labels=labels,
+                spec=spec,
+                model=model,
+                feature_normalizer=feature_normalizer,
+                mesh_xx=mesh_xx,
+                mesh_yy=mesh_yy,
+                grid=grid,
+                epoch=epoch,
+                placeholder=boundary_placeholder,
+            )
+        elif len(features) == 1:
+            _render_epoch_probability_plot(
+                x=x,
+                labels=labels,
+                spec=spec,
+                model=model,
+                feature_normalizer=feature_normalizer,
+                feature=features[0],
+                epoch=epoch,
+                placeholder=boundary_placeholder,
+            )
+        loss_value = history.get("loss", [float("nan")])[-1]
+        accuracy_value = history.get(metric_key, [0.0])[-1] * 100.0
+        status_placeholder.caption(
+            f"Epoch {epoch:,} / {train_config.epochs:,} · "
+            f"loss = {loss_value:.4f} · accuracy = {accuracy_value:.2f}%"
+        )
+        time.sleep(0.02)
+
+    try:
+        artifacts = train_model(
+            spec,
+            compile_spec,
+            train_config,
+            x,
+            y,
+            epoch_callback=on_epoch_end,
+        )
+    except Exception as exc:
+        st.error(f"訓練失敗：{exc}")
+        return
 
     st.session_state[RESULT_KEY] = {
         "signature": signature,
@@ -373,7 +562,12 @@ def _run_training(
         train_result=artifacts.result,
         row_count=len(frame),
     )
-    _render_training_results(st.session_state[RESULT_KEY], frame=frame, spec=spec)
+    _render_training_metrics(
+        artifacts,
+        frame=frame,
+        spec=spec,
+        features=features,
+    )
 
 
 def _render_training_results(
@@ -415,13 +609,7 @@ def _render_training_results(
         )
     elif len(features) == 1:
         feature = features[0]
-        if spec.output_units == 1:
-            if spec.output_activation == "linear":
-                probs = 1.0 / (1.0 + np.exp(-np.clip(scores.reshape(-1), -500, 500)))
-            else:
-                probs = scores.reshape(-1)
-        else:
-            probs = scores[:, 1] if scores.ndim > 1 and scores.shape[1] > 1 else scores.reshape(-1)
+        probs = _scores_to_probabilities(scores, spec)
         x_vals = x[:, 0]
         x_label = AXIS_LABELS.get(feature, feature)
         prob_fig = build_nn_1d_probability_figure(x_vals, probs, labels, x_label=x_label)
@@ -440,29 +628,15 @@ def _render_decision_map(
     spec: NetworkSpec,
     artifacts: dict,
 ) -> None:
+    x1, x2, mesh_xx, mesh_yy, grid = _build_decision_mesh(frame, features)
     x1_name, x2_name = features[0], features[1]
-    x1 = frame[x1_name].to_numpy(dtype=float)
-    x2 = frame[x2_name].to_numpy(dtype=float)
-    x_lo, x_hi, y_lo, y_hi = linear_svm_data_axis_limits(x1, x2)
-    mesh_points = 40
-    grid_x = np.linspace(x_lo, x_hi, mesh_points)
-    grid_y = np.linspace(y_lo, y_hi, mesh_points)
-    mesh_xx, mesh_yy = np.meshgrid(grid_x, grid_y)
-    grid = np.c_[mesh_xx.ravel(), mesh_yy.ravel()].astype(np.float32)
     mesh_scores = predict_scores(
         artifacts["artifacts"].model,
         grid,
         spec,
         feature_normalizer=artifacts["artifacts"].feature_normalizer,
     )
-    if spec.output_units == 1:
-        if spec.output_activation == "linear":
-            prob_grid = 1.0 / (1.0 + np.exp(-np.clip(mesh_scores.reshape(-1), -500, 500)))
-        else:
-            prob_grid = mesh_scores.reshape(-1)
-    else:
-        prob_grid = mesh_scores[:, 1] if mesh_scores.ndim > 1 else mesh_scores.reshape(-1)
-
+    prob_grid = _scores_to_probabilities(mesh_scores, spec)
     boundary_fig = build_nn_decision_boundary_figure(
         x1,
         x2,

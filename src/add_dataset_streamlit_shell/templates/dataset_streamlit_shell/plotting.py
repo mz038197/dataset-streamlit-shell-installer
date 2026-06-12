@@ -523,12 +523,11 @@ def build_nn_decision_boundary_figure(
     configure_matplotlib_for_traditional_chinese()
     class_0 = labels == 0
     class_1 = labels == 1
-    fig, ax = plt.subplots(figsize=NN_TEACHING_CHART_FIGSIZE, constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
     scatter_nn_binary_classes(ax, x1, x2, class_0=class_0, class_1=class_1)
     x_lo, x_hi, y_lo, y_hi = linear_svm_data_axis_limits(x1, x2)
     ax.set_xlim(x_lo, x_hi)
     ax.set_ylim(y_lo, y_hi)
-    ax.set_aspect("equal", adjustable="box")
     score_grid = np.asarray(mesh_scores, dtype=float).reshape(mesh_xx.shape)
     ax.contourf(mesh_xx, mesh_yy, score_grid, levels=20, alpha=0.35, cmap="coolwarm", zorder=1)
     ax.contour(

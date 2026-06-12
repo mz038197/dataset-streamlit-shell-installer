@@ -20,6 +20,7 @@ from dataset_streamlit_shell.plotting import activation_curve_y
 from dataset_streamlit_shell.ml.coffee_nn import (
     BUILTIN_DATA_PATH_SUFFIX,
     CompileSpec,
+    FEATURE_OPTIONS,
     HiddenLayerSpec,
     LOSS_AUTO,
     NetworkSpec,
@@ -50,12 +51,13 @@ def test_builtin_data_has_400_rows_and_binary_labels() -> None:
     assert len(frame) == 400
     labels = frame["類別"].astype(int).unique()
     assert set(labels.tolist()) == {0, 1}
+    assert list(FEATURE_OPTIONS) == ["溫度", "時間"]
 
 
 def test_validate_rejects_too_many_output_units() -> None:
     frame = load_builtin_frame(BUILTIN_PATH)
     spec = NetworkSpec(
-        input_features=("特徵1", "特徵2"),
+        input_features=("溫度", "時間"),
         hidden_layers=(),
         output_units=3,
         output_activation="softmax",
@@ -67,7 +69,7 @@ def test_validate_rejects_too_many_output_units() -> None:
 def test_validate_manual_loss_binary_requires_sigmoid() -> None:
     frame = load_builtin_frame(BUILTIN_PATH)
     spec = NetworkSpec(
-        input_features=("特徵1", "特徵2"),
+        input_features=("溫度", "時間"),
         hidden_layers=(),
         output_units=1,
         output_activation="relu",
@@ -95,7 +97,7 @@ def test_train_model_smoke() -> None:
     pytest.importorskip("tensorflow")
     frame = load_builtin_frame(BUILTIN_PATH)
     spec = NetworkSpec(
-        input_features=("特徵1", "特徵2"),
+        input_features=("溫度", "時間"),
         hidden_layers=(HiddenLayerSpec(2, "relu"),),
         output_units=1,
         output_activation="sigmoid",
@@ -103,7 +105,7 @@ def test_train_model_smoke() -> None:
     )
     compile_spec = CompileSpec(optimizer_name="Adam", learning_rate=0.05)
     train_config = TrainConfig(epochs=2)
-    x = frame[["特徵1", "特徵2"]].to_numpy(dtype=np.float32)
+    x = frame[["溫度", "時間"]].to_numpy(dtype=np.float32)
     y = frame["類別"].to_numpy(dtype=np.float32)
     artifacts = train_model(spec, compile_spec, train_config, x, y)
     assert artifacts.result.parameter_count > 0
@@ -122,7 +124,7 @@ def test_train_model_with_in_model_normalization_layer() -> None:
     pytest.importorskip("tensorflow")
     frame = load_builtin_frame(BUILTIN_PATH)
     spec = NetworkSpec(
-        input_features=("特徵1", "特徵2"),
+        input_features=("溫度", "時間"),
         hidden_layers=(HiddenLayerSpec(2, "relu"),),
         output_units=1,
         output_activation="sigmoid",
@@ -131,8 +133,46 @@ def test_train_model_with_in_model_normalization_layer() -> None:
     )
     compile_spec = CompileSpec(optimizer_name="Adam", learning_rate=0.05)
     train_config = TrainConfig(epochs=2)
-    x = frame[["特徵1", "特徵2"]].to_numpy(dtype=np.float32)
+    x = frame[["溫度", "時間"]].to_numpy(dtype=np.float32)
     y = frame["類別"].to_numpy(dtype=np.float32)
     artifacts = train_model(spec, compile_spec, train_config, x, y)
     assert artifacts.feature_normalizer is None
     assert len(artifacts.result.history.get("loss", [])) == 2
+
+
+def test_train_model_epoch_callback_invoked() -> None:
+    pytest.importorskip("tensorflow")
+    frame = load_builtin_frame(BUILTIN_PATH)
+    spec = NetworkSpec(
+        input_features=("溫度", "時間"),
+        hidden_layers=(HiddenLayerSpec(2, "relu"),),
+        output_units=1,
+        output_activation="sigmoid",
+        loss_choice=LOSS_AUTO,
+    )
+    compile_spec = CompileSpec(optimizer_name="Adam", learning_rate=0.05)
+    train_config = TrainConfig(epochs=5)
+    x = frame[["溫度", "時間"]].to_numpy(dtype=np.float32)
+    y = frame["類別"].to_numpy(dtype=np.float32)
+    seen_epochs: list[int] = []
+
+    def on_epoch(
+        epoch: int,
+        history: dict[str, list[float]],
+        model,
+        feature_normalizer,
+    ) -> None:
+        seen_epochs.append(epoch)
+        assert model is not None
+        assert len(history.get("loss", [])) == epoch
+
+    artifacts = train_model(
+        spec,
+        compile_spec,
+        train_config,
+        x,
+        y,
+        epoch_callback=on_epoch,
+    )
+    assert seen_epochs == [1, 2, 3, 4, 5]
+    assert len(artifacts.result.history.get("loss", [])) == 5

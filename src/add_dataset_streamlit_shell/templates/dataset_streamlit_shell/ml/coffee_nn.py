@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,7 +12,7 @@ import pandas as pd
 
 _TF_RUNTIME_CONFIGURED = False
 
-FEATURE_OPTIONS = ("特徵1", "特徵2")
+FEATURE_OPTIONS = ("溫度", "時間")
 TARGET_COLUMN = "類別"
 BUILTIN_DATA_PATH_SUFFIX = ("built-in-data", "classification", "nn_binary_400.csv")
 
@@ -37,8 +38,8 @@ LOSS_CHOICES = (
 )
 
 AXIS_LABELS = {
-    "特徵1": "Temperature (Celsius)",
-    "特徵2": "Duration (minutes)",
+    "溫度": "溫度（°C）",
+    "時間": "時間（分鐘）",
 }
 
 
@@ -86,7 +87,7 @@ class TrainArtifacts:
 
 def lab02_default_network_spec() -> NetworkSpec:
     return NetworkSpec(
-        input_features=("特徵1", "特徵2"),
+        input_features=("溫度", "時間"),
         hidden_layers=(HiddenLayerSpec(3, "sigmoid"),),
         output_units=1,
         output_activation="sigmoid",
@@ -288,6 +289,8 @@ def train_model(
     train_config: TrainConfig,
     x: np.ndarray,
     y: np.ndarray,
+    *,
+    epoch_callback: Callable[[int, dict[str, list[float]], Any, Any | None], None] | None = None,
 ) -> TrainArtifacts:
     tf = _import_tf()
     tf.random.set_seed(DEFAULT_RANDOM_SEED)
@@ -313,11 +316,30 @@ def train_model(
     metrics = ["accuracy"] if spec.output_units == 1 else ["sparse_categorical_accuracy"]
     model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
 
+    callbacks: list[Any] = []
+    if epoch_callback is not None:
+        accumulated: dict[str, list[float]] = {}
+
+        class _EpochProgressCallback(tf.keras.callbacks.Callback):
+            def on_epoch_end(self, epoch: int, logs: dict[str, float] | None = None) -> None:
+                logs = logs or {}
+                for key, value in logs.items():
+                    accumulated.setdefault(key, []).append(float(value))
+                epoch_callback(
+                    epoch + 1,
+                    {key: list(values) for key, values in accumulated.items()},
+                    self.model,
+                    feature_normalizer,
+                )
+
+        callbacks.append(_EpochProgressCallback())
+
     history_obj = model.fit(
         x_fit,
         y_fit,
         epochs=int(train_config.epochs),
         verbose=0,
+        callbacks=callbacks,
     )
     history = {key: [float(value) for value in values] for key, values in history_obj.history.items()}
     final_loss = float(history.get("loss", [float("nan")])[-1])
