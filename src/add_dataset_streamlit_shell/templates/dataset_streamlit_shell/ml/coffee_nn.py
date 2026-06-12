@@ -25,6 +25,7 @@ OUTPUT_ACTIVATION_CHOICES = ACTIVATION_CHOICES + ("softmax",)
 OPTIMIZER_CHOICES = ("Adam", "SGD", "RMSprop")
 
 LOSS_AUTO = "自動"
+DEFAULT_RANDOM_SEED = 42
 LOSS_CHOICES = (
     LOSS_AUTO,
     "BinaryCrossentropy",
@@ -66,8 +67,6 @@ class CompileSpec:
 @dataclass(frozen=True)
 class TrainConfig:
     epochs: int
-    tile_factor: int
-    random_seed: int
 
 
 @dataclass(frozen=True)
@@ -259,21 +258,6 @@ def encode_labels(y: np.ndarray, spec: NetworkSpec) -> np.ndarray:
     return labels.astype(np.int32)
 
 
-def tile_training_arrays(
-    x: np.ndarray,
-    y: np.ndarray,
-    *,
-    tile_factor: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    factor = max(int(tile_factor), 1)
-    x_tiled = np.tile(x, (factor, 1))
-    if y.ndim == 1:
-        y_tiled = np.tile(y, factor)
-    else:
-        y_tiled = np.tile(y, (factor, 1))
-    return x_tiled, y_tiled
-
-
 def transform_features(x: np.ndarray, feature_normalizer: Any | None, spec: NetworkSpec) -> np.ndarray:
     x_array = np.asarray(x, dtype=np.float32)
     if spec.use_normalization_layer:
@@ -290,6 +274,14 @@ def fit_feature_normalizer(x: np.ndarray):
     return normalizer
 
 
+def _find_normalization_layer(model: Any):
+    tf = _import_tf()
+    for layer in model.layers:
+        if isinstance(layer, tf.keras.layers.Normalization):
+            return layer
+    raise ValueError("模型中找不到 Normalization 層。")
+
+
 def train_model(
     spec: NetworkSpec,
     compile_spec: CompileSpec,
@@ -298,7 +290,7 @@ def train_model(
     y: np.ndarray,
 ) -> TrainArtifacts:
     tf = _import_tf()
-    tf.random.set_seed(int(train_config.random_seed))
+    tf.random.set_seed(DEFAULT_RANDOM_SEED)
 
     x_array = np.asarray(x, dtype=np.float32)
     y_encoded = encode_labels(y, spec)
@@ -310,11 +302,11 @@ def train_model(
         feature_normalizer = fit_feature_normalizer(x_array)
         x_fit = feature_normalizer(x_array).numpy()
 
-    x_fit, y_fit = tile_training_arrays(x_fit, y_encoded, tile_factor=train_config.tile_factor)
+    y_fit = y_encoded
 
     model = build_sequential_model(spec)
     if spec.use_normalization_layer:
-        model.layers[1].adapt(x_array)
+        _find_normalization_layer(model).adapt(x_array)
 
     loss = resolve_loss(spec)
     optimizer = build_optimizer(compile_spec)

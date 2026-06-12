@@ -205,8 +205,6 @@ def _apply_lab02_defaults() -> None:
     st.session_state["nn_optimizer"] = compile_spec.optimizer_name
     st.session_state["nn_learning_rate"] = compile_spec.learning_rate
     st.session_state["nn_epochs"] = 100
-    st.session_state["nn_tile_factor"] = 1000
-    st.session_state["nn_random_seed"] = 42
 
 
 def _render_network_form(frame: pd.DataFrame) -> tuple[NetworkSpec, CompileSpec, TrainConfig]:
@@ -291,23 +289,6 @@ def _render_network_form(frame: pd.DataFrame) -> tuple[NetworkSpec, CompileSpec,
         key="nn_learning_rate",
     )
     epochs = c3.number_input("epochs", min_value=1, max_value=500, value=100, step=1, key="nn_epochs")
-    c4, c5 = st.columns(2)
-    tile_factor = c4.number_input(
-        "tile_factor（資料重複倍數）",
-        min_value=1,
-        max_value=5000,
-        value=1000,
-        step=100,
-        key="nn_tile_factor",
-    )
-    random_seed = c5.number_input(
-        "random_seed",
-        min_value=0,
-        max_value=9999,
-        value=42,
-        step=1,
-        key="nn_random_seed",
-    )
 
     spec = NetworkSpec(
         input_features=tuple(selected_features),
@@ -321,11 +302,7 @@ def _render_network_form(frame: pd.DataFrame) -> tuple[NetworkSpec, CompileSpec,
         optimizer_name=optimizer_name,
         learning_rate=float(learning_rate),
     )
-    train_config = TrainConfig(
-        epochs=int(epochs),
-        tile_factor=int(tile_factor),
-        random_seed=int(random_seed),
-    )
+    train_config = TrainConfig(epochs=int(epochs))
     return spec, compile_spec, train_config
 
 
@@ -352,8 +329,6 @@ def _training_signature(
         compile_spec.optimizer_name,
         compile_spec.learning_rate,
         train_config.epochs,
-        train_config.tile_factor,
-        train_config.random_seed,
         row_count,
     )
 

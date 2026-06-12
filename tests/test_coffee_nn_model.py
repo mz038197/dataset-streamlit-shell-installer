@@ -102,7 +102,7 @@ def test_train_model_smoke() -> None:
         loss_choice=LOSS_AUTO,
     )
     compile_spec = CompileSpec(optimizer_name="Adam", learning_rate=0.05)
-    train_config = TrainConfig(epochs=2, tile_factor=10, random_seed=0)
+    train_config = TrainConfig(epochs=2)
     x = frame[["特徵1", "特徵2"]].to_numpy(dtype=np.float32)
     y = frame["類別"].to_numpy(dtype=np.float32)
     artifacts = train_model(spec, compile_spec, train_config, x, y)
@@ -116,3 +116,23 @@ def test_train_model_smoke() -> None:
     )
     preds = predict_class_labels(scores, spec)
     assert preds.shape == (5,)
+
+
+def test_train_model_with_in_model_normalization_layer() -> None:
+    pytest.importorskip("tensorflow")
+    frame = load_builtin_frame(BUILTIN_PATH)
+    spec = NetworkSpec(
+        input_features=("特徵1", "特徵2"),
+        hidden_layers=(HiddenLayerSpec(2, "relu"),),
+        output_units=1,
+        output_activation="sigmoid",
+        loss_choice=LOSS_AUTO,
+        use_normalization_layer=True,
+    )
+    compile_spec = CompileSpec(optimizer_name="Adam", learning_rate=0.05)
+    train_config = TrainConfig(epochs=2)
+    x = frame[["特徵1", "特徵2"]].to_numpy(dtype=np.float32)
+    y = frame["類別"].to_numpy(dtype=np.float32)
+    artifacts = train_model(spec, compile_spec, train_config, x, y)
+    assert artifacts.feature_normalizer is None
+    assert len(artifacts.result.history.get("loss", [])) == 2
