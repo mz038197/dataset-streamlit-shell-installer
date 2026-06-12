@@ -200,22 +200,24 @@ def _render_segmentation_results(
     alpha: float,
 ) -> None:
     blended = blend_overlay(image, result.color_overlay, alpha=alpha)
-    left, right = st.columns(2)
-    with left:
-        st.image(blended, caption="語意分割疊圖", use_container_width=True)
-    with right:
-        st.markdown("##### 類別圖例")
-        foreground = _foreground_items(result.class_items)
-        if foreground:
-            _render_legend(foreground)
-            st.dataframe(
-                _coverage_dataframe(result.class_items),
-                use_container_width=True,
-                hide_index=True,
-            )
-            st.caption(format_semantic_summary(result.class_items))
-        else:
-            st.warning("此圖僅偵測到 background 或無明顯前景類別。")
+    st.image(blended, caption="語意分割疊圖", use_container_width=True)
+
+    st.markdown("##### 類別圖例")
+    foreground = _foreground_items(result.class_items)
+    if not foreground:
+        st.warning("此圖僅偵測到 background 或無明顯前景類別。")
+        return
+
+    legend_col, table_col = st.columns([1, 2], gap="medium")
+    with legend_col:
+        _render_legend(foreground)
+    with table_col:
+        st.dataframe(
+            _coverage_dataframe(result.class_items),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(format_semantic_summary(result.class_items))
 
 
 def _render_legend(class_items: tuple[ClassCoverage, ...]) -> None:
@@ -249,10 +251,14 @@ def _render_interpret_tab() -> None:
             st.warning("沒有前景類別可供解讀。")
         else:
             blended = blend_overlay(image, result.color_overlay, alpha=alpha)
-            cols = st.columns(3)
-            cols[0].image(image, caption="原圖")
-            cols[1].image(result.color_overlay, caption="純色塊 mask")
-            cols[2].image(blended, caption="疊加圖")
+            st.image(blended, caption="疊加圖", use_container_width=True)
+            compare_cols = st.columns(2, gap="medium")
+            compare_cols[0].image(image, caption="原圖", use_container_width=True)
+            compare_cols[1].image(
+                result.color_overlay,
+                caption="純色塊 mask",
+                use_container_width=True,
+            )
 
             options = [
                 f"{item.label} ({item.coverage:.1%})" for item in foreground

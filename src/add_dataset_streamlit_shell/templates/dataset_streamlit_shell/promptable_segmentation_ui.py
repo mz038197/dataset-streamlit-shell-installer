@@ -265,24 +265,20 @@ def _render_inference_tab() -> None:
 
 def _render_promptable_results(image: np.ndarray, result: PromptableResult) -> None:
     items = result.items
-    left, right = st.columns(2)
-    with left:
-        if items:
-            st.image(
-                result.annotated_image,
-                caption="提示式分割結果（mask + bbox）",
-                use_container_width=True,
-            )
-        else:
-            st.image(image, caption="原圖（無分割結果）", use_container_width=True)
-            st.warning("未找到符合提示詞的區域。試著換提示詞或降低信心門檻。")
-    with right:
-        st.markdown("##### 匹配清單")
-        if items:
-            st.dataframe(_promptable_dataframe(items), use_container_width=True, hide_index=True)
-            st.caption(format_promptable_summary(items))
-        else:
-            st.write("目前沒有任何匹配結果。")
+    if items:
+        st.image(
+            result.annotated_image,
+            caption="提示式分割結果（mask + bbox）",
+            use_container_width=True,
+        )
+    else:
+        st.image(image, caption="原圖（無分割結果）", use_container_width=True)
+        st.warning("未找到符合提示詞的區域。試著換提示詞或降低信心門檻。")
+        return
+
+    st.markdown("##### 匹配清單")
+    st.dataframe(_promptable_dataframe(items), use_container_width=True, hide_index=True)
+    st.caption(format_promptable_summary(items))
 
 
 def _render_interpret_tab() -> None:
@@ -316,10 +312,8 @@ def _render_interpret_tab() -> None:
         )
         if filtered:
             annotated = draw_promptable_results(image, filtered, alpha=alpha)
-            cols = st.columns(3)
-            cols[0].image(image, caption="原圖")
-            cols[1].image(annotated, caption="疊加圖")
-            cols[2].image(annotated, caption="結果預覽")
+            st.image(annotated, caption="提示式分割結果", use_container_width=True)
+            st.image(image, caption="原圖", use_container_width=True)
 
             options = [
                 f"{item.rank}. {item.prompt} ({item.confidence:.0%})"

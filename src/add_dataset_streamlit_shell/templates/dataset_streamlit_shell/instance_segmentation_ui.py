@@ -202,22 +202,21 @@ def _render_instance_results(
     alpha: float,
 ) -> None:
     items = result.items
-    left, right = st.columns(2)
-    with left:
-        if items:
-            annotated = draw_instances(image, items, alpha=alpha)
-            st.image(annotated, caption="實例分割結果（mask + bbox）", use_container_width=True)
-        else:
-            st.image(image, caption="原圖（無分割結果）", use_container_width=True)
-            st.warning("未偵測到實例。試著降低信心門檻後重新執行分割。")
-    with right:
-        st.markdown("##### 實例清單")
-        if items:
-            _render_legend(items)
-            st.dataframe(_instance_dataframe(items), use_container_width=True, hide_index=True)
-            st.caption(format_instance_summary(items))
-        else:
-            st.write("目前沒有任何實例 mask。")
+    if items:
+        annotated = draw_instances(image, items, alpha=alpha)
+        st.image(annotated, caption="實例分割結果（mask + bbox）", use_container_width=True)
+    else:
+        st.image(image, caption="原圖（無分割結果）", use_container_width=True)
+        st.warning("未偵測到實例。試著降低信心門檻後重新執行分割。")
+        return
+
+    st.markdown("##### 實例清單")
+    legend_col, table_col = st.columns([1, 2], gap="medium")
+    with legend_col:
+        _render_legend(items)
+    with table_col:
+        st.dataframe(_instance_dataframe(items), use_container_width=True, hide_index=True)
+        st.caption(format_instance_summary(items))
 
 
 def _render_legend(items: tuple[InstanceItem, ...]) -> None:
@@ -262,10 +261,14 @@ def _render_interpret_tab() -> None:
         if filtered:
             filtered_overlay = build_color_overlay(image.shape[:2], filtered)
             overlay = blend_overlay(image, filtered_overlay, alpha=alpha)
-            cols = st.columns(3)
-            cols[0].image(image, caption="原圖")
-            cols[1].image(filtered_overlay, caption="純色塊 mask")
-            cols[2].image(overlay, caption="疊加圖")
+            st.image(overlay, caption="疊加圖", use_container_width=True)
+            compare_cols = st.columns(2, gap="medium")
+            compare_cols[0].image(image, caption="原圖", use_container_width=True)
+            compare_cols[1].image(
+                filtered_overlay,
+                caption="純色塊 mask",
+                use_container_width=True,
+            )
 
             options = [
                 f"{item.rank}. {item.label} ({item.confidence:.0%})"
