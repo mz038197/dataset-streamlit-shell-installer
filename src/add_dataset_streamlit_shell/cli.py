@@ -32,12 +32,17 @@ def install(
         False,
         "--update",
         "-u",
-        help="Update shell code in place while preserving workspace, sessions, and uploads.",
+        help="Update shell code in place while preserving workspace, sessions, uploads, memory.",
     ),
     require_agent_core: bool = typer.Option(
         False,
         "--require-agent-core",
-        help="Require agent_core.py to exist before installing.",
+        help="(舊旗標) 要求 agent_core.py；Dataset Shell 已改 create_agent，請改用 --require-agent-contract。",
+    ),
+    require_agent_contract: bool = typer.Option(
+        False,
+        "--require-agent-contract",
+        help="安裝後必須通過 create_agent 契約檢查，否則非零結束。",
     ),
     install_dependencies: bool = typer.Option(
         True,
@@ -57,6 +62,7 @@ def install(
             force=force,
             update=update,
             require_agent_core=require_agent_core,
+            require_agent_contract=require_agent_contract,
             install_dependencies=install_dependencies,
         )
     except (FileExistsError, FileNotFoundError) as exc:
@@ -70,6 +76,19 @@ def install(
         typer.echo(f"Previous shell backed up to: {result.backed_up_to}")
     if result.installed_dependencies:
         typer.echo("Installed dependencies: " + ", ".join(result.installed_dependencies))
+
+    if result.contract_ok is True:
+        typer.secho(
+            f"Agent contract OK ({result.factory_ref}).",
+            fg=typer.colors.GREEN,
+        )
+    elif result.contract_ok is False:
+        typer.secho("Agent contract: not connected yet.", fg=typer.colors.YELLOW)
+        for msg in result.contract_messages:
+            typer.echo(f"  - {msg}")
+    elif result.contract_messages:
+        for msg in result.contract_messages:
+            typer.echo(f"Contract note: {msg}")
 
     typer.echo("")
     typer.echo("Next:")

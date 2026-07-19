@@ -57,6 +57,9 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
         "{}\n",
         encoding="utf-8",
     )
+    memory_dir = target / "memory"
+    memory_dir.mkdir(exist_ok=True)
+    (memory_dir / "notes.jsonl").write_text('{"keep":true}\n', encoding="utf-8")
     scripts_dir = target / "scripts"
     scripts_dir.mkdir(exist_ok=True)
     (scripts_dir / "student_cleanup.py").write_text("# keep me\n", encoding="utf-8")
@@ -75,6 +78,7 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
     assert (target / "workspace" / "ready.csv").read_text(encoding="utf-8") == "a\n3\n"
     assert (target / "workspace" / "cleaning_log.jsonl").read_text(encoding="utf-8") == "{}\n"
     assert (target / "sessions" / "session_20260529_000000_abc123.jsonl").exists()
+    assert (memory_dir / "notes.jsonl").read_text(encoding="utf-8") == '{"keep":true}\n'
     assert (scripts_dir / "student_cleanup.py").read_text(encoding="utf-8") == "# keep me\n"
     assert (upload_dir / "image.png").read_bytes() == b"png"
 
@@ -109,11 +113,14 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
 
     result = install_shell(tmp_path, dependency_runner=fake_runner)
 
-    assert calls == [
-        (
-            ["uv", "add", "--upgrade-package", "openai-tts", *PROJECT_DEPENDENCIES],
-            tmp_path.resolve(),
-            True,
-        )
-    ]
-    assert result.installed_dependencies == PROJECT_DEPENDENCIES
+    assert len(calls) == 2
+    assert calls[0] == (
+        ["uv", "add", "--upgrade-package", "openai-tts", *PROJECT_DEPENDENCIES],
+        tmp_path.resolve(),
+        True,
+    )
+    assert calls[1][0][:2] == ["uv", "add"]
+    assert "peas-agent-runtime" in " ".join(str(x) for x in calls[1][0])
+    assert calls[1][1:] == (tmp_path.resolve(), True)
+    assert PROJECT_DEPENDENCIES == result.installed_dependencies[:-1]
+    assert "peas-agent-runtime" in result.installed_dependencies[-1]
