@@ -41,6 +41,7 @@ from dataset_streamlit_shell.ui.nn_form_state import (  # noqa: E402
     reset_loop_budget,
     save_nn_form_state,
     set_loop_state,
+    should_rerun_after_nn_chat,
     specs_to_state,
     state_to_specs,
     train_request_is_set,
@@ -118,6 +119,18 @@ def test_apply_state_to_session_keys() -> None:
     assert session["nn_hidden_count"] == 1
     assert session["nn_hidden_units_1"] == 3
     assert session["nn_optimizer"] == "Adam"
+
+
+def test_should_rerun_after_nn_chat_only_when_needed() -> None:
+    assert should_rerun_after_nn_chat(
+        requested=False, form_mtime=1.0, applied_mtime=1.0
+    ) is False
+    assert should_rerun_after_nn_chat(
+        requested=True, form_mtime=1.0, applied_mtime=1.0
+    ) is True
+    assert should_rerun_after_nn_chat(
+        requested=False, form_mtime=2.0, applied_mtime=1.0
+    ) is True
 
 
 def test_consume_train_request_respects_budget(tmp_path: Path) -> None:

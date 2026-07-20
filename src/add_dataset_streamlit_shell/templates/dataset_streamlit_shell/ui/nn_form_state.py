@@ -176,6 +176,16 @@ def form_file_mtime(workspace_dir: Path) -> float:
         return 0.0
 
 
+def should_rerun_after_nn_chat(
+    *,
+    requested: bool,
+    form_mtime: float,
+    applied_mtime: float,
+) -> bool:
+    """Chat 後是否整頁重跑：有訓練請求，或 form 檔比已套用版本更新。"""
+    return bool(requested) or form_mtime > applied_mtime
+
+
 def state_to_specs(state: dict[str, Any]) -> tuple[NetworkSpec, CompileSpec, TrainConfig]:
     normalized = normalize_nn_form_state(state)
     hidden = tuple(

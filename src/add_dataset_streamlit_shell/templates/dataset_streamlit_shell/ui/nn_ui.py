@@ -42,6 +42,7 @@ from dataset_streamlit_shell.ui.nn_form_state import (
     save_nn_form_state,
     session_to_state,
     set_loop_state,
+    should_rerun_after_nn_chat,
     specs_to_state,
     write_last_run,
 )
@@ -137,9 +138,16 @@ def render_neural_network_page() -> None:
 
         render_chat_panel(extra_context=extra_context, page_name="類神經網路")
         if st.session_state.pop("data_chat_just_replied", False):
-            consume_train_request(WORKSPACE_DIR, st.session_state)
+            requested = consume_train_request(WORKSPACE_DIR, st.session_state)
+            # 僅在 Agent 寫入訓練請求或改過 form 時重跑；純文字回覆不要整頁 RELOAD。
             # 不可在本輪 widget 建立後寫回其 session_state；交由下一輪開頭同步。
-            st.rerun()
+            applied = float(st.session_state.get(FORM_MTIME_KEY, -1.0))
+            if should_rerun_after_nn_chat(
+                requested=requested,
+                form_mtime=form_file_mtime(WORKSPACE_DIR),
+                applied_mtime=applied,
+            ):
+                st.rerun()
 
 
 def _render_activation_tab() -> None:
