@@ -25,7 +25,7 @@ from dataset_streamlit_shell.cv.semantic_segmentation import (
     load_segmentation_model,
     predict_semantic_mask,
 )
-from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
+from dataset_streamlit_shell.ui.cv_layout import render_cv_tabbed_page
 
 PAGE_TITLE = "語意分割（Semantic Segmentation）"
 CONTEXT_KEY = "semantic_segmentation_agent_context"

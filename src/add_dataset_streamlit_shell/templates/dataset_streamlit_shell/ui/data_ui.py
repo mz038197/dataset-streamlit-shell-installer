@@ -16,16 +16,19 @@ from dotenv import load_dotenv
 from openai_tts import Settings, stream_tts_play
 from openai_tts.settings import MAX_TTS_SPEED, MIN_TTS_SPEED
 
-from agent_loader import create_agent_for_session, load_create_agent
-
-SHELL_ROOT = Path(__file__).parent
+SHELL_ROOT = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = SHELL_ROOT.parent
 load_dotenv(PROJECT_ROOT / ".env")
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from dataset_streamlit_shell.agent_loader import (  # noqa: E402
+    create_agent_for_session,
+    load_create_agent,
+)
+
 WORKSPACE_DIR = SHELL_ROOT / "workspace"
-SESSION_DIR = SHELL_ROOT / "sessions"
+SESSION_DIR = PROJECT_ROOT / "sessions"
 CHAT_IMAGE_DIR = SHELL_ROOT / "uploads" / "chat_images"
 AGENT_ACTIVATION_MARKER_PATH = SHELL_ROOT / ".agent_activated"
 ORIGINAL_DATASET_PATH = WORKSPACE_DIR / "original.csv"

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from dataset_streamlit_shell.data_ui import (
+from dataset_streamlit_shell.ui.data_ui import (
     READY_DATASET_PATH,
     SHELL_ROOT,
     _display_path,

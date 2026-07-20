@@ -33,7 +33,7 @@ from dataset_streamlit_shell.cv.promptable_segmentation import (
     parse_text_prompts,
     predict_text_masks,
 )
-from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
+from dataset_streamlit_shell.ui.cv_layout import render_cv_tabbed_page
 
 PAGE_TITLE = "提示式分割（Promptable Segmentation / SAM）"
 CONTEXT_KEY = "promptable_segmentation_agent_context"

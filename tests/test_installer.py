@@ -18,10 +18,13 @@ def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> Non
     result = install_shell(tmp_path, install_dependencies=False)
 
     assert (result.target / "app.py").exists()
-    assert (result.target / "data_ui.py").exists()
+    assert (result.target / "ui" / "data_ui.py").exists()
     assert (result.target / "pages" / "1_Database.py").exists()
     assert (result.target / "workspace" / ".gitkeep").exists()
-    assert (result.target / "sessions" / ".gitkeep").exists()
+    assert (tmp_path / "sessions" / ".gitkeep").exists()
+    assert not (result.target / "sessions").exists()
+    data_ui = (result.target / "ui" / "data_ui.py").read_text(encoding="utf-8")
+    assert 'SESSION_DIR = PROJECT_ROOT / "sessions"' in data_ui
 
 
 def test_install_shell_can_require_agent_core(tmp_path: Path) -> None:
@@ -60,7 +63,17 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
     (target / "workspace" / "working.csv").write_text("a\n2\n", encoding="utf-8")
     (target / "workspace" / "ready.csv").write_text("a\n3\n", encoding="utf-8")
     (target / "workspace" / "cleaning_log.jsonl").write_text("{}\n", encoding="utf-8")
-    (target / "sessions" / "session_20260529_000000_abc123.jsonl").write_text(
+    # 新版：專案根 sessions/
+    root_sessions = tmp_path / "sessions"
+    root_sessions.mkdir(exist_ok=True)
+    (root_sessions / "session_20260529_000000_root.jsonl").write_text(
+        "{}\n",
+        encoding="utf-8",
+    )
+    # 舊版：shell 內 sessions/（--update 仍須保留、不可刪）
+    legacy_sessions = target / "sessions"
+    legacy_sessions.mkdir(exist_ok=True)
+    (legacy_sessions / "session_20260529_000000_legacy.jsonl").write_text(
         "{}\n",
         encoding="utf-8",
     )
@@ -84,7 +97,9 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
     assert (target / "workspace" / "working.csv").read_text(encoding="utf-8") == "a\n2\n"
     assert (target / "workspace" / "ready.csv").read_text(encoding="utf-8") == "a\n3\n"
     assert (target / "workspace" / "cleaning_log.jsonl").read_text(encoding="utf-8") == "{}\n"
-    assert (target / "sessions" / "session_20260529_000000_abc123.jsonl").exists()
+    assert (root_sessions / "session_20260529_000000_root.jsonl").exists()
+    assert (legacy_sessions / "session_20260529_000000_legacy.jsonl").exists()
+    assert (tmp_path / "sessions" / ".gitkeep").exists()
     assert (memory_dir / "notes.jsonl").read_text(encoding="utf-8") == '{"keep":true}\n'
     assert (scripts_dir / "student_cleanup.py").read_text(encoding="utf-8") == "# keep me\n"
     assert (upload_dir / "image.png").read_bytes() == b"png"

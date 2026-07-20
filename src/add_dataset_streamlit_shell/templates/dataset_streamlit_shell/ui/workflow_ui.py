@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from dataset_streamlit_shell.data_ui import (
+from dataset_streamlit_shell.ui.data_ui import (
     CLEANING_LOG_PATH,
     READY_DATASET_PATH,
     SHELL_ROOT,
@@ -49,8 +49,7 @@ configure_matplotlib_for_traditional_chinese()
 
 
 PromptList = list[str]
-_PACKAGE_DIR = Path(__file__).resolve().parent
-CORRELATION_FORMULA_IMAGE_PATH = _PACKAGE_DIR / "assets" / "correlation_formula.png"
+CORRELATION_FORMULA_IMAGE_PATH = SHELL_ROOT / "assets" / "correlation_formula.png"
 CATEGORICAL_SELECTION_STATE_KEY = "confirmed_categorical_columns"
 CATEGORICAL_SELECTION_WIDGET_KEY = "selected_categorical_columns_widget"
 CATEGORICAL_SELECTION_EDIT_WIDGET_KEY = "selected_categorical_columns_edit_widget"

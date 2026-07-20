@@ -11,8 +11,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dataset_streamlit_shell.data_ui import inject_style
-from dataset_streamlit_shell.workflow_ui import pca_status, render_analysis_shell
+from dataset_streamlit_shell.ui.data_ui import inject_style
+from dataset_streamlit_shell.ui.workflow_ui import pca_status, render_analysis_shell
 
 st.set_page_config(page_title="PCA 主成分分析", page_icon="PC", layout="wide")
 inject_style()

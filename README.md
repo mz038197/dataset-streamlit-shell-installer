@@ -45,7 +45,7 @@ This preserves:
 - `dataset_streamlit_shell/workspace/*.csv`
 - `dataset_streamlit_shell/workspace/*.jsonl`
 - `dataset_streamlit_shell/workspace/user_settings.json`
-- `dataset_streamlit_shell/sessions/*.jsonl`
+- `sessions/*.jsonl`（專案根；對話紀錄）
 - `dataset_streamlit_shell/scripts/`
 - `dataset_streamlit_shell/uploads/`
 

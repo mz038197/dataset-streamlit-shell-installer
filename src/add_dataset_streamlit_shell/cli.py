@@ -32,7 +32,10 @@ def install(
         False,
         "--update",
         "-u",
-        help="Update shell code in place while preserving workspace, sessions, uploads, memory.",
+        help=(
+            "Update shell code in place while preserving workspace, "
+            "project-root sessions/, uploads, memory."
+        ),
     ),
     require_agent_core: bool = typer.Option(
         False,

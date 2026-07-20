@@ -30,7 +30,7 @@ from dataset_streamlit_shell.cv.image_io import (
     overlay_heatmap,
     pil_to_rgb_array,
 )
-from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
+from dataset_streamlit_shell.ui.cv_layout import render_cv_tabbed_page
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 
 configure_matplotlib_for_traditional_chinese()

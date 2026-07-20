@@ -20,8 +20,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $sourcePath "app.py"))) {
     throw "Source is missing app.py: $sourcePath"
 }
 
-if (-not (Test-Path -LiteralPath (Join-Path $sourcePath "data_ui.py"))) {
-    throw "Source is missing data_ui.py: $sourcePath"
+if (-not (Test-Path -LiteralPath (Join-Path $sourcePath "ui\data_ui.py"))) {
+    throw "Source is missing ui\data_ui.py: $sourcePath"
 }
 
 if (Test-Path -LiteralPath $destination) {

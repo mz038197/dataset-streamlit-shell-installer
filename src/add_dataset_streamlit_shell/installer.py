@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 SHELL_DIR_NAME = "dataset_streamlit_shell"
+# sessions 仍保留：舊版裝在 shell 內的對話檔，--update 時不可刪。
+# 新版對話檔寫在專案根 sessions/（見 _ensure_project_sessions_dir）。
 PRESERVE_ON_UPDATE = frozenset(
     {"workspace", "sessions", "scripts", "uploads", "memory"}
 )
@@ -81,6 +83,7 @@ def install_shell(
         if update:
             with resources.as_file(template) as template_path:
                 _update_existing(target, template_path)
+            _ensure_project_sessions_dir(project_root)
             installed = (
                 _install_dependencies(project_root, dependency_runner)
                 if install_dependencies
@@ -106,6 +109,7 @@ def install_shell(
 
     with resources.as_file(template) as template_path:
         shutil.copytree(template_path, target)
+    _ensure_project_sessions_dir(project_root)
 
     installed = (
         _install_dependencies(project_root, dependency_runner)
@@ -125,6 +129,15 @@ def install_shell(
         contract_messages=contract_messages,
         factory_ref=factory_ref,
     )
+
+
+def _ensure_project_sessions_dir(project_root: Path) -> None:
+    """對話 JSONL 存專案根 sessions/（與 main_shell 預設對齊）。"""
+    sessions = project_root / "sessions"
+    sessions.mkdir(exist_ok=True)
+    gitkeep = sessions / ".gitkeep"
+    if not gitkeep.exists():
+        gitkeep.write_text("", encoding="utf-8")
 
 
 def _install_dependencies(

@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 
 import streamlit as st
 
-from dataset_streamlit_shell.data_ui import render_chat_panel
+from dataset_streamlit_shell.ui.data_ui import render_chat_panel
 
 
 def render_cv_tabbed_page(

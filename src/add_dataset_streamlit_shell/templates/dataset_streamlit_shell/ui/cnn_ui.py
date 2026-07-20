@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 import torch
 
-from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
+from dataset_streamlit_shell.ui.cv_layout import render_cv_tabbed_page
 from dataset_streamlit_shell.ml.cnn_intro import (
     BASE_RGB_IMAGE,
     DEMO_IMAGE_6X6,

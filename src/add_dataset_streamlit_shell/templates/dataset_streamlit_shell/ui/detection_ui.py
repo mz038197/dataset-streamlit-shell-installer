@@ -24,7 +24,7 @@ from dataset_streamlit_shell.cv.image_io import (
     load_image_path,
     pil_to_rgb_array,
 )
-from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
+from dataset_streamlit_shell.ui.cv_layout import render_cv_tabbed_page
 
 PAGE_TITLE = "物件偵測（Object Detection）"
 CONTEXT_KEY = "object_detection_agent_context"

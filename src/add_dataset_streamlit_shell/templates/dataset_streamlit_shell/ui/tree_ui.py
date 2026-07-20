@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 from sklearn.tree import export_text
 
-from dataset_streamlit_shell.data_ui import (
+from dataset_streamlit_shell.ui.data_ui import (
     SHELL_ROOT,
     render_chat_panel,
     render_dataset_metrics,

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-from dataset_streamlit_shell.data_ui import SHELL_ROOT, render_chat_panel, render_dataset_metrics
+from dataset_streamlit_shell.ui.data_ui import SHELL_ROOT, render_chat_panel, render_dataset_metrics
 from dataset_streamlit_shell.ml.decision_tree import HEART_TARGET, RANDOM_STATE
 from dataset_streamlit_shell.ml.xgboost_model import (
     FINAL_LEARNING_RATE,

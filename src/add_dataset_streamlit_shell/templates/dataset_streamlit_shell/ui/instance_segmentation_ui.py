@@ -28,7 +28,7 @@ from dataset_streamlit_shell.cv.instance_segmentation import (
     load_yolo_seg_model,
     predict_instances,
 )
-from dataset_streamlit_shell.cv_layout import render_cv_tabbed_page
+from dataset_streamlit_shell.ui.cv_layout import render_cv_tabbed_page
 
 PAGE_TITLE = "實例分割（Instance Segmentation）"
 CONTEXT_KEY = "instance_segmentation_agent_context"

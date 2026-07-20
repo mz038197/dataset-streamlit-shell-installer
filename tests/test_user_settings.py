@@ -36,6 +36,15 @@ def _load_data_ui_module(monkeypatch, tmp_path: Path):
         MAX_TTS_SPEED=4.0,
     )
 
+    template_root = (
+        Path(__file__).parents[1]
+        / "src"
+        / "add_dataset_streamlit_shell"
+        / "templates"
+    )
+    if str(template_root) not in sys.path:
+        sys.path.insert(0, str(template_root))
+
     monkeypatch.setitem(sys.modules, "streamlit", fake_streamlit)
     monkeypatch.setitem(sys.modules, "dotenv", fake_dotenv)
     monkeypatch.setitem(sys.modules, "pandas", fake_pandas)
@@ -43,11 +52,9 @@ def _load_data_ui_module(monkeypatch, tmp_path: Path):
     monkeypatch.setitem(sys.modules, "openai_tts.settings", fake_openai_tts_settings)
 
     module_path = (
-        Path(__file__).parents[1]
-        / "src"
-        / "add_dataset_streamlit_shell"
-        / "templates"
+        template_root
         / "dataset_streamlit_shell"
+        / "ui"
         / "data_ui.py"
     )
     spec = util.spec_from_file_location("data_ui_under_test", module_path)
@@ -277,6 +284,7 @@ def test_data_ui_assistant_reply_is_saved_before_tts_playback() -> None:
         / "add_dataset_streamlit_shell"
         / "templates"
         / "dataset_streamlit_shell"
+        / "ui"
         / "data_ui.py"
     ).read_text(encoding="utf-8")
     user_message_flow = source.split('if user_text := st.chat_input("詢問資料 Agent...", key="data_chat"):', 1)[1]
