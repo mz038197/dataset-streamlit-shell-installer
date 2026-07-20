@@ -22,7 +22,7 @@ wheels = [
 
 [[package]]
 name = "dataset-streamlit-shell-installer"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "typer" },
