@@ -108,13 +108,38 @@ ACTIVATION_DEMO_ITEMS: tuple[tuple[str, str, str | None], ...] = (
 
 
 def render_neural_network_page() -> None:
+    """左欄分頁、右欄固定 Agent（與 CNN 等教學頁同一版面）。"""
     configure_tensorflow_runtime()
     frame = load_builtin_frame(BUILTIN_PATH)
-    tab_activation, tab_train = st.tabs(["活化函數", "神經網路訓練"])
-    with tab_activation:
-        _render_activation_tab()
-    with tab_train:
-        _render_training_tab(frame)
+    _sync_form_from_disk_if_newer()
+
+    main, side = st.columns([5, 3], gap="large")
+    with main:
+        tab_activation, tab_train = st.tabs(["活化函數", "神經網路訓練"])
+        with tab_activation:
+            _render_activation_tab()
+        with tab_train:
+            _render_training_tab(frame)
+
+    with side:
+        form_state = session_to_state(st.session_state)
+        extra_context = _nn_extra_context(form_state, len(frame))
+        st.session_state[CONTEXT_KEY] = extra_context
+        loop = get_loop_state(st.session_state)
+
+        if loop["status"] == LOOP_STATUS_NEED_AGENT:
+            _run_agent_decision_turn(extra_context=extra_context, row_count=len(frame))
+            if consume_train_request(WORKSPACE_DIR, st.session_state):
+                st.rerun()
+            set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
+            # 下一輪會在 widget 建立前同步 Agent 可能更新的 form。
+            st.rerun()
+
+        render_chat_panel(extra_context=extra_context, page_name="類神經網路")
+        if st.session_state.pop("data_chat_just_replied", False):
+            consume_train_request(WORKSPACE_DIR, st.session_state)
+            # 不可在本輪 widget 建立後寫回其 session_state；交由下一輪開頭同步。
+            st.rerun()
 
 
 def _render_activation_tab() -> None:
@@ -226,148 +251,126 @@ def _render_agent_experiment_controls() -> None:
 
 
 def _render_training_tab(frame: pd.DataFrame) -> None:
+    """訓練分頁主內容（右欄 Agent 由 render_neural_network_page 固定渲染）。"""
     context_key = CONTEXT_KEY
-    _sync_form_from_disk_if_newer()
     loop = get_loop_state(st.session_state)
-    main, side = st.columns([5, 3], gap="large")
-    with main:
-        st.title("類神經網路")
+    st.title("類神經網路")
+    st.caption(
+        "使用內建雙特徵二元分類資料，以 TensorFlow Sequential 建立並訓練神經網路。"
+        "也可請右側 Agent 改左欄架構並寫入訓練請求，由系統播放訓練動畫。"
+    )
+    st.success("目前使用本頁內建教學資料。")
+    render_dataset_metrics(frame)
+    render_figures_in_streamlit(
+        build_nn_data_figures(
+            frame,
+            list(FEATURE_OPTIONS),
+            TARGET_COLUMN,
+            axis_labels=AXIS_LABELS,
+        )
+    )
+
+    _render_agent_experiment_controls()
+    # 控制項可能已調整上限或把超出預算的迴圈停回 idle。
+    loop = get_loop_state(st.session_state)
+
+    if st.button("套用 Lab02 預設", key="nn_apply_lab02"):
+        _apply_lab02_defaults()
+        st.rerun()
+
+    spec, compile_spec, train_config = _render_network_form(frame)
+    form_state = _persist_form_from_session()
+    st.session_state[context_key] = _nn_extra_context(form_state, len(frame))
+
+    st.markdown("##### 模型程式碼預覽")
+    st.code(format_model_code(spec, compile_spec), language="python")
+
+    param_count = estimate_parameter_count(spec)
+    if param_count > PARAM_WARN_THRESHOLD:
+        st.warning(f"參數數量約 {param_count:,}，超過建議上限 {PARAM_WARN_THRESHOLD:,}，訓練可能較慢。")
+    else:
+        st.caption(f"參數數量約 {param_count:,}。")
+
+    validation_errors = validate_network_spec(spec, frame)
+    if validation_errors:
+        for message in validation_errors:
+            st.error(message)
+
+    agent_train_config = TrainConfig(epochs=clamp_agent_epochs(train_config.epochs))
+    if agent_train_config.epochs != train_config.epochs and loop["status"] == LOOP_STATUS_NEED_TRAIN:
         st.caption(
-            "使用內建雙特徵二元分類資料，以 TensorFlow Sequential 建立並訓練神經網路。"
-            "也可請右側 Agent 改左欄架構並寫入訓練請求，由系統播放訓練動畫。"
-        )
-        st.success("目前使用本頁內建教學資料。")
-        render_dataset_metrics(frame)
-        render_figures_in_streamlit(
-            build_nn_data_figures(
-                frame,
-                list(FEATURE_OPTIONS),
-                TARGET_COLUMN,
-                axis_labels=AXIS_LABELS,
-            )
+            f"Agent 本輪 epochs 已 clamp 為 {agent_train_config.epochs}"
+            f"（上限 {AGENT_EPOCHS_MAX}）。"
         )
 
-        _render_agent_experiment_controls()
-        # 控制項可能已調整上限或把超出預算的迴圈停回 idle。
-        loop = get_loop_state(st.session_state)
+    signature = _training_signature(spec, compile_spec, train_config, len(frame))
+    agent_signature = _training_signature(spec, compile_spec, agent_train_config, len(frame))
+    train_disabled = bool(validation_errors)
+    train_clicked = st.button(
+        "開始訓練",
+        type="primary",
+        width="stretch",
+        key="train_neural_network",
+        disabled=train_disabled,
+    )
 
-        if st.button("套用 Lab02 預設", key="nn_apply_lab02"):
-            _apply_lab02_defaults()
-            st.rerun()
-
-        spec, compile_spec, train_config = _render_network_form(frame)
-        form_state = _persist_form_from_session()
-        extra_context = _nn_extra_context(form_state, len(frame))
-        st.session_state[context_key] = extra_context
-
-        st.markdown("##### 模型程式碼預覽")
-        st.code(format_model_code(spec, compile_spec), language="python")
-
-        param_count = estimate_parameter_count(spec)
-        if param_count > PARAM_WARN_THRESHOLD:
-            st.warning(f"參數數量約 {param_count:,}，超過建議上限 {PARAM_WARN_THRESHOLD:,}，訓練可能較慢。")
-        else:
-            st.caption(f"參數數量約 {param_count:,}。")
-
-        validation_errors = validate_network_spec(spec, frame)
+    if loop["status"] == LOOP_STATUS_NEED_TRAIN:
         if validation_errors:
-            for message in validation_errors:
-                st.error(message)
-
-        agent_train_config = TrainConfig(epochs=clamp_agent_epochs(train_config.epochs))
-        if agent_train_config.epochs != train_config.epochs and loop["status"] == LOOP_STATUS_NEED_TRAIN:
-            st.caption(
-                f"Agent 本輪 epochs 已 clamp 為 {agent_train_config.epochs}"
-                f"（上限 {AGENT_EPOCHS_MAX}）。"
-            )
-
-        signature = _training_signature(spec, compile_spec, train_config, len(frame))
-        agent_signature = _training_signature(spec, compile_spec, agent_train_config, len(frame))
-        train_disabled = bool(validation_errors)
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            width="stretch",
-            key="train_neural_network",
-            disabled=train_disabled,
-        )
-
-        if loop["status"] == LOOP_STATUS_NEED_TRAIN:
-            if validation_errors:
-                st.error("架構驗證失敗，已取消本輪 Agent 訓練。請修正後再請 Agent 寫入訓練請求。")
-                set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
-            elif not _ensure_tensorflow_available():
-                set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
-            else:
-                with st.status("Agent 實驗訓練中…", expanded=True):
-                    ok = _run_training(
-                        frame,
-                        spec=spec,
-                        compile_spec=compile_spec,
-                        train_config=agent_train_config,
-                        signature=agent_signature,
-                        context_key=context_key,
-                    )
-                if ok:
-                    cached = st.session_state.get(RESULT_KEY, {})
-                    artifacts = cached.get("artifacts")
-                    if artifacts is not None:
-                        new_index = int(loop["run_index"]) + 1
-                        write_last_run(
-                            WORKSPACE_DIR,
-                            form_state=form_state,
-                            train_result=artifacts.result,
-                            run_index=new_index,
-                            epochs_used=agent_train_config.epochs,
-                            note="Agent 實驗動畫訓練",
-                        )
-                        set_loop_state(
-                            st.session_state,
-                            run_index=new_index,
-                            status=LOOP_STATUS_NEED_AGENT,
-                        )
-                        st.rerun()
-                else:
-                    set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
-        elif train_clicked:
-            if _ensure_tensorflow_available():
-                with st.status("訓練中…", expanded=True):
-                    _run_training(
-                        frame,
-                        spec=spec,
-                        compile_spec=compile_spec,
-                        train_config=train_config,
-                        signature=signature,
-                        context_key=context_key,
-                    )
-        elif RESULT_KEY in st.session_state and st.session_state[RESULT_KEY]["signature"] in {
-            signature,
-            agent_signature,
-        }:
-            _render_training_results(st.session_state[RESULT_KEY], frame=frame, spec=spec)
-        else:
-            st.info(
-                "可按「開始訓練」自行觀察動畫，或請右側 Agent 寫入訓練請求啟動實驗迴圈。"
-            )
-
-    with side:
-        form_state = session_to_state(st.session_state)
-        extra_context = _nn_extra_context(form_state, len(frame))
-        loop = get_loop_state(st.session_state)
-
-        if loop["status"] == LOOP_STATUS_NEED_AGENT:
-            _run_agent_decision_turn(extra_context=extra_context, row_count=len(frame))
-            if consume_train_request(WORKSPACE_DIR, st.session_state):
-                st.rerun()
+            st.error("架構驗證失敗，已取消本輪 Agent 訓練。請修正後再請 Agent 寫入訓練請求。")
             set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
-            # 下一輪會在 widget 建立前同步 Agent 可能更新的 form。
-            st.rerun()
-
-        render_chat_panel(extra_context=extra_context, page_name="類神經網路")
-        if st.session_state.pop("data_chat_just_replied", False):
-            consume_train_request(WORKSPACE_DIR, st.session_state)
-            # 不可在本輪 widget 建立後寫回其 session_state；交由下一輪開頭同步。
-            st.rerun()
+        elif not _ensure_tensorflow_available():
+            set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
+        else:
+            with st.status("Agent 實驗訓練中…", expanded=True):
+                ok = _run_training(
+                    frame,
+                    spec=spec,
+                    compile_spec=compile_spec,
+                    train_config=agent_train_config,
+                    signature=agent_signature,
+                    context_key=context_key,
+                )
+            if ok:
+                cached = st.session_state.get(RESULT_KEY, {})
+                artifacts = cached.get("artifacts")
+                if artifacts is not None:
+                    new_index = int(loop["run_index"]) + 1
+                    write_last_run(
+                        WORKSPACE_DIR,
+                        form_state=form_state,
+                        train_result=artifacts.result,
+                        run_index=new_index,
+                        epochs_used=agent_train_config.epochs,
+                        note="Agent 實驗動畫訓練",
+                    )
+                    set_loop_state(
+                        st.session_state,
+                        run_index=new_index,
+                        status=LOOP_STATUS_NEED_AGENT,
+                    )
+                    st.rerun()
+            else:
+                set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
+    elif train_clicked:
+        if _ensure_tensorflow_available():
+            with st.status("訓練中…", expanded=True):
+                _run_training(
+                    frame,
+                    spec=spec,
+                    compile_spec=compile_spec,
+                    train_config=train_config,
+                    signature=signature,
+                    context_key=context_key,
+                )
+    elif RESULT_KEY in st.session_state and st.session_state[RESULT_KEY]["signature"] in {
+        signature,
+        agent_signature,
+    }:
+        _render_training_results(st.session_state[RESULT_KEY], frame=frame, spec=spec)
+    else:
+        st.info(
+            "可按「開始訓練」自行觀察動畫，或請右側 Agent 寫入訓練請求啟動實驗迴圈。"
+        )
 
 
 def _run_agent_decision_turn(*, extra_context: str, row_count: int) -> None:
