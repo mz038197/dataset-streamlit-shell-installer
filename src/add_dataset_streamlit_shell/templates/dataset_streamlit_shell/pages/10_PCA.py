@@ -67,7 +67,7 @@ def _render_pca(df: pd.DataFrame) -> None:
             "解釋變異比例": explained,
         }
     )
-    st.dataframe(variance_frame.head(10), use_container_width=True, hide_index=True)
+    st.dataframe(variance_frame.head(10), width="stretch", hide_index=True)
     st.bar_chart(variance_frame.set_index("主成分")["解釋變異比例"])
 
     if scores.shape[1] >= 2:
@@ -77,7 +77,7 @@ def _render_pca(df: pd.DataFrame) -> None:
 
     st.markdown("##### 欄位權重")
     loading = pd.DataFrame(vt[:2].T, index=matrix.columns, columns=["PC1", "PC2"])
-    st.dataframe(loading.style.format("{:.3f}"), use_container_width=True)
+    st.dataframe(loading.style.format("{:.3f}"), width="stretch")
 
     st.markdown("##### 建議問 Agent")
     st.code("請解讀解釋變異量，說明前兩個主成分保留了多少資訊。", language="text")

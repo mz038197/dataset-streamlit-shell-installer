@@ -155,7 +155,7 @@ def _render_inference_tab() -> None:
         selected_example=selected_example,
     )
     if image is not None:
-        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
+        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", width="stretch")
 
     st.caption("模型：YOLOv8n-seg（COCO 預訓練）")
     conf_threshold = st.slider(
@@ -204,9 +204,9 @@ def _render_instance_results(
     items = result.items
     if items:
         annotated = draw_instances(image, items, alpha=alpha)
-        st.image(annotated, caption="實例分割結果（mask + bbox）", use_container_width=True)
+        st.image(annotated, caption="實例分割結果（mask + bbox）", width="stretch")
     else:
-        st.image(image, caption="原圖（無分割結果）", use_container_width=True)
+        st.image(image, caption="原圖（無分割結果）", width="stretch")
         st.warning("未偵測到實例。試著降低信心門檻後重新執行分割。")
         return
 
@@ -215,7 +215,7 @@ def _render_instance_results(
     with legend_col:
         _render_legend(items)
     with table_col:
-        st.dataframe(_instance_dataframe(items), use_container_width=True, hide_index=True)
+        st.dataframe(_instance_dataframe(items), width="stretch", hide_index=True)
         st.caption(format_instance_summary(items))
 
 
@@ -261,13 +261,13 @@ def _render_interpret_tab() -> None:
         if filtered:
             filtered_overlay = build_color_overlay(image.shape[:2], filtered)
             overlay = blend_overlay(image, filtered_overlay, alpha=alpha)
-            st.image(overlay, caption="疊加圖", use_container_width=True)
+            st.image(overlay, caption="疊加圖", width="stretch")
             compare_cols = st.columns(2, gap="medium")
-            compare_cols[0].image(image, caption="原圖", use_container_width=True)
+            compare_cols[0].image(image, caption="原圖", width="stretch")
             compare_cols[1].image(
                 filtered_overlay,
                 caption="純色塊 mask",
-                use_container_width=True,
+                width="stretch",
             )
 
             options = [
@@ -290,18 +290,18 @@ def _render_interpret_tab() -> None:
             sub_cols[1].image(
                 highlighted,
                 caption=f"{selected_item.label} highlighted",
-                use_container_width=True,
+                width="stretch",
             )
             sub_cols[2].image(
                 crop,
                 caption=f"{selected_item.label} bbox crop",
-                use_container_width=True,
+                width="stretch",
             )
             st.caption(
                 f"{selected_item.label} 覆蓋 {selected_item.area:,} 像素 "
                 f"（{selected_item.coverage:.1%}）"
             )
-            st.dataframe(_instance_dataframe(filtered), use_container_width=True, hide_index=True)
+            st.dataframe(_instance_dataframe(filtered), width="stretch", hide_index=True)
         else:
             st.warning("此門檻下沒有實例。請降低顯示門檻。")
         with st.expander("mask area 與 bbox 的差異", expanded=False):

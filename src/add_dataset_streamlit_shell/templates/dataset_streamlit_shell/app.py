@@ -67,7 +67,7 @@ def overview() -> None:
             st.success(f"Ready 分析就緒資料已建立：{len(ready_df):,} 筆、{len(ready_df.columns):,} 欄。")
 
         st.markdown("##### 快速預覽")
-        st.dataframe(df.head(12), use_container_width=True, hide_index=True)
+        st.dataframe(df.head(12), width="stretch", hide_index=True)
 
         st.markdown("##### 課程流程")
         st.markdown(

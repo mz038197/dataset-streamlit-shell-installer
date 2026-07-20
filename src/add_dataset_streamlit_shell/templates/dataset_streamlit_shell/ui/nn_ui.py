@@ -161,7 +161,7 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
         train_clicked = st.button(
             "開始訓練",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="train_neural_network",
             disabled=train_disabled,
         )
@@ -384,7 +384,7 @@ def _render_epoch_loss_plot(
     container,
 ) -> None:
     fig = build_training_loss_figure(history, title=f"訓練 loss 曲線（epoch {epoch}）")
-    container.pyplot(fig, clear_figure=True, use_container_width=True)
+    container.pyplot(fig, clear_figure=True, width="stretch")
     plt.close(fig)
 
 
@@ -418,7 +418,7 @@ def _render_epoch_boundary_plot(
         x2_label=AXIS_LABELS.get(x2_name, x2_name),
         title=f"神經網路決策區域（epoch {epoch}）",
     )
-    container.pyplot(fig, clear_figure=True, use_container_width=True)
+    container.pyplot(fig, clear_figure=True, width="stretch")
     plt.close(fig)
 
 
@@ -443,7 +443,7 @@ def _render_epoch_probability_plot(
         x_label=x_label,
         title=f"單特徵分類機率曲線（epoch {epoch}）",
     )
-    container.pyplot(fig, clear_figure=True, use_container_width=True)
+    container.pyplot(fig, clear_figure=True, width="stretch")
     plt.close(fig)
 
 

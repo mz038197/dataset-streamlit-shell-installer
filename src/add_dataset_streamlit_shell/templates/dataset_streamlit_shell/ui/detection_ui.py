@@ -149,7 +149,7 @@ def _render_inference_tab() -> None:
         selected_example=selected_example,
     )
     if image is not None:
-        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
+        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", width="stretch")
 
     st.caption(f"模型：YOLOv8n（COCO 預訓練）")
     conf_threshold = st.slider(
@@ -183,14 +183,14 @@ def _render_detection_results(image: np.ndarray, result: DetectionResult) -> Non
     items = result.items
     if items:
         annotated = draw_detections(image, items)
-        st.image(annotated, caption="偵測結果", use_container_width=True)
+        st.image(annotated, caption="偵測結果", width="stretch")
     else:
-        st.image(image, caption="原圖（無偵測結果）", use_container_width=True)
+        st.image(image, caption="原圖（無偵測結果）", width="stretch")
         st.warning("未偵測到物件。試著降低信心門檻後重新執行偵測。")
         return
 
     st.markdown("##### 偵測清單")
-    st.dataframe(_detection_dataframe(items), use_container_width=True, hide_index=True)
+    st.dataframe(_detection_dataframe(items), width="stretch", hide_index=True)
     st.caption(format_detection_summary(items))
 
 
@@ -217,7 +217,7 @@ def _render_interpret_tab() -> None:
         )
         if filtered:
             annotated = draw_detections(image, filtered)
-            st.image(annotated, caption="過濾後結果", use_container_width=True)
+            st.image(annotated, caption="過濾後結果", width="stretch")
             crop_options = [
                 f"{item.rank}. {item.label} ({item.confidence:.0%})" for item in filtered
             ]
@@ -232,9 +232,9 @@ def _render_interpret_tab() -> None:
             st.image(
                 crop,
                 caption=f"{selected_item.label} · {selected_item.confidence:.1%}",
-                use_container_width=True,
+                width="stretch",
             )
-            st.dataframe(_detection_dataframe(filtered), use_container_width=True, hide_index=True)
+            st.dataframe(_detection_dataframe(filtered), width="stretch", hide_index=True)
         else:
             st.warning("此門檻下沒有偵測框。請降低顯示門檻。")
         with st.expander("NMS 簡介", expanded=False):

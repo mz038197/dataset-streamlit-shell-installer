@@ -149,6 +149,7 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
         tmp_path.resolve(),
         True,
     )
+    assert "streamlit>=1.50" in PROJECT_DEPENDENCIES
     assert PROJECT_DEPENDENCIES == result.installed_dependencies[:-2]
     assert "peas-agent-runtime" in result.installed_dependencies[-2]
     assert result.installed_dependencies[-1] == CHARSET_NORMALIZER_CONSTRAINT

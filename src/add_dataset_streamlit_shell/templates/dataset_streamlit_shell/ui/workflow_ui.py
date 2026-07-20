@@ -104,10 +104,10 @@ def _page_shell(
 
 def _render_refresh_controls() -> None:
     refresh_col, reset_col = st.columns(2)
-    if refresh_col.button("重新讀取工作資料", use_container_width=True):
+    if refresh_col.button("重新讀取工作資料", width="stretch"):
         refresh_working_dataset_cache()
         st.rerun()
-    if reset_col.button("回到原始資料", use_container_width=True):
+    if reset_col.button("回到原始資料", width="stretch"):
         if reset_working_dataset_from_source():
             st.success("已用原始資料重建工作資料。")
             st.rerun()
@@ -212,9 +212,9 @@ def render_quality_page() -> None:
             },
             index=df.columns,
         )
-        st.dataframe(overview, use_container_width=True)
+        st.dataframe(overview, width="stretch")
         with st.expander("資料預覽", expanded=False):
-            st.dataframe(df.head(20), use_container_width=True, hide_index=True)
+            st.dataframe(df.head(20), width="stretch", hide_index=True)
         _render_prompts(
             [
                 "請檢查目前工作資料的欄位名稱，並建議哪些欄位需要重新命名。",
@@ -247,7 +247,7 @@ def render_missing_page() -> None:
             )
         else:
             st.success("綠燈：目前沒有缺失儲存格，可以進入下一個整理步驟。")
-        st.dataframe(missing_frame, use_container_width=True)
+        st.dataframe(missing_frame, width="stretch")
         _render_prompts(
             [
                 "請依缺失比例整理目前工作資料的缺失值問題，先不要修改資料。",
@@ -508,7 +508,7 @@ def render_duplicates_page() -> None:
             )
             st.dataframe(
                 duplicate_candidates.head(50),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 
@@ -564,7 +564,7 @@ def render_outliers_page() -> None:
         st.markdown("###### 數值欄位輔助資訊")
         st.dataframe(
             _outlier_column_overview(df, numeric_columns),
-            use_container_width=True,
+            width="stretch",
         )
 
         selected_columns = st.multiselect(
@@ -605,7 +605,7 @@ def render_outliers_page() -> None:
             return
 
         st.markdown("##### 離群值檢查結果")
-        st.dataframe(outlier_frame, use_container_width=True, hide_index=True)
+        st.dataframe(outlier_frame, width="stretch", hide_index=True)
         outlier_columns = outlier_frame[outlier_frame["離群值筆數"] > 0]["欄位名稱"].tolist()
         if not outlier_columns:
             st.success("依照目前方法，沒有偵測到離群值欄位。")
@@ -637,7 +637,7 @@ def render_outliers_page() -> None:
 
         outlier_rows = df[outlier_mask.fillna(False)]
         st.markdown("##### 離群值資料列預覽")
-        st.dataframe(outlier_rows.head(30), use_container_width=True, hide_index=True)
+        st.dataframe(outlier_rows.head(30), width="stretch", hide_index=True)
         _render_prompts(
             [
                 f"請使用 {method} 檢查目前工作資料的 `{selected}` 欄位離群值，先不要修改資料。",
@@ -755,7 +755,7 @@ def render_categorical_page() -> None:
         )
         all_columns = [str(column) for column in df.columns]
         st.markdown("###### 欄位輔助資訊")
-        st.dataframe(_column_overview(df, all_columns), use_container_width=True)
+        st.dataframe(_column_overview(df, all_columns), width="stretch")
 
         selected_columns = st.multiselect(
             "請選擇你和 Agent 確認的類別欄位",
@@ -768,7 +768,7 @@ def render_categorical_page() -> None:
             st.warning("尚未選擇類別欄位。請先和 Agent 討論，再勾選你確認的欄位。")
         else:
             st.markdown("###### 已確認的類別欄位")
-            st.dataframe(_column_overview(df, selected_columns), use_container_width=True)
+            st.dataframe(_column_overview(df, selected_columns), width="stretch")
             selected = st.selectbox(
                 "查看類別分布",
                 ["請選擇欄位"] + selected_columns,
@@ -820,7 +820,7 @@ def render_encoding_page() -> None:
                 "先和 Agent 確認要使用 One-Hot、Label Encoding，或保留原欄位。"
                 for _ in categorical
             ]
-            st.dataframe(overview, use_container_width=True)
+            st.dataframe(overview, width="stretch")
 
             preview_columns = _encoding_preview_columns(df, categorical)
             st.markdown("###### 目前工作資料預覽：類別欄位與編碼結果")
@@ -831,7 +831,7 @@ def render_encoding_page() -> None:
             if preview_columns:
                 st.dataframe(
                     _display_encoding_preview(df[preview_columns].head(20)),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
             else:
@@ -855,7 +855,7 @@ def render_encoding_page() -> None:
 def _render_correlation_formula_reference() -> None:
     with st.expander("共變異數與相關係數公式", expanded=False):
         if CORRELATION_FORMULA_IMAGE_PATH.is_file():
-            st.image(str(CORRELATION_FORMULA_IMAGE_PATH), use_container_width=True)
+            st.image(str(CORRELATION_FORMULA_IMAGE_PATH), width="stretch")
         else:
             st.caption("公式說明圖尚未就緒。")
         st.caption("本頁相關性矩陣每格為 Pearson 相關係數 r，範圍 [-1, 1]。")
@@ -871,7 +871,7 @@ def render_correlation_page() -> None:
         _render_correlation_formula_reference()
         all_columns = [str(column) for column in df.columns]
         st.markdown("###### 欄位輔助資訊")
-        st.dataframe(_column_overview(df, all_columns), use_container_width=True)
+        st.dataframe(_column_overview(df, all_columns), width="stretch")
 
         selected_columns = st.multiselect(
             "請選擇你和 Agent 確認要做數值相關性的欄位",
@@ -900,7 +900,7 @@ def render_correlation_page() -> None:
 
         corr = numeric_frame[usable_columns].corr()
         st.markdown("###### 相關性矩陣")
-        st.dataframe(corr.style.format("{:.2f}"), use_container_width=True)
+        st.dataframe(corr.style.format("{:.2f}"), width="stretch")
         _render_prompts(
             [
                 "請解讀我目前選取欄位之間的相關性矩陣，指出值得注意的關係。",
@@ -1115,7 +1115,7 @@ def render_feature_scaling_page() -> None:
         st.markdown("###### 數值欄位概覽")
         st.dataframe(
             _feature_scaling_overview(df, numeric_columns),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -1174,7 +1174,7 @@ def render_feature_scaling_page() -> None:
                 output_column = _scaled_output_column(column, method)
                 preview[output_column] = _apply_scaling(df[column], method).head(10)
             st.markdown("###### 預覽（前 10 筆，尚未寫入 working）")
-            st.dataframe(preview, use_container_width=True, hide_index=True)
+            st.dataframe(preview, width="stretch", hide_index=True)
 
         method_name = _SCALING_METHOD_LABELS[method]
         column_list = "、".join(f"`{column}`" for column in valid_columns)
@@ -1229,7 +1229,7 @@ def render_ready_page() -> None:
             )
         if missing_total:
             st.warning("仍有缺失值。後續分析或訓練前建議先完成缺失值處理。")
-        if st.button("建立 ready.csv", type="primary", use_container_width=True):
+        if st.button("建立 ready.csv", type="primary", width="stretch"):
             create_ready_dataset(df)
             append_cleaning_log(
                 action="create_ready_dataset",
@@ -1248,7 +1248,7 @@ def render_ready_page() -> None:
                 data=ready.to_csv(index=False).encode("utf-8-sig"),
                 file_name="ready.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
         _render_prompts(
             [
@@ -1363,7 +1363,7 @@ def render_simple_linear_regression_page() -> None:
         train_clicked = st.button(
             "開始訓練",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="train_simple_regression",
         )
         artifact: LinearModelArtifact | None = None
@@ -1548,7 +1548,7 @@ def render_multiple_linear_regression_page() -> None:
         train_clicked = st.button(
             "開始訓練",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="train_multiple_regression",
         )
         artifact: LinearModelArtifact | None = None
@@ -1744,11 +1744,11 @@ def _render_regression_data_intro(
         pd.DataFrame(role_rows).style.format(
             {"最小值": "{:.4f}", "最大值": "{:.4f}", "平均值": "{:.4f}"}
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
     with st.expander("資料預覽", expanded=True):
-        st.dataframe(frame[features + [target]].head(10), use_container_width=True, hide_index=True)
+        st.dataframe(frame[features + [target]].head(10), width="stretch", hide_index=True)
     render_figures_in_streamlit(build_regression_data_figures(frame, features, target))
 
 
@@ -1868,7 +1868,7 @@ def _render_prediction_error_table(
         }
     )
     st.markdown("##### 預測與誤差")
-    st.dataframe(result.head(30).style.format("{:.4f}"), use_container_width=True)
+    st.dataframe(result.head(30).style.format("{:.4f}"), width="stretch")
 
 
 def _render_feature_target_overview(
@@ -1903,7 +1903,7 @@ def _render_training_results(
         weights = pd.DataFrame(
             {"feature": artifact.features, "w": [float(v) for v in artifact.weights]}
         )
-        st.dataframe(weights, use_container_width=True, hide_index=True)
+        st.dataframe(weights, width="stretch", hide_index=True)
     _render_prediction_error_table(working, target, prediction)
 
 
@@ -1920,7 +1920,7 @@ def _render_regression_save_section(
     if st.button(
         "保存模型 JSON",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         key=f"save_{page_key}",
     ):
         REGRESSION_MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -2018,7 +2018,7 @@ def _render_regression_inference_section(
                 key=f"{page_key}_input_{feature}",
             )
 
-    if st.button("計算預測", type="primary", use_container_width=True, key=f"{page_key}_predict"):
+    if st.button("計算預測", type="primary", width="stretch", key=f"{page_key}_predict"):
         feature_frame = pd.DataFrame([input_values])
         prediction = float(predict_from_artifact(active_artifact, feature_frame).iloc[0])
         st.markdown("##### 預測結果")
@@ -2036,7 +2036,7 @@ def _render_regression_inference_section(
                         "輸入值": [input_values[feature] for feature in active_artifact.features],
                     }
                 ),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 

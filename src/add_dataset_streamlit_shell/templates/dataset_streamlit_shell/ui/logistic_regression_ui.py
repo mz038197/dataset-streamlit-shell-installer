@@ -159,7 +159,7 @@ def render_logistic_regression_page() -> None:
         train_clicked = st.button(
             "開始訓練",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="train_logistic_regression",
         )
         artifact: LogisticModelArtifact | None = None
@@ -363,7 +363,7 @@ def render_regularized_logistic_regression_page() -> None:
         train_clicked = st.button(
             "開始訓練",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="train_regularized_logistic",
         )
         artifact: RegularizedLogisticModelArtifact | None = None
@@ -561,11 +561,11 @@ def _render_classification_data_intro(
         pd.DataFrame(role_rows).style.format(
             {"最小值": "{:.4f}", "最大值": "{:.4f}", "平均值": "{:.4f}"}
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
     with st.expander("資料預覽", expanded=True):
-        st.dataframe(frame[features + [target]].head(10), use_container_width=True, hide_index=True)
+        st.dataframe(frame[features + [target]].head(10), width="stretch", hide_index=True)
     render_figures_in_streamlit(build_classification_data_figures(frame, features, target))
 
 
@@ -820,7 +820,7 @@ def _render_logistic_training_results(
             "predicted_class": predicted,
         }
     )
-    st.dataframe(result.head(30).style.format({"probability": "{:.4f}"}), use_container_width=True)
+    st.dataframe(result.head(30).style.format({"probability": "{:.4f}"}), width="stretch")
 
 
 def _render_classification_save_section(
@@ -833,7 +833,7 @@ def _render_classification_save_section(
     if st.button(
         "保存模型 JSON",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         key=f"save_{page_key}",
     ):
         CLASSIFICATION_MODEL_DIR.mkdir(parents=True, exist_ok=True)

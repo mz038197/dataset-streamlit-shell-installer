@@ -165,7 +165,7 @@ def _render_inference_tab() -> None:
         selected_example=selected_example,
     )
     if image is not None:
-        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
+        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", width="stretch")
 
     backbone_mode = st.radio(
         "模型骨幹",
@@ -227,21 +227,21 @@ def _render_classification_results(
         result = next(iter(results.values()))
         left, right = st.columns(2)
         with left:
-            st.image(image, caption="原圖", use_container_width=True)
+            st.image(image, caption="原圖", width="stretch")
         with right:
             _render_prediction_card(result, top_k)
         with st.expander("進階資訊", expanded=False):
             st.image(
                 result.preprocessed_preview,
                 caption="模型輸入（224×224 前處理後）",
-                use_container_width=True,
+                width="stretch",
             )
             st.caption(
                 f"骨幹：{result.backbone} · ImageNet 預訓練 · 輸出 Top-{top_k}"
             )
             st.dataframe(
                 _prediction_dataframe(result.top_items[:top_k]),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         return
@@ -352,7 +352,7 @@ def _render_feature_tab() -> None:
         )
 
     if image is not None:
-        st.image(image, use_container_width=True)
+        st.image(image, width="stretch")
 
     if st.button("擷取特徵歷程", key="cv_feature_extract", disabled=image is None):
         model = _cached_resnet50()
@@ -382,12 +382,12 @@ def _render_feature_tab() -> None:
         st.caption(stage.caption)
         if stage.vector_preview is not None and stage.feature_maps is None:
             if stage.stage_id == "original":
-                st.image(stage.vector_preview, use_container_width=True)
+                st.image(stage.vector_preview, width="stretch")
             else:
                 st.write("Pooled feature vector preview:", stage.vector_preview[:8])
         if stage.feature_maps is not None:
             grid = _feature_map_grid(stage.feature_maps)
-            st.image(grid, caption="前 16 個 channel（灰階）", use_container_width=True)
+            st.image(grid, caption="前 16 個 channel（灰階）", width="stretch")
 
     gradcam = st.session_state.get(GRADCAM_KEY)
     if gradcam and image is not None:

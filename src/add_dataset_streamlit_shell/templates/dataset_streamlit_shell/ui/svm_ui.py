@@ -188,7 +188,7 @@ def _render_sklearn_mode(
     if not can_plot_2d:
         st.caption("目前選超過 2 個 features，訓練後無法繪製 2D 決策邊界圖。")
 
-    train_clicked = st.button("開始訓練", type="primary", use_container_width=True, key="train_linear_svm")
+    train_clicked = st.button("開始訓練", type="primary", width="stretch", key="train_linear_svm")
     artifact: LinearSvmArtifact | None = None
     if train_clicked:
         try:
@@ -340,7 +340,7 @@ def _render_teaching_mode(
     train_clicked = st.button(
         "開始示意訓練",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         key="train_linear_svm_demo",
     )
     final_step: GradientDescentStep | None = None
@@ -531,11 +531,11 @@ def _render_svm_data_intro(
         )
     st.dataframe(
         pd.DataFrame(role_rows).style.format({"最小值": "{:.4f}", "最大值": "{:.4f}", "平均值": "{:.4f}"}),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
     with st.expander("資料預覽", expanded=True):
-        st.dataframe(frame[features + [target]].head(10), use_container_width=True, hide_index=True)
+        st.dataframe(frame[features + [target]].head(10), width="stretch", hide_index=True)
     st.markdown("##### 資料視覺化")
     if builtin and len(features) == 2:
         st.caption("特徵空間分佈（Paired 色圖）")
@@ -565,13 +565,13 @@ def _render_svm_training_results(
     scores = decision_function_from_artifact(artifact, working)
     predicted = predict_class_from_artifact(artifact, working)
     preview = pd.DataFrame({"actual": working[target], "decision_function": scores, "predicted_class": predicted})
-    st.dataframe(preview.head(30).style.format({"decision_function": "{:.4f}"}), use_container_width=True)
+    st.dataframe(preview.head(30).style.format({"decision_function": "{:.4f}"}), width="stretch")
 
 
 def _render_svm_save_section(artifact: LinearSvmArtifact) -> None:
     st.markdown("##### 保存模型 JSON")
     st.caption("檔案保存至 `dataset_streamlit_shell/workspace/models/classification/`。")
-    if st.button("保存模型 JSON", type="primary", use_container_width=True, key="save_svm"):
+    if st.button("保存模型 JSON", type="primary", width="stretch", key="save_svm"):
         CLASSIFICATION_MODEL_DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = CLASSIFICATION_MODEL_DIR / f"linear_svm_{stamp}.json"
@@ -771,7 +771,7 @@ def _render_teaching_results(
     c1.metric("最後 b", f"{step.intercept:.4f}")
     c2.metric("Support vector candidates", str(int(np.sum(candidate_mask))))
     c3.metric("最後 hinge loss", f"{compute_hinge_loss(feature_matrix, working[target], step.weights, step.intercept, C=C):.4f}")
-    st.dataframe(result.head(30).style.format({"decision_function": "{:.4f}"}), use_container_width=True)
+    st.dataframe(result.head(30).style.format({"decision_function": "{:.4f}"}), width="stretch")
 
 
 def _svm_teaching_demo_frame() -> pd.DataFrame:

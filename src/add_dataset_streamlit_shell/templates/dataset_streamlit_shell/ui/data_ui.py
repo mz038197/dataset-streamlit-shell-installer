@@ -811,7 +811,7 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
     if resolved_pick and resolved_pick != current_session:
         _set_current_session(PROJECT_ROOT / resolved_pick)
         st.rerun()
-    if new_col.button("", icon=":material/add:", help="新增對話", use_container_width=True):
+    if new_col.button("", icon=":material/add:", help="新增對話", width="stretch"):
         _set_current_session(_new_session_path())
         _reset_session_picker_widget()
         st.rerun()
@@ -819,7 +819,7 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         "",
         icon=":material/delete:",
         help="刪除對話",
-        use_container_width=True,
+        width="stretch",
         disabled=not current_session,
     ):
         if current_session:
@@ -860,7 +860,7 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
             st.warning(probe.error)
         if restore_error:
             st.warning(restore_error)
-        if st.button("啟用資料 Agent", type="primary", use_container_width=True):
+        if st.button("啟用資料 Agent", type="primary", width="stretch"):
             ok, message = _activate_agent(current_session)
             if ok:
                 st.success(f"{message} 你可以開始詢問資料 Agent。")
@@ -890,7 +890,7 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         help="圖片只會送給下一則訊息；支援 PNG/JPG/WEBP，大小上限 5 MB。",
     )
     if uploaded_image is not None:
-        st.image(uploaded_image, caption="下一則訊息會附上這張圖片", use_container_width=True)
+        st.image(uploaded_image, caption="下一則訊息會附上這張圖片", width="stretch")
 
     try:
         agent = _get_agent_for_session(current_session)
@@ -930,7 +930,7 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
             with st.chat_message("user"):
                 st.markdown(user_text)
                 if uploaded_image is not None and image_path:
-                    st.image(uploaded_image, caption="已附圖", use_container_width=True)
+                    st.image(uploaded_image, caption="已附圖", width="stretch")
             with st.chat_message("assistant"):
                 placeholder = st.empty()
                 answer_parts: list[str] = []

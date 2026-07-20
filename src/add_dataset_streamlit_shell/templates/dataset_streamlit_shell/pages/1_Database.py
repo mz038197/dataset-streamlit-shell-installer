@@ -187,11 +187,11 @@ with main:
             else:
                 st.caption(f"目前基底資料：Original 原始資料 `{_display_path(ORIGINAL_DATASET_PATH)}`")
             st.caption("畫面篩選不會落檔；右側 Agent 會寫入整理工作資料。")
-        st.dataframe(filtered, use_container_width=True, hide_index=True)
+        st.dataframe(filtered, width="stretch", hide_index=True)
 
         with st.expander("欄位統計", expanded=False):
             summary = df.describe(include="all").transpose()
-            st.dataframe(prepare_dataframe_for_display(summary), use_container_width=True)
+            st.dataframe(prepare_dataframe_for_display(summary), width="stretch")
 
 with side:
     render_chat_panel(page_name="資料上傳與預覽")

@@ -31,7 +31,7 @@ uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git
 By default, installation and update also run this in the target project:
 
 ```powershell
-uv add --upgrade-package openai-tts streamlit pandas matplotlib numpy scikit-learn xgboost "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
+uv add --upgrade-package openai-tts "streamlit>=1.50" pandas matplotlib numpy scikit-learn xgboost "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
 ```
 
 To copy or update the shell without changing project dependencies:
@@ -39,6 +39,8 @@ To copy or update the shell without changing project dependencies:
 ```powershell
 uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell --no-install-deps
 ```
+
+When using `--no-install-deps`, the target project must already provide Streamlit 1.50 or newer.
 
 This preserves:
 
@@ -114,7 +116,7 @@ Requires stable network, ~3.4 GB free disk space, and `gdown` (installed with sh
 
 - Copies `dataset_streamlit_shell/` into the current project.
 - Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
-- Installs required project dependencies with `uv add streamlit pandas matplotlib numpy scikit-learn xgboost` and `openai-tts` by default.
+- Installs required project dependencies with `uv add "streamlit>=1.50" pandas matplotlib numpy scikit-learn xgboost` and `openai-tts` by default.
 - Persists TTS preferences to `dataset_streamlit_shell/workspace/user_settings.json` across page changes and browser restarts.
 - Refuses to overwrite an existing shell unless `--force` is used.
 - Supports `--update` to refresh shell code while preserving runtime data.

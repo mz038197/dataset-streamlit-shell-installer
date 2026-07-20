@@ -164,7 +164,7 @@ def _render_inference_tab() -> None:
         selected_example=selected_example,
     )
     if image is not None:
-        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
+        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", width="stretch")
 
     st.caption("模型：DeepLabv3-ResNet50（COCO 預訓練）")
     alpha = st.slider(
@@ -200,7 +200,7 @@ def _render_segmentation_results(
     alpha: float,
 ) -> None:
     blended = blend_overlay(image, result.color_overlay, alpha=alpha)
-    st.image(blended, caption="語意分割疊圖", use_container_width=True)
+    st.image(blended, caption="語意分割疊圖", width="stretch")
 
     st.markdown("##### 類別圖例")
     foreground = _foreground_items(result.class_items)
@@ -214,7 +214,7 @@ def _render_segmentation_results(
     with table_col:
         st.dataframe(
             _coverage_dataframe(result.class_items),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
         st.caption(format_semantic_summary(result.class_items))
@@ -251,13 +251,13 @@ def _render_interpret_tab() -> None:
             st.warning("沒有前景類別可供解讀。")
         else:
             blended = blend_overlay(image, result.color_overlay, alpha=alpha)
-            st.image(blended, caption="疊加圖", use_container_width=True)
+            st.image(blended, caption="疊加圖", width="stretch")
             compare_cols = st.columns(2, gap="medium")
-            compare_cols[0].image(image, caption="原圖", use_container_width=True)
+            compare_cols[0].image(image, caption="原圖", width="stretch")
             compare_cols[1].image(
                 result.color_overlay,
                 caption="純色塊 mask",
-                use_container_width=True,
+                width="stretch",
             )
 
             options = [
@@ -278,7 +278,7 @@ def _render_interpret_tab() -> None:
             sub_cols[1].image(
                 highlighted,
                 caption=f"{selected_item.label} highlighted",
-                use_container_width=True,
+                width="stretch",
             )
             st.caption(
                 f"{selected_item.label} 覆蓋 {selected_item.pixel_count:,} 像素 "

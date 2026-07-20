@@ -16,7 +16,7 @@ PRESERVE_ON_UPDATE = frozenset(
     {"workspace", "sessions", "scripts", "uploads", "memory"}
 )
 PROJECT_DEPENDENCIES = (
-    "streamlit",
+    "streamlit>=1.50",
     "pandas",
     "matplotlib",
     "numpy",

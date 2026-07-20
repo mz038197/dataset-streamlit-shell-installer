@@ -52,7 +52,7 @@ def render_decision_tree_concepts_page() -> None:
         st.caption("在根節點（全部樣本）計算；數值愈大代表分裂後愈能降低不純度。")
         st.dataframe(
             ig_table.style.format({"資訊增益": "{:.4f}"}),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
         st.markdown("##### 訓練設定")
@@ -78,7 +78,7 @@ def render_decision_tree_concepts_page() -> None:
         train_clicked = st.button(
             "開始訓練",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="train_decision_tree",
         )
         if train_clicked:
@@ -163,11 +163,11 @@ def _render_tree_data_intro(
         pd.DataFrame(role_rows).style.format(
             {"最小值": "{:.4f}", "最大值": "{:.4f}", "平均值": "{:.4f}"}
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
     with st.expander("資料預覽", expanded=True):
-        st.dataframe(frame[features + [target]].head(10), use_container_width=True, hide_index=True)
+        st.dataframe(frame[features + [target]].head(10), width="stretch", hide_index=True)
     render_figures_in_streamlit(build_classification_data_figures(frame, features, target))
 
 

@@ -897,9 +897,9 @@ def _render_misuse_contrast(df: pd.DataFrame, roles: dict[str, list[str]]) -> No
     if datetimes:
         x_col = datetimes[0]
         frame = _ordered_grouped_frame(df, x_col, COUNT_ROWS, "count", top_n=12)
-        bad = _render_pie_chart(frame, x_col, f"❌ 誤用：把「{x_col}」當成圓餅比例")
+        bad = _render_pie_chart(frame, x_col, f"誤用：把「{x_col}」當成圓餅比例")
         good_frame = _line_frame(df, x_col, COUNT_ROWS, "count", None)
-        good = _render_line_chart(good_frame, x_col, None, f"✅ 建議：用折線看「{x_col}」趨勢")
+        good = _render_line_chart(good_frame, x_col, None, f"建議：用折線看「{x_col}」趨勢")
         col_a, col_b = st.columns(2)
         with col_a:
             if bad is not None:
@@ -923,8 +923,8 @@ def _render_misuse_contrast(df: pd.DataFrame, roles: dict[str, list[str]]) -> No
             .rename_axis(column)
             .reset_index(name="value")
         )
-        bad = _render_pie_chart(frame, column, f"❌ 誤用：把連續「{column}」切段當圓餅")
-        good = _render_histogram(df, column, 20, f"✅ 建議：用直方圖看「{column}」分布")
+        bad = _render_pie_chart(frame, column, f"誤用：把連續「{column}」切段當圓餅")
+        good = _render_histogram(df, column, 20, f"建議：用直方圖看「{column}」分布")
         col_a, col_b = st.columns(2)
         with col_a:
             if bad is not None:
@@ -1152,7 +1152,7 @@ def _render_quiz_preview(
     plt.close(fig)
     if table is not None:
         st.markdown("##### 對應數據表")
-        st.dataframe(table, use_container_width=True, hide_index=True)
+        st.dataframe(table, width="stretch", hide_index=True)
     _show_summary(summary)
 
     if chart_type in {"line", "histogram"}:
@@ -1418,7 +1418,7 @@ def run_page() -> None:
                         "用我的資料畫圖",
                         key=f"chart_quiz_draw_{item.id}",
                         disabled=not is_correct,
-                        use_container_width=True,
+                        width="stretch",
                     )
                     if draw_clicked and is_correct:
                         st.session_state[_quiz_drawn_key(item.id)] = True

@@ -196,7 +196,7 @@ def _render_inference_tab() -> None:
         selected_example=selected_example,
     )
     if image is not None:
-        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", use_container_width=True)
+        st.image(image, caption=f"{image.shape[1]}×{image.shape[0]}", width="stretch")
 
     if "cv_sam_prompts_input" not in st.session_state:
         st.session_state["cv_sam_prompts_input"] = (
@@ -256,15 +256,15 @@ def _render_promptable_results(image: np.ndarray, result: PromptableResult) -> N
         st.image(
             result.annotated_image,
             caption="提示式分割結果（mask + bbox）",
-            use_container_width=True,
+            width="stretch",
         )
     else:
-        st.image(image, caption="原圖（無分割結果）", use_container_width=True)
+        st.image(image, caption="原圖（無分割結果）", width="stretch")
         st.warning("未找到符合提示詞的區域。試著換提示詞或降低信心門檻。")
         return
 
     st.markdown("##### 匹配清單")
-    st.dataframe(_promptable_dataframe(items), use_container_width=True, hide_index=True)
+    st.dataframe(_promptable_dataframe(items), width="stretch", hide_index=True)
     st.caption(format_promptable_summary(items))
 
 
@@ -299,8 +299,8 @@ def _render_interpret_tab() -> None:
         )
         if filtered:
             annotated = draw_promptable_results(image, filtered, alpha=alpha)
-            st.image(annotated, caption="提示式分割結果", use_container_width=True)
-            st.image(image, caption="原圖", use_container_width=True)
+            st.image(annotated, caption="提示式分割結果", width="stretch")
+            st.image(image, caption="原圖", width="stretch")
 
             options = [
                 f"{item.rank}. {item.prompt} ({item.confidence:.0%})"
@@ -321,18 +321,18 @@ def _render_interpret_tab() -> None:
             sub_cols[1].image(
                 highlighted,
                 caption=f"{selected_item.prompt} highlighted",
-                use_container_width=True,
+                width="stretch",
             )
             sub_cols[2].image(
                 crop,
                 caption=f"{selected_item.prompt} bbox crop",
-                use_container_width=True,
+                width="stretch",
             )
             st.caption(
                 f"提示詞「{selected_item.prompt}」覆蓋 {selected_item.area:,} 像素 "
                 f"（{selected_item.coverage:.1%}）"
             )
-            st.dataframe(_promptable_dataframe(filtered), use_container_width=True, hide_index=True)
+            st.dataframe(_promptable_dataframe(filtered), width="stretch", hide_index=True)
         else:
             st.warning("此門檻下沒有匹配結果。請降低顯示門檻。")
         with st.expander("文字提示 vs 點擊提示", expanded=False):

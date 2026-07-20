@@ -51,7 +51,7 @@ def render_xgboost_page() -> None:
         train_clicked = st.button(
             "開始訓練",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="train_xgboost",
         )
         if train_clicked:
@@ -147,9 +147,9 @@ def _render_heart_data_intro(frame: pd.DataFrame) -> None:
             }
         )
     display = pd.DataFrame(role_rows)
-    st.dataframe(display, use_container_width=True, hide_index=True)
+    st.dataframe(display, width="stretch", hide_index=True)
     with st.expander("資料預覽", expanded=True):
-        st.dataframe(frame.head(10), use_container_width=True, hide_index=True)
+        st.dataframe(frame.head(10), width="stretch", hide_index=True)
     viz_features = [column for column in HEART_VIZ_FEATURES if column in features]
     if len(viz_features) >= 2:
         numeric_frame = frame[viz_features + [HEART_TARGET]].apply(pd.to_numeric, errors="coerce").dropna()
