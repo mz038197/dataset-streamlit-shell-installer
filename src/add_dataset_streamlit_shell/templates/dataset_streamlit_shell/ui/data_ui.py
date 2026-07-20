@@ -760,7 +760,7 @@ def _activate_agent(session_path: str) -> tuple[bool, str]:
     st.session_state["data_agent_factory_ref"] = factory_ref
     st.session_state["data_agent_connected"] = True
     _write_activation_marker()
-    return True, f"已連接 create_agent（{factory_ref}）。"
+    return True, "Agent 已連接。"
 
 
 def _restore_agent_if_possible(session_path: str) -> tuple[bool, str | None]:
@@ -890,9 +890,8 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
 
     restored, restore_error = _restore_agent_if_possible(current_session)
     connected = bool(st.session_state.get("data_agent_connected")) or restored
-    factory_ref = st.session_state.get("data_agent_factory_ref") or "create_agent"
     status_text = (
-        f":green[●] Agent：已連接（{factory_ref}）"
+        ":green[●] Agent：已連接"
         if connected
         else ":red[●] Agent：未啟用"
     )
@@ -913,16 +912,6 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         _render_tts_settings_ui(settings_error=settings_error)
         st.chat_input("請先啟用資料 Agent...", disabled=True, key="data_chat_not_activated")
         return
-
-    with st.expander("技術資訊", expanded=False):
-        st.caption(f"Agent factory：`{factory_ref}`")
-        st.caption(f"對話紀錄檔：`{current_session}`")
-        st.caption(f"語音設定檔：`{_display_path(USER_SETTINGS_PATH)}`")
-        st.caption("長期記憶：未接上（Gate A 不依賴 peas-agent-memory）")
-        if df is not None:
-            st.caption(f"Working 工作資料檔：`{_display_path(WORKING_DATASET_PATH)}`")
-        else:
-            st.caption("Working 工作資料檔：尚未建立")
 
     _render_tts_settings_ui(settings_error=settings_error)
 
