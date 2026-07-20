@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import resources
@@ -29,6 +29,8 @@ PROJECT_DEPENDENCIES = (
     "gdown",
     "openai-tts @ git+https://github.com/mz038197/openai-tts.git",
 )
+# requests 間接依賴；避開 PyPI yanked 的 3.4.8
+CHARSET_NORMALIZER_CONSTRAINT = "charset-normalizer>=3.4.9"
 DependencyRunner = Callable[[list[str]], None]
 
 
@@ -149,31 +151,92 @@ def _install_dependencies(
             check=True,
         )
         runtime_label = "peas-agent-runtime"
-    return (*PROJECT_DEPENDENCIES, runtime_label)
+    dependency_runner(
+        ["uv", "add", CHARSET_NORMALIZER_CONSTRAINT],
+        cwd=project_root,
+        check=True,
+    )
+    return (*PROJECT_DEPENDENCIES, runtime_label, CHARSET_NORMALIZER_CONSTRAINT)
+
+
+# 在專案 uv/.venv 內執行，避免安裝器全域 Python 找不到 peas-agent-runtime。
+_CONTRACT_CHECK_SCRIPT = """\
+import json
+import sys
+try:
+    from peas_agent_runtime import check_agent_factory
+except ImportError:
+    print(json.dumps({
+        "skip": True,
+        "reason": "peas-agent-runtime 尚未可 import；略過契約檢查。",
+    }))
+    raise SystemExit(0)
+factory_ref = sys.argv[1]
+result = check_agent_factory(factory_ref, project_root=".")
+print(json.dumps({
+    "skip": False,
+    "ok": result.ok,
+    "messages": list(result.messages),
+    "factory_ref": factory_ref,
+}))
+"""
+
+
+def _parse_contract_payload(stdout: str) -> dict | None:
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
 
 
 def _check_contract(
     project_root: Path,
 ) -> tuple[bool | None, tuple[str, ...], str | None]:
-    """盡力檢查 create_agent；runtime 未安裝時回傳 None（不阻一般安裝）。"""
-    root_text = str(project_root)
-    if root_text not in sys.path:
-        sys.path.insert(0, root_text)
-
-    try:
-        from peas_agent_runtime import check_agent_factory
-    except ImportError:
-        return None, ("peas-agent-runtime 尚未可 import；略過契約檢查。",), None
-
+    """盡力檢查 create_agent；專案環境無 runtime 時回傳 None（不阻一般安裝）。"""
     for factory_ref in ("main_shell:create_agent", "main:create_agent"):
         module_name = factory_ref.split(":", 1)[0]
         if not (project_root / f"{module_name}.py").exists():
             continue
-        result = check_agent_factory(factory_ref, project_root=project_root)
-        hard = tuple(m for m in result.messages if not m.startswith("提示："))
-        if result.ok:
-            return True, result.messages + (f"契約通過：{factory_ref}",), factory_ref
-        return False, hard or result.messages, factory_ref
+        try:
+            proc = subprocess.run(
+                [
+                    "uv",
+                    "run",
+                    "python",
+                    "-c",
+                    _CONTRACT_CHECK_SCRIPT,
+                    factory_ref,
+                ],
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError:
+            return None, ("無法執行 uv run；略過契約檢查。",), None
+
+        payload = _parse_contract_payload(proc.stdout or "")
+        if payload is None:
+            return None, ("peas-agent-runtime 尚未可 import；略過契約檢查。",), None
+        if payload.get("skip"):
+            reason = payload.get("reason") or (
+                "peas-agent-runtime 尚未可 import；略過契約檢查。"
+            )
+            return None, (str(reason),), None
+
+        messages = tuple(str(m) for m in payload.get("messages", ()))
+        ok = bool(payload.get("ok"))
+        hard = tuple(m for m in messages if not m.startswith("提示："))
+        if ok:
+            return True, messages + (f"契約通過：{factory_ref}",), factory_ref
+        return False, hard or messages, factory_ref
 
     return (
         False,

@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from add_dataset_streamlit_shell.installer import PROJECT_DEPENDENCIES, install_shell
+from add_dataset_streamlit_shell import installer
+from add_dataset_streamlit_shell.installer import (
+    CHARSET_NORMALIZER_CONSTRAINT,
+    PROJECT_DEPENDENCIES,
+    install_shell,
+)
 
 
 def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> None:
@@ -113,7 +120,7 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
 
     result = install_shell(tmp_path, dependency_runner=fake_runner)
 
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert calls[0] == (
         ["uv", "add", "--upgrade-package", "openai-tts", *PROJECT_DEPENDENCIES],
         tmp_path.resolve(),
@@ -122,5 +129,58 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
     assert calls[1][0][:2] == ["uv", "add"]
     assert "peas-agent-runtime" in " ".join(str(x) for x in calls[1][0])
     assert calls[1][1:] == (tmp_path.resolve(), True)
-    assert PROJECT_DEPENDENCIES == result.installed_dependencies[:-1]
-    assert "peas-agent-runtime" in result.installed_dependencies[-1]
+    assert calls[2] == (
+        ["uv", "add", CHARSET_NORMALIZER_CONSTRAINT],
+        tmp_path.resolve(),
+        True,
+    )
+    assert PROJECT_DEPENDENCIES == result.installed_dependencies[:-2]
+    assert "peas-agent-runtime" in result.installed_dependencies[-2]
+    assert result.installed_dependencies[-1] == CHARSET_NORMALIZER_CONSTRAINT
+
+
+def test_check_contract_uses_uv_run_not_global_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "main_shell.py").write_text(
+        "def create_agent(session_path=None, host_context=None):\n"
+        "    class A:\n"
+        "        def chat(self, text, *, image_path=None, on_token=None):\n"
+        "            return text\n"
+        "    return A()\n",
+        encoding="utf-8",
+    )
+    uv_calls: list[list[str]] = []
+
+    def fake_run(
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        capture_output: bool = False,
+        text: bool = False,
+        check: bool = False,
+        **_: object,
+    ) -> SimpleNamespace:
+        uv_calls.append(list(args))
+        assert args[:3] == ["uv", "run", "python"]
+        assert cwd == tmp_path.resolve()
+        assert args[-1] == "main_shell:create_agent"
+        payload = json.dumps(
+            {
+                "skip": False,
+                "ok": True,
+                "messages": ["提示：測試略過深檢"],
+                "factory_ref": "main_shell:create_agent",
+            }
+        )
+        return SimpleNamespace(returncode=0, stdout=payload + "\n", stderr="")
+
+    monkeypatch.setattr(installer.subprocess, "run", fake_run)
+
+    result = install_shell(tmp_path, install_dependencies=False)
+
+    assert result.contract_ok is True
+    assert result.factory_ref == "main_shell:create_agent"
+    assert any("契約通過：main_shell:create_agent" in m for m in result.contract_messages)
+    assert uv_calls
+    assert "peas-agent-runtime" not in " ".join(uv_calls[0][:3])
