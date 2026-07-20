@@ -87,7 +87,7 @@ pages = {
     "資料工作區": [
         st.Page(overview, title="總覽", default=True),
         st.Page(str(SHELL_ROOT / "pages" / "1_Database.py"), title="資料上傳與預覽"),
-        st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="通用圖表"),
+        st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="圖表探索"),
     ],
     "AI 協作資料整理": [
         st.Page(str(SHELL_ROOT / "pages" / "3_Field_Quality.py"), title="欄位與資料概覽"),
