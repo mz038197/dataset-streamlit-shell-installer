@@ -491,6 +491,11 @@ def dataset_base_context() -> str:
     ready = _display_path(READY_DATASET_PATH)
     cleaning_log = _display_path(CLEANING_LOG_PATH)
     scripts = _display_path(SHELL_ROOT / "scripts")
+    from dataset_streamlit_shell.ui.nn_form_state import nn_host_context_fragment
+
+    nn_form = _display_path(WORKSPACE_DIR / "nn_form.json")
+    nn_request = _display_path(WORKSPACE_DIR / "nn_train_request.json")
+    nn_last = _display_path(WORKSPACE_DIR / "nn_last_run.json")
     return (
         "目前為 Dataset Streamlit Shell。"
         f"Original 原始資料路徑：{source}，只作為重置來源，請勿覆蓋。"
@@ -508,6 +513,11 @@ def dataset_base_context() -> str:
         '{"created_at":"2026-05-29T12:05:41","actor":"agent",'
         '"action":"fill_missing_age","columns":["Age"],"rows":177,'
         '"note":"以中位數補齊 Age 欄位的空值。"}'
+        + nn_host_context_fragment(
+            form_path=nn_form,
+            request_path=nn_request,
+            last_run_path=nn_last,
+        )
     )
 
 
@@ -764,6 +774,39 @@ def _restore_agent_if_possible(session_path: str) -> tuple[bool, str | None]:
     return False, message
 
 
+def invoke_data_agent(
+    user_text: str,
+    *,
+    extra_context: str = "",
+    display_user_text: str | None = None,
+) -> str:
+    """程式呼叫 Agent 一輪，並寫入右側 chat 歷史。失敗時回傳錯誤字串。"""
+    current_session = st.session_state.get("session_path")
+    if not current_session or not st.session_state.get("data_agent_connected"):
+        return "Agent 尚未啟用，無法繼續實驗決策。"
+
+    if "data_chat_history" not in st.session_state:
+        st.session_state["data_chat_history"] = []
+
+    shown = display_user_text if display_user_text is not None else user_text
+    st.session_state["data_chat_history"].append(("user", shown))
+
+    df = load_working_dataset()
+    snapshot = dataset_page_snapshot(df, extra_context)
+    prompt = format_user_turn(user_text, extra_context=snapshot)
+
+    try:
+        agent = _get_agent_for_session(current_session)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            final_text = agent.chat(prompt, image_path=None, on_token=lambda _token: None)
+        answer = (final_text or "").strip() or "（Agent 未回傳文字）"
+    except Exception as exc:  # keep classroom UI alive
+        answer = f"Agent 執行時發生錯誤：`{exc}`"
+
+    st.session_state["data_chat_history"].append(("assistant", answer))
+    return answer
+
+
 def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
     st.markdown('<div class="data-agent-title-spacer"></div>', unsafe_allow_html=True)
     st.markdown(
@@ -971,3 +1014,5 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
                         stream_tts_play(answer, tts_settings)
                     except Exception as exc:
                         st.warning(f"語音播放發生錯誤，文字回答已保留：`{exc}`")
+                # 供 NN 等頁在 chat 後偵測共享檔變更（例如訓練請求）
+                st.session_state["data_chat_just_replied"] = True

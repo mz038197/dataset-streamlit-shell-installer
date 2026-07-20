@@ -7,7 +7,44 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from dataset_streamlit_shell.ui.data_ui import SHELL_ROOT, render_chat_panel, render_dataset_metrics
+from dataset_streamlit_shell.ui.data_ui import (
+    SHELL_ROOT,
+    WORKSPACE_DIR,
+    _display_path,
+    invoke_data_agent,
+    render_chat_panel,
+    render_dataset_metrics,
+)
+from dataset_streamlit_shell.ui.nn_form_state import (
+    AGENT_EPOCHS_MAX,
+    DEFAULT_MAX_RUNS,
+    FORM_MTIME_KEY,
+    LOOP_STATUS_IDLE,
+    LOOP_STATUS_NEED_AGENT,
+    LOOP_STATUS_NEED_TRAIN,
+    MAX_RUNS_HARD_CAP,
+    apply_state_to_session,
+    build_nn_page_agent_context,
+    clamp_agent_epochs,
+    clamp_max_runs,
+    clear_train_request,
+    consume_train_request,
+    format_last_run_summary,
+    form_file_mtime,
+    get_loop_state,
+    load_last_run,
+    load_nn_form_state,
+    nn_form_path,
+    nn_last_run_path,
+    nn_train_request_path,
+    remaining_runs,
+    reset_loop_budget,
+    save_nn_form_state,
+    session_to_state,
+    set_loop_state,
+    specs_to_state,
+    write_last_run,
+)
 from dataset_streamlit_shell.ml.coffee_nn import (
     ACTIVATION_CHOICES,
     AXIS_LABELS,
@@ -110,22 +147,94 @@ def _render_activation_tab() -> None:
                 st.caption(note)
 
 
-def _sanitize_feature_session() -> None:
-    stored = st.session_state.get("nn_features")
-    if not isinstance(stored, list):
-        return
-    valid = [feature for feature in stored if feature in FEATURE_OPTIONS]
-    if valid != stored:
-        st.session_state["nn_features"] = valid or list(FEATURE_OPTIONS)
+def _sync_form_from_disk_if_newer() -> dict:
+    """若 Agent 改過 nn_form.json，在 widget 建立前灌回 session_state。"""
+    WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    state = load_nn_form_state(WORKSPACE_DIR)
+    mtime = form_file_mtime(WORKSPACE_DIR)
+    applied = float(st.session_state.get(FORM_MTIME_KEY, -1.0))
+    if "nn_features" not in st.session_state or mtime > applied:
+        apply_state_to_session(st.session_state, state)
+        st.session_state[FORM_MTIME_KEY] = mtime
+    return state
+
+
+def _persist_form_from_session() -> dict:
+    state = session_to_state(st.session_state)
+    save_nn_form_state(WORKSPACE_DIR, state)
+    st.session_state[FORM_MTIME_KEY] = form_file_mtime(WORKSPACE_DIR)
+    return state
+
+
+def _nn_extra_context(form_state: dict, row_count: int) -> str:
+    loop = get_loop_state(st.session_state)
+    last_run = load_last_run(WORKSPACE_DIR)
+    return build_nn_page_agent_context(
+        form_state=form_state,
+        row_count=row_count,
+        loop=loop,
+        last_run=last_run,
+        form_path=_display_path(nn_form_path(WORKSPACE_DIR)),
+        request_path=_display_path(nn_train_request_path(WORKSPACE_DIR)),
+        last_run_path=_display_path(nn_last_run_path(WORKSPACE_DIR)),
+    )
+
+
+def _render_agent_experiment_controls() -> None:
+    loop = get_loop_state(st.session_state)
+    st.markdown("##### Agent 實驗")
+    st.caption(
+        "請在右側 chat 請 Agent 設計架構並寫入訓練請求；"
+        "請求後左欄會播放與手動相同的訓練動畫。次數上限可調（1～5）。"
+    )
+    if "nn_agent_max_runs" not in st.session_state:
+        st.session_state["nn_agent_max_runs"] = clamp_max_runs(
+            loop.get("max_runs", DEFAULT_MAX_RUNS)
+        )
+    max_runs = st.number_input(
+        "Agent 實驗最多幾輪",
+        min_value=1,
+        max_value=MAX_RUNS_HARD_CAP,
+        step=1,
+        key="nn_agent_max_runs",
+    )
+    set_loop_state(st.session_state, max_runs=int(max_runs))
+    loop = get_loop_state(st.session_state)
+    if loop["run_index"] >= loop["max_runs"] and loop["status"] != LOOP_STATUS_IDLE:
+        set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
+
+    progress_col, reset_col = st.columns([3, 1])
+    progress_col.info(
+        f"實驗進度：已完成 {loop['run_index']}／{loop['max_runs']} 輪"
+        f"（剩餘 {remaining_runs(loop)}）· 狀態 `{loop['status']}`"
+    )
+    if reset_col.button("重置次數", key="nn_reset_agent_budget", help="清除 Agent 實驗進度，不改架構"):
+        reset_loop_budget(st.session_state)
+        clear_train_request(WORKSPACE_DIR)
+        st.rerun()
+
+    last_run = load_last_run(WORKSPACE_DIR)
+    st.caption(f"Agent 最近一次實驗：{format_last_run_summary(last_run)}")
+
+    st.markdown("##### 建議問 Agent")
+    for question in (
+        "請設計一個不過大的二元分類網路，寫回左欄架構，並寫入訓練請求開始第一輪動畫訓練。",
+        "請先說明你選的層數與 activation 理由，再更新 nn_form.json 並請求訓練。",
+        "依最近一次訓練結果調整 learning rate 或隱藏層寬度，解釋取捨後再請求下一輪訓練。",
+    ):
+        st.markdown(f"- `{question}`")
 
 
 def _render_training_tab(frame: pd.DataFrame) -> None:
     context_key = CONTEXT_KEY
+    _sync_form_from_disk_if_newer()
+    loop = get_loop_state(st.session_state)
     main, side = st.columns([5, 3], gap="large")
     with main:
         st.title("類神經網路")
         st.caption(
             "使用內建雙特徵二元分類資料，以 TensorFlow Sequential 建立並訓練神經網路。"
+            "也可請右側 Agent 改左欄架構並寫入訓練請求，由系統播放訓練動畫。"
         )
         st.success("目前使用本頁內建教學資料。")
         render_dataset_metrics(frame)
@@ -138,10 +247,19 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
             )
         )
 
+        _render_agent_experiment_controls()
+        # 控制項可能已調整上限或把超出預算的迴圈停回 idle。
+        loop = get_loop_state(st.session_state)
+
         if st.button("套用 Lab02 預設", key="nn_apply_lab02"):
             _apply_lab02_defaults()
+            st.rerun()
 
         spec, compile_spec, train_config = _render_network_form(frame)
+        form_state = _persist_form_from_session()
+        extra_context = _nn_extra_context(form_state, len(frame))
+        st.session_state[context_key] = extra_context
+
         st.markdown("##### 模型程式碼預覽")
         st.code(format_model_code(spec, compile_spec), language="python")
 
@@ -156,7 +274,15 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
             for message in validation_errors:
                 st.error(message)
 
+        agent_train_config = TrainConfig(epochs=clamp_agent_epochs(train_config.epochs))
+        if agent_train_config.epochs != train_config.epochs and loop["status"] == LOOP_STATUS_NEED_TRAIN:
+            st.caption(
+                f"Agent 本輪 epochs 已 clamp 為 {agent_train_config.epochs}"
+                f"（上限 {AGENT_EPOCHS_MAX}）。"
+            )
+
         signature = _training_signature(spec, compile_spec, train_config, len(frame))
+        agent_signature = _training_signature(spec, compile_spec, agent_train_config, len(frame))
         train_disabled = bool(validation_errors)
         train_clicked = st.button(
             "開始訓練",
@@ -165,7 +291,45 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
             key="train_neural_network",
             disabled=train_disabled,
         )
-        if train_clicked:
+
+        if loop["status"] == LOOP_STATUS_NEED_TRAIN:
+            if validation_errors:
+                st.error("架構驗證失敗，已取消本輪 Agent 訓練。請修正後再請 Agent 寫入訓練請求。")
+                set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
+            elif not _ensure_tensorflow_available():
+                set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
+            else:
+                with st.status("Agent 實驗訓練中…", expanded=True):
+                    ok = _run_training(
+                        frame,
+                        spec=spec,
+                        compile_spec=compile_spec,
+                        train_config=agent_train_config,
+                        signature=agent_signature,
+                        context_key=context_key,
+                    )
+                if ok:
+                    cached = st.session_state.get(RESULT_KEY, {})
+                    artifacts = cached.get("artifacts")
+                    if artifacts is not None:
+                        new_index = int(loop["run_index"]) + 1
+                        write_last_run(
+                            WORKSPACE_DIR,
+                            form_state=form_state,
+                            train_result=artifacts.result,
+                            run_index=new_index,
+                            epochs_used=agent_train_config.epochs,
+                            note="Agent 實驗動畫訓練",
+                        )
+                        set_loop_state(
+                            st.session_state,
+                            run_index=new_index,
+                            status=LOOP_STATUS_NEED_AGENT,
+                        )
+                        st.rerun()
+                else:
+                    set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
+        elif train_clicked:
             if _ensure_tensorflow_available():
                 with st.status("訓練中…", expanded=True):
                     _run_training(
@@ -176,66 +340,111 @@ def _render_training_tab(frame: pd.DataFrame) -> None:
                         signature=signature,
                         context_key=context_key,
                     )
-        elif RESULT_KEY in st.session_state and st.session_state[RESULT_KEY]["signature"] == signature:
+        elif RESULT_KEY in st.session_state and st.session_state[RESULT_KEY]["signature"] in {
+            signature,
+            agent_signature,
+        }:
             _render_training_results(st.session_state[RESULT_KEY], frame=frame, spec=spec)
         else:
             st.info(
-                "設定 epochs 與 learning rate 後，按下「開始訓練」觀察 loss 與決策區域的演進。"
+                "可按「開始訓練」自行觀察動畫，或請右側 Agent 寫入訓練請求啟動實驗迴圈。"
             )
 
     with side:
-        render_chat_panel(page_name="類神經網路")
+        form_state = session_to_state(st.session_state)
+        extra_context = _nn_extra_context(form_state, len(frame))
+        loop = get_loop_state(st.session_state)
+
+        if loop["status"] == LOOP_STATUS_NEED_AGENT:
+            _run_agent_decision_turn(extra_context=extra_context, row_count=len(frame))
+            if consume_train_request(WORKSPACE_DIR, st.session_state):
+                st.rerun()
+            set_loop_state(st.session_state, status=LOOP_STATUS_IDLE)
+            # 下一輪會在 widget 建立前同步 Agent 可能更新的 form。
+            st.rerun()
+
+        render_chat_panel(extra_context=extra_context, page_name="類神經網路")
+        if st.session_state.pop("data_chat_just_replied", False):
+            consume_train_request(WORKSPACE_DIR, st.session_state)
+            # 不可在本輪 widget 建立後寫回其 session_state；交由下一輪開頭同步。
+            st.rerun()
+
+
+def _run_agent_decision_turn(*, extra_context: str, row_count: int) -> None:
+    loop = get_loop_state(st.session_state)
+    last_run = load_last_run(WORKSPACE_DIR)
+    summary = format_last_run_summary(last_run)
+    remaining = remaining_runs(loop)
+    user_text = (
+        "【系統｜Agent 實驗決策】"
+        f"剛剛完成第 {loop['run_index']}／{loop['max_runs']} 輪左欄動畫訓練（資料 {row_count} 筆）。"
+        f"結果：{summary}。剩餘可實驗 {remaining} 輪。"
+        "請用繁體中文解釋結果與取捨；若要繼續，先更新 "
+        f"{_display_path(nn_form_path(WORKSPACE_DIR))}，再寫入 "
+        f'{_display_path(nn_train_request_path(WORKSPACE_DIR))} 為 {{"requested": true}}；'
+        "若停止實驗，請總結理由且不要寫訓練請求。"
+        "不要改高 max_runs，不要清除預算。"
+    )
+    with st.spinner("Agent 正在依訓練結果決策…"):
+        answer = invoke_data_agent(
+            user_text,
+            extra_context=extra_context,
+            display_user_text="（系統）請依剛剛的訓練結果決定是否調整參數並繼續實驗。",
+        )
+    st.info(answer[:500] + ("…" if len(answer) > 500 else ""))
 
 
 def _apply_lab02_defaults() -> None:
-    spec = lab02_default_network_spec()
-    compile_spec = lab02_default_compile_spec()
-    st.session_state["nn_features"] = list(spec.input_features)
-    st.session_state["nn_hidden_count"] = len(spec.hidden_layers)
-    for index, layer in enumerate(spec.hidden_layers, start=1):
-        st.session_state[f"nn_hidden_units_{index}"] = layer.units
-        st.session_state[f"nn_hidden_activation_{index}"] = layer.activation
-    st.session_state["nn_output_units"] = spec.output_units
-    st.session_state["nn_output_activation"] = spec.output_activation
-    st.session_state["nn_use_norm_layer"] = spec.use_normalization_layer
-    st.session_state["nn_loss_choice"] = spec.loss_choice
-    st.session_state["nn_optimizer"] = compile_spec.optimizer_name
-    st.session_state["nn_learning_rate"] = compile_spec.learning_rate
-    st.session_state["nn_epochs"] = 100
+    state = specs_to_state(
+        lab02_default_network_spec(),
+        lab02_default_compile_spec(),
+        TrainConfig(epochs=100),
+    )
+    save_nn_form_state(WORKSPACE_DIR, state)
+    apply_state_to_session(st.session_state, state)
+    st.session_state[FORM_MTIME_KEY] = form_file_mtime(WORKSPACE_DIR)
 
 
 def _render_network_form(frame: pd.DataFrame) -> tuple[NetworkSpec, CompileSpec, TrainConfig]:
+    del frame  # 表單不直接依賴 frame；驗證在外層
     st.markdown("##### 輸入與架構")
-    _sanitize_feature_session()
+    stored = st.session_state.get("nn_features")
+    if isinstance(stored, list):
+        valid = [feature for feature in stored if feature in FEATURE_OPTIONS]
+        if valid != stored:
+            st.session_state["nn_features"] = valid or list(FEATURE_OPTIONS)
+
     selected_features = st.multiselect(
         "輸入特徵（1～2 個）",
         list(FEATURE_OPTIONS),
-        default=list(FEATURE_OPTIONS),
         key="nn_features",
     )
     hidden_count = st.number_input(
         "隱藏層數",
         min_value=0,
         max_value=MAX_HIDDEN_LAYERS,
-        value=1,
         step=1,
         key="nn_hidden_count",
     )
     hidden_layers: list[HiddenLayerSpec] = []
     for index in range(1, int(hidden_count) + 1):
+        if f"nn_hidden_units_{index}" not in st.session_state:
+            st.session_state[f"nn_hidden_units_{index}"] = 3 if index == 1 else 4
+        if f"nn_hidden_activation_{index}" not in st.session_state:
+            st.session_state[f"nn_hidden_activation_{index}"] = (
+                "sigmoid" if index == 1 else "relu"
+            )
         col_units, col_act = st.columns(2)
         units = col_units.number_input(
             f"第 {index} 層神經元數",
             min_value=1,
             max_value=MAX_UNITS_PER_LAYER,
-            value=3 if index == 1 else 4,
             step=1,
             key=f"nn_hidden_units_{index}",
         )
         activation = col_act.selectbox(
             f"第 {index} 層活化函數",
             ACTIVATION_CHOICES,
-            index=1 if index == 1 else 0,
             key=f"nn_hidden_activation_{index}",
         )
         hidden_layers.append(HiddenLayerSpec(int(units), activation))
@@ -245,33 +454,31 @@ def _render_network_form(frame: pd.DataFrame) -> tuple[NetworkSpec, CompileSpec,
         "輸出神經元數",
         min_value=1,
         max_value=10,
-        value=1,
         step=1,
         key="nn_output_units",
     )
     output_activation_options = _output_activation_options(int(output_units))
-    default_out_act = "sigmoid" if int(output_units) == 1 else "softmax"
-    current_out_act = st.session_state.get("nn_output_activation", default_out_act)
+    current_out_act = st.session_state.get("nn_output_activation", "sigmoid")
     if current_out_act not in output_activation_options:
-        current_out_act = default_out_act
+        st.session_state["nn_output_activation"] = (
+            "sigmoid" if int(output_units) == 1 else "softmax"
+        )
     output_activation = out_col2.selectbox(
         "輸出活化函數",
         output_activation_options,
-        index=output_activation_options.index(current_out_act),
         key="nn_output_activation",
     )
 
     with st.expander("進階：正規化與 loss", expanded=False):
         use_norm_layer = st.checkbox(
             "在 Sequential 內加入 Normalization 層（與訓練前 adapt 二擇一）",
-            value=False,
             key="nn_use_norm_layer",
         )
         if use_norm_layer:
             st.info("已啟用層內 Normalization；訓練前不另做 adapt+transform。")
         else:
             st.caption("預設：訓練前以 Normalization.adapt 正規化特徵，不放入 Sequential。")
-        loss_choice = st.selectbox("loss", LOSS_CHOICES, key="nn_loss_choice")
+        st.selectbox("loss", LOSS_CHOICES, key="nn_loss_choice")
     use_norm_layer = bool(st.session_state.get("nn_use_norm_layer", False))
     loss_choice = st.session_state.get("nn_loss_choice", LOSS_AUTO)
 
@@ -282,11 +489,10 @@ def _render_network_form(frame: pd.DataFrame) -> tuple[NetworkSpec, CompileSpec,
         "learning_rate",
         min_value=0.0001,
         max_value=1.0,
-        value=0.01,
         format="%.4f",
         key="nn_learning_rate",
     )
-    epochs = c3.number_input("epochs", min_value=1, max_value=500, value=100, step=1, key="nn_epochs")
+    epochs = c3.number_input("epochs", min_value=1, max_value=500, step=1, key="nn_epochs")
 
     spec = NetworkSpec(
         input_features=tuple(selected_features),
@@ -455,7 +661,7 @@ def _run_training(
     train_config: TrainConfig,
     signature: tuple,
     context_key: str,
-) -> None:
+) -> bool:
     features = list(spec.input_features)
     x = frame[features].to_numpy(dtype=np.float32)
     y = frame[TARGET_COLUMN].to_numpy(dtype=np.float32)
@@ -526,7 +732,7 @@ def _run_training(
         )
     except Exception as exc:
         st.error(f"訓練失敗：{exc}")
-        return
+        return False
 
     st.session_state[RESULT_KEY] = {
         "signature": signature,
@@ -547,6 +753,7 @@ def _run_training(
         spec=spec,
         features=features,
     )
+    return True
 
 
 def _render_training_metrics(
