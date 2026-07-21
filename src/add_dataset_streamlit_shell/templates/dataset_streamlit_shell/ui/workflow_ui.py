@@ -19,6 +19,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     _display_path,
     append_cleaning_log,
     create_ready_dataset,
+    invoke_data_agent,
     load_cleaning_log,
     load_ready_dataset,
     load_working_dataset,
@@ -26,6 +27,31 @@ from dataset_streamlit_shell.ui.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
     reset_working_dataset_from_source,
+)
+from dataset_streamlit_shell.ui.simple_regression_quiz import (
+    ALPHA_OPTIONS,
+    PLEASE_SELECT,
+    QID_ALPHA,
+    QID_SLOPE,
+    SESSION_ALPHA,
+    SESSION_FOCUS,
+    SESSION_PAIR,
+    SESSION_SLOPE,
+    SLOPE_OPTIONS,
+    both_quiz_correct,
+    build_quiz_agent_appendix,
+    build_regression_frame_hint_summary,
+    can_send_hint,
+    expected_slope_direction,
+    focus_prompt_lines,
+    hint_display_text,
+    hint_user_text,
+    is_alpha_correct,
+    is_slope_correct,
+    needs_quiz_reset,
+    quiz_choice_status,
+    quiz_identity,
+    slope_label_from_weight,
 )
 from dataset_streamlit_shell.ml.regression import (
     GradientDescentStep,
@@ -1357,6 +1383,17 @@ def render_simple_linear_regression_page() -> None:
         st.latex(r"Y = WX + B")
         _render_cost_formula()
 
+        expected_slope = expected_slope_direction(working, feature, target)
+        quiz_unlocked = _render_simple_regression_pretrain_quiz(
+            working,
+            feature=feature,
+            target=target,
+            learning_rate=float(learning_rate),
+            expected_slope=expected_slope,
+            source_label=source_label,
+            epochs=int(epochs),
+        )
+
         result_key = "simple_regression_last_artifact"
         signature = (source_label, feature, target, float(learning_rate), int(epochs), len(working))
         context_key = "單變量線性回歸_agent_context"
@@ -1365,10 +1402,15 @@ def render_simple_linear_regression_page() -> None:
             type="primary",
             width="stretch",
             key="train_simple_regression",
+            disabled=not quiz_unlocked,
         )
+        if not quiz_unlocked:
+            st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+
         artifact: LinearModelArtifact | None = None
         prediction: pd.Series | None = None
-        if train_clicked:
+        slope_guess = st.session_state.get(SESSION_SLOPE, PLEASE_SELECT)
+        if train_clicked and quiz_unlocked:
             steps = gradient_descent_steps(
                 working[[feature]],
                 working[target],
@@ -1406,24 +1448,67 @@ def render_simple_linear_regression_page() -> None:
                 data_source=source_label,
             )
             st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+            actual_dir = slope_label_from_weight(
+                float(final_step.weights[0]),
+                x_std=float(working[feature].astype(float).std(ddof=0)),
+                y_std=float(working[target].astype(float).std(ddof=0)),
+            )
+            st.caption(
+                f"你猜的斜率方向：{slope_guess}；"
+                f"實際 w≈{float(final_step.weights[0]):.4g}（{actual_dir}）。"
+            )
         else:
             stored = st.session_state.get(result_key)
             if isinstance(stored, dict) and stored.get("signature") == signature:
                 artifact = stored["artifact"]
                 prediction = predict_from_artifact(artifact, working[artifact.features])
                 st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+                if artifact is not None and slope_guess in SLOPE_OPTIONS:
+                    actual_dir = slope_label_from_weight(
+                        float(artifact.weights[0]),
+                        x_std=float(working[feature].astype(float).std(ddof=0)),
+                        y_std=float(working[target].astype(float).std(ddof=0)),
+                    )
+                    st.caption(
+                        f"你猜的斜率方向：{slope_guess}；"
+                        f"實際 w≈{float(artifact.weights[0]):.4g}（{actual_dir}）。"
+                    )
+            elif quiz_unlocked:
+                st.info("兩題已過關。按下「開始訓練」觀察回歸線與 Cost 的演進。")
             else:
-                st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察回歸線與 Cost 的演進。")
+                st.info("先完成上方兩題訓練前預測，再開始訓練。")
 
-        st.session_state[context_key] = build_regression_agent_context(
-            page_name="單變量線性回歸",
-            data_source=source_label,
-            features=[feature],
+        slope_choice = str(st.session_state.get(SESSION_SLOPE, PLEASE_SELECT))
+        alpha_choice = str(st.session_state.get(SESSION_ALPHA, PLEASE_SELECT))
+        quiz_note = build_quiz_agent_appendix(
+            slope_status=quiz_choice_status(
+                slope_choice,
+                correct=is_slope_correct(slope_choice, expected_slope),
+            ),
+            alpha_status=quiz_choice_status(
+                alpha_choice,
+                correct=is_alpha_correct(alpha_choice),
+            ),
+            focus_qid=st.session_state.get(SESSION_FOCUS),
+            feature=feature,
             target=target,
             learning_rate=float(learning_rate),
-            epochs=int(epochs),
-            row_count=len(working),
-            artifact=artifact,
+            unlocked=quiz_unlocked,
+        )
+        st.session_state[context_key] = (
+            build_regression_agent_context(
+                page_name="單變量線性回歸",
+                data_source=source_label,
+                features=[feature],
+                target=target,
+                learning_rate=float(learning_rate),
+                epochs=int(epochs),
+                row_count=len(working),
+                artifact=artifact,
+                prompt_train=quiz_unlocked,
+            )
+            + "\n"
+            + quiz_note
         )
         if artifact is not None and prediction is not None:
             _render_training_results(artifact, working, target, prediction)
@@ -1436,13 +1521,8 @@ def render_simple_linear_regression_page() -> None:
             page_key="simple_regression",
             trained_artifact=artifact,
         )
-        _render_regression_prompts(
-            [
-                "請解釋這條回歸線代表什麼，並用 w 和 b 說明模型公式。",
-                "請用 Cost J 說明這個模型目前預測得好不好。",
-                "請找出誤差最大的幾筆資料，推測可能原因。",
-            ]
-        )
+        focus = st.session_state.get(SESSION_FOCUS)
+        _render_regression_prompts(focus_prompt_lines(focus, unlocked=quiz_unlocked))
 
     _regression_page_shell(
         "單變量線性回歸",
@@ -1638,6 +1718,235 @@ def render_multiple_linear_regression_page() -> None:
         HOUSE_PRICES_PATH,
         body,
     )
+
+
+def _reset_simple_regression_quiz_answers() -> None:
+    st.session_state[SESSION_SLOPE] = PLEASE_SELECT
+    st.session_state[SESSION_ALPHA] = PLEASE_SELECT
+    st.session_state[SESSION_FOCUS] = QID_SLOPE
+
+
+def _simple_reg_quiz_extra_context(
+    frame: pd.DataFrame,
+    *,
+    feature: str,
+    target: str,
+    learning_rate: float,
+    epochs: int,
+    source_label: str,
+    expected_slope: str,
+) -> str:
+    slope_choice = str(st.session_state.get(SESSION_SLOPE, PLEASE_SELECT))
+    alpha_choice = str(st.session_state.get(SESSION_ALPHA, PLEASE_SELECT))
+    unlocked = both_quiz_correct(
+        slope_choice,
+        alpha_choice,
+        expected_slope=expected_slope,
+    )
+    appendix = build_quiz_agent_appendix(
+        slope_status=quiz_choice_status(
+            slope_choice,
+            correct=is_slope_correct(slope_choice, expected_slope),
+        ),
+        alpha_status=quiz_choice_status(
+            alpha_choice,
+            correct=is_alpha_correct(alpha_choice),
+        ),
+        focus_qid=st.session_state.get(SESSION_FOCUS),
+        feature=feature,
+        target=target,
+        learning_rate=learning_rate,
+        unlocked=unlocked,
+    )
+    return (
+        build_regression_agent_context(
+            page_name="單變量線性回歸",
+            data_source=source_label,
+            features=[feature],
+            target=target,
+            learning_rate=learning_rate,
+            epochs=epochs,
+            row_count=len(frame),
+            artifact=None,
+            prompt_train=unlocked,
+        )
+        + "\n"
+        + build_regression_frame_hint_summary(frame, feature, target)
+        + "\n"
+        + appendix
+    )
+
+
+def _send_simple_reg_agent_hint(
+    qid: str,
+    frame: pd.DataFrame,
+    *,
+    feature: str,
+    target: str,
+    learning_rate: float,
+    epochs: int,
+    source_label: str,
+    expected_slope: str,
+) -> None:
+    ts_key = f"simple_reg_hint_ts_{qid}"
+    now = time.time()
+    if not can_send_hint(st.session_state.get(ts_key), now):
+        st.caption("提示發送中，請稍候再按。")
+        return
+    if not st.session_state.get("data_agent_connected"):
+        st.warning("請先在右側啟用資料 Agent，再按「Agent 提示」。")
+        return
+    st.session_state[SESSION_FOCUS] = qid
+    st.session_state[ts_key] = now
+    extra = _simple_reg_quiz_extra_context(
+        frame,
+        feature=feature,
+        target=target,
+        learning_rate=learning_rate,
+        epochs=epochs,
+        source_label=source_label,
+        expected_slope=expected_slope,
+    )
+    with st.spinner("正在詢問 Agent…"):
+        invoke_data_agent(
+            hint_user_text(
+                qid,
+                feature=feature,
+                target=target,
+                learning_rate=learning_rate,
+            ),
+            extra_context=extra,
+            display_user_text=hint_display_text(qid),
+        )
+    st.rerun()
+
+
+def _render_simple_regression_pretrain_quiz(
+    frame: pd.DataFrame,
+    *,
+    feature: str,
+    target: str,
+    learning_rate: float,
+    expected_slope: str,
+    source_label: str,
+    epochs: int,
+) -> bool:
+    identity = quiz_identity(
+        feature,
+        target,
+        source_label=source_label,
+        frame=frame,
+    )
+    if needs_quiz_reset(st.session_state.get(SESSION_PAIR), identity):
+        _reset_simple_regression_quiz_answers()
+    st.session_state[SESSION_PAIR] = identity
+
+    if SESSION_SLOPE not in st.session_state:
+        st.session_state[SESSION_SLOPE] = PLEASE_SELECT
+    if SESSION_ALPHA not in st.session_state:
+        st.session_state[SESSION_ALPHA] = PLEASE_SELECT
+    if SESSION_FOCUS not in st.session_state:
+        st.session_state[SESSION_FOCUS] = QID_SLOPE
+
+    st.markdown("##### 訓練前先猜一下")
+    st.caption("兩題都答對後，「開始訓練」才會啟用。卡住時可按「Agent 提示」問線索（不會直接給正解）。")
+
+    agent_ready = bool(st.session_state.get("data_agent_connected"))
+
+    q1_col, h1_col = st.columns([4, 1])
+    with q1_col:
+        slope_choice = st.radio(
+            "題1：依目前散點，擬合後的斜率 w 比較可能是？",
+            [PLEASE_SELECT, *SLOPE_OPTIONS],
+            key=SESSION_SLOPE,
+            horizontal=True,
+        )
+    with h1_col:
+        st.write("")
+        if st.button(
+            "Agent 提示",
+            key="simple_reg_hint_slope",
+            disabled=not agent_ready,
+            width="stretch",
+            help="一鍵請右側 Agent 給斜率方向的觀察线索",
+        ):
+            _send_simple_reg_agent_hint(
+                QID_SLOPE,
+                frame,
+                feature=feature,
+                target=target,
+                learning_rate=learning_rate,
+                epochs=epochs,
+                source_label=source_label,
+                expected_slope=expected_slope,
+            )
+        elif not agent_ready:
+            st.caption("先啟用 Agent")
+
+    slope_ok = is_slope_correct(str(slope_choice), expected_slope)
+    if str(slope_choice) == PLEASE_SELECT:
+        st.caption("請先選擇題1。")
+        st.session_state[SESSION_FOCUS] = QID_SLOPE
+    elif slope_ok:
+        st.caption("題1 OK，訓練後可用實際的 w 對照。")
+    else:
+        st.caption("題1 與散點方向不符，可按「Agent 提示」或問右側 Agent。")
+        st.session_state[SESSION_FOCUS] = QID_SLOPE
+
+    q2_col, h2_col = st.columns([4, 1])
+    with q2_col:
+        alpha_choice = st.radio(
+            "題2：若學習率 α 明顯偏大，Cost 曲線比較可能？",
+            [PLEASE_SELECT, *ALPHA_OPTIONS],
+            key=SESSION_ALPHA,
+            horizontal=True,
+        )
+    with h2_col:
+        st.write("")
+        if st.button(
+            "Agent 提示",
+            key="simple_reg_hint_alpha",
+            disabled=not agent_ready,
+            width="stretch",
+            help="一鍵請右側 Agent 給 α 與 Cost 的线索",
+        ):
+            _send_simple_reg_agent_hint(
+                QID_ALPHA,
+                frame,
+                feature=feature,
+                target=target,
+                learning_rate=learning_rate,
+                epochs=epochs,
+                source_label=source_label,
+                expected_slope=expected_slope,
+            )
+        elif not agent_ready:
+            st.caption("先啟用 Agent")
+
+    alpha_ok = is_alpha_correct(str(alpha_choice))
+    if str(alpha_choice) == PLEASE_SELECT:
+        st.caption("請先選擇題2。")
+        if slope_ok:
+            st.session_state[SESSION_FOCUS] = QID_ALPHA
+    elif alpha_ok:
+        st.caption("題2 OK。")
+        if not slope_ok:
+            st.session_state[SESSION_FOCUS] = QID_SLOPE
+    else:
+        st.caption("題2 再想想 α 對更新步長的影響，可按「Agent 提示」。")
+        st.session_state[SESSION_FOCUS] = QID_ALPHA
+
+    unlocked = both_quiz_correct(
+        str(slope_choice),
+        str(alpha_choice),
+        expected_slope=expected_slope,
+    )
+    if unlocked:
+        st.success("2／2 題已準備好訓練。")
+    else:
+        done = int(slope_ok) + int(alpha_ok)
+        st.info(f"進度：{done}／2 題答對（需全部正確才解鎖訓練）。")
+    return unlocked
 
 
 def _regression_page_shell(

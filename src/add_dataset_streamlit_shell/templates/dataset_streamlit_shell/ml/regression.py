@@ -199,6 +199,7 @@ def build_regression_agent_context(
     row_count: int,
     artifact: LinearModelArtifact | None = None,
     note: str = "",
+    prompt_train: bool = True,
 ) -> str:
     parts = [
         f"目前頁面：{page_name}。",
@@ -212,7 +213,14 @@ def build_regression_agent_context(
     if epochs is not None:
         parts.append(f"epoch：{epochs}。")
     if artifact is None:
-        parts.append("目前尚未完成本組設定的訓練，請引導學生先按「開始訓練」觀察 Cost 與模型演進。")
+        if prompt_train:
+            parts.append(
+                "目前尚未完成本組設定的訓練，請引導學生先按「開始訓練」觀察 Cost 與模型演進。"
+            )
+        else:
+            parts.append(
+                "目前尚未完成本組設定的訓練；「開始訓練」尚未解鎖，請先協助完成訓練前預測關卡，不要建議按該按鈕。"
+            )
     else:
         weights = "、".join(
             f"{feature}={weight:g}" for feature, weight in zip(artifact.features, artifact.weights)

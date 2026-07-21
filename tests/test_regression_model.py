@@ -170,3 +170,18 @@ def test_build_regression_agent_context_includes_current_settings() -> None:
     assert "epoch：1500" in context
     assert "最後 Cost J：4.2" in context
     assert "weights：城市人口_萬人=1.25" in context
+
+    locked = build_regression_agent_context(
+        page_name="單變量線性回歸",
+        data_source="內建範例資料",
+        features=["城市人口_萬人"],
+        target="餐廳獲利_萬美元",
+        learning_rate=0.01,
+        epochs=1500,
+        row_count=97,
+        artifact=None,
+        prompt_train=False,
+    )
+    assert "開始訓練" in locked
+    assert "尚未解鎖" in locked
+    assert "請引導學生先按「開始訓練」" not in locked
