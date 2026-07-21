@@ -11,10 +11,8 @@ import pandas as pd
 import streamlit as st
 
 from dataset_streamlit_shell.ui.data_ui import (
-    READY_DATASET_PATH,
     SHELL_ROOT,
     _display_path,
-    load_ready_dataset,
     render_chat_panel,
     render_dataset_metrics,
 )
@@ -38,12 +36,10 @@ from dataset_streamlit_shell.ml.classification import (
     predict_proba_from_regularized_artifact,
     save_classification_artifact,
     training_accuracy,
-    validate_binary_target,
 )
 from dataset_streamlit_shell.ml.regression import (
     GradientDescentStep,
     apply_standard_scaler,
-    create_standard_scaler,
 )
 from dataset_streamlit_shell.plotting import (
     build_classification_data_figures,
@@ -67,50 +63,18 @@ MICROCHIP_TARGET = "是否通過"
 
 
 def render_logistic_regression_page() -> None:
-    def body(df: pd.DataFrame, source_label: str, *, builtin: bool) -> None:
+    def body(df: pd.DataFrame, source_label: str) -> None:
         st.markdown("##### 邏輯迴歸")
         st.info(
             "依兩科考試成績預測是否錄取。訓練使用 logistic Cost J 與梯度下降；"
             "分類 threshold 在訓練完成後才用於解讀預測類別。"
         )
-        if builtin:
-            features = list(ADMISSION_FEATURES)
-            target = ADMISSION_TARGET
-            working = _classification_training_frame(df, features, target)
-        else:
-            numeric_columns = _numeric_columns(df)
-            if len(numeric_columns) < 2:
-                st.warning("至少需要 1 個 target 與 1 個 feature。")
-                return
-            default_target = _default_column(numeric_columns, ADMISSION_TARGET)
-            target = st.selectbox(
-                "選擇 target（y，0/1）",
-                numeric_columns,
-                index=numeric_columns.index(default_target)
-                if default_target in numeric_columns
-                else 0,
-                key="logistic_target",
-            )
-            if not validate_binary_target(df[target]):
-                st.warning("target 必須為 0/1。請在編碼頁先整理，或改用內建範例資料。")
-                return
-            feature_options = [column for column in numeric_columns if column != target]
-            default_features = [column for column in ADMISSION_FEATURES if column in feature_options]
-            if not default_features:
-                default_features = feature_options[: min(2, len(feature_options))]
-            features = st.multiselect(
-                "選擇 features（x）",
-                feature_options,
-                default=default_features,
-                key="logistic_features",
-            )
-            if not features:
-                st.warning("請至少選擇 1 個 feature。")
-                return
-            working = _classification_training_frame(df, features, target)
-            if len(working) < 2:
-                st.warning("可用樣本少於 2 筆，無法訓練。")
-                return
+        features = list(ADMISSION_FEATURES)
+        target = ADMISSION_TARGET
+        working = _classification_training_frame(df, features, target)
+        if len(working) < 2:
+            st.warning("可用樣本少於 2 筆，無法訓練。")
+            return
 
         _render_classification_data_intro(
             working,
@@ -118,7 +82,8 @@ def render_logistic_regression_page() -> None:
             target=target,
             dataset_note="每一列是一位申請者：兩科筆試為 x，是否錄取為 y（1=錄取、0=未錄取）。",
         )
-        feature_matrix, scaler = _prepare_logistic_features(working, features, builtin=builtin)
+        feature_matrix = working[features]
+        scaler = None
 
         st.markdown("##### 訓練設定")
         c1, c2 = st.columns(2)
@@ -154,7 +119,6 @@ def render_logistic_regression_page() -> None:
             float(learning_rate),
             int(epochs),
             len(working),
-            builtin,
         )
         train_clicked = st.button(
             "開始訓練",
@@ -249,54 +213,23 @@ def render_logistic_regression_page() -> None:
 
     _classification_page_shell(
         "邏輯迴歸",
-        "使用內建大學錄取資料或目前 ready.csv，練習二元邏輯迴歸與決策邊界。",
+        "使用內建大學錄取資料，練習二元邏輯迴歸與決策邊界。",
         "內建範例資料：大學錄取（ex2data1）",
         UNIVERSITY_ADMISSION_PATH,
-        lambda df, label, builtin: body(df, label, builtin=builtin),
+        body,
     )
 
 
 def render_regularized_logistic_regression_page() -> None:
-    def body(df: pd.DataFrame, source_label: str, *, builtin: bool) -> None:
+    def body(df: pd.DataFrame, source_label: str) -> None:
         st.markdown("##### 正則化邏輯迴歸")
         st.info(
             "晶片兩項檢測分數預測是否通過。訓練前會將 2 個 features 映射為 6 次多項式（27 維），"
             "並以 λ 做正則化；threshold 僅用於訓練後的類別預測。"
         )
-        if builtin:
-            base_features = list(MICROCHIP_FEATURES)
-            target = MICROCHIP_TARGET
-            working = _classification_training_frame(df, base_features, target)
-        else:
-            numeric_columns = _numeric_columns(df)
-            if len(numeric_columns) < 3:
-                st.warning("至少需要 2 個 features 與 1 個 target。")
-                return
-            default_target = _default_column(numeric_columns, MICROCHIP_TARGET)
-            target = st.selectbox(
-                "選擇 target（y，0/1）",
-                numeric_columns,
-                index=numeric_columns.index(default_target)
-                if default_target in numeric_columns
-                else 0,
-                key="regularized_target",
-            )
-            if not validate_binary_target(df[target]):
-                st.warning("target 必須為 0/1。")
-                return
-            feature_options = [column for column in numeric_columns if column != target]
-            default_features = [column for column in MICROCHIP_FEATURES if column in feature_options]
-            selected = st.multiselect(
-                "選擇 2 個原始 features（x1, x2）",
-                feature_options,
-                default=default_features if len(default_features) == 2 else feature_options[:2],
-                key="regularized_features",
-            )
-            if len(selected) != 2:
-                st.warning("正則化邏輯迴歸需要恰好 2 個原始 features 才能做特徵映射。")
-                return
-            base_features = selected
-            working = _classification_training_frame(df, base_features, target)
+        base_features = list(MICROCHIP_FEATURES)
+        target = MICROCHIP_TARGET
+        working = _classification_training_frame(df, base_features, target)
 
         if len(working) < 2:
             st.warning("可用樣本少於 2 筆，無法訓練。")
@@ -358,7 +291,6 @@ def render_regularized_logistic_regression_page() -> None:
             int(epochs),
             float(lambda_),
             len(working),
-            builtin,
         )
         train_clicked = st.button(
             "開始訓練",
@@ -453,10 +385,10 @@ def render_regularized_logistic_regression_page() -> None:
 
     _classification_page_shell(
         "正則化邏輯迴歸",
-        "使用內建晶片檢測資料或 ready.csv（需 2 個 features），練習特徵映射與 λ。",
+        "使用內建晶片檢測資料（2 個 features），練習特徵映射與 λ。",
         "內建範例資料：晶片檢測（ex2data2）",
         MICROCHIP_TEST_PATH,
-        lambda df, label, builtin: body(df, label, builtin=builtin),
+        body,
     )
 
 
@@ -472,45 +404,20 @@ def _classification_page_shell(
     with main:
         st.title(title)
         st.caption(caption)
-        source = st.radio(
-            "資料來源",
-            ["內建範例資料", "目前 ready.csv"],
-            horizontal=True,
-            key=f"{title}_data_source",
-        )
-        builtin = source == "內建範例資料"
-        if builtin:
-            df = pd.read_csv(builtin_path)
-            source_label = builtin_label
-            st.success("目前使用本頁內建教學資料。")
-        else:
-            df = load_ready_dataset()
-            source_label = f"目前 ready.csv：{_display_path(READY_DATASET_PATH)}"
-            if df is None:
-                st.warning("尚未建立 ready.csv，或改用內建範例資料。")
-                return
-            st.info(f"目前使用 `{_display_path(READY_DATASET_PATH)}`。")
+        df = pd.read_csv(builtin_path)
+        source_label = builtin_label
         render_dataset_metrics(df)
-        render_main(df, source_label, builtin=builtin)
+        render_main(df, source_label)
     with side:
         render_chat_panel(
-            extra_context=str(st.session_state.get(context_key, f"目前頁面：{title}。")),
+            extra_context=str(
+                st.session_state.get(
+                    context_key,
+                    f"目前頁面：{title}。資料來源：{builtin_label}。",
+                )
+            ),
             page_name=title,
         )
-
-
-def _numeric_columns(df: pd.DataFrame) -> list[str]:
-    return [str(column) for column in df.select_dtypes(include="number").columns]
-
-
-def _default_column(columns: list[str], preferred: str, *, exclude: set[str] | None = None) -> str:
-    exclude = exclude or set()
-    if preferred in columns and preferred not in exclude:
-        return preferred
-    for column in columns:
-        if column not in exclude:
-            return column
-    return columns[0]
 
 
 def _classification_training_frame(
@@ -520,18 +427,6 @@ def _classification_training_frame(
 ) -> pd.DataFrame:
     columns = list(features) + [target]
     return df[columns].apply(pd.to_numeric, errors="coerce").dropna()
-
-
-def _prepare_logistic_features(
-    working: pd.DataFrame,
-    features: list[str],
-    *,
-    builtin: bool,
-) -> tuple[pd.DataFrame, dict | None]:
-    if builtin:
-        return working[features], None
-    scaler = create_standard_scaler(working, features)
-    return apply_standard_scaler(working, scaler), scaler
 
 
 def _render_classification_data_intro(
