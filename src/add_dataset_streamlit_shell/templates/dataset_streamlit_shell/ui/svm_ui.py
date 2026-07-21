@@ -11,17 +11,11 @@ import pandas as pd
 import streamlit as st
 
 from dataset_streamlit_shell.ui.data_ui import (
-    READY_DATASET_PATH,
     SHELL_ROOT,
     _display_path,
     invoke_data_agent,
-    load_ready_dataset,
     render_chat_panel,
     render_dataset_metrics,
-)
-from dataset_streamlit_shell.ml.regression import (
-    apply_standard_scaler,
-    create_standard_scaler,
 )
 from dataset_streamlit_shell.ml.svm import (
     MODEL_KIND_LINEAR_SVM,
@@ -34,14 +28,11 @@ from dataset_streamlit_shell.ml.svm import (
     predict_binary_class,
     predict_class_from_artifact,
     save_svm_artifact,
-    validate_svm_target,
 )
 from dataset_streamlit_shell.plotting import (
-    build_classification_data_figures,
     build_linear_svm_result_figure,
     build_svm_paired_data_figure,
     configure_matplotlib_for_traditional_chinese,
-    render_figures_in_streamlit,
 )
 from dataset_streamlit_shell.ui import svm_quiz as quiz
 
@@ -55,7 +46,7 @@ SVM_SOFT_PATH = CLASSIFICATION_DEMO_DIR / "svm_soft_margin_80.csv"
 SVM_FEATURES = ["特徵1", "特徵2"]
 SVM_TARGET = "類別"
 HARD_DEFAULT_C = 1.0
-PAGE_TITLE = "線性 SVM"
+PAGE_TITLE = "線性支援向量機"
 CONTEXT_KEY = f"{PAGE_TITLE}_agent_context"
 STAGE_HARD_LABEL = "線性可分（最大化 margin）"
 STAGE_SOFT_LABEL = "Soft Margin"
@@ -66,23 +57,6 @@ def render_linear_svm_page() -> None:
     with main:
         st.title(PAGE_TITLE)
         st.caption("先學可分開時的最大 margin，再學分不開時的 Soft Margin。")
-        source = st.radio(
-            "資料來源",
-            ["內建範例資料", "目前 ready.csv"],
-            horizontal=True,
-            key=f"{PAGE_TITLE}_data_source",
-        )
-        builtin = source == "內建範例資料"
-        ready_df: pd.DataFrame | None = None
-        if builtin:
-            st.success("內建資料依階段切換：可分 blobs → 重疊 soft-margin。")
-        else:
-            ready_df = load_ready_dataset()
-            if ready_df is None:
-                st.warning("尚未建立 ready.csv，或改用內建範例資料。")
-                return
-            st.info(f"目前使用 `{_display_path(READY_DATASET_PATH)}`。")
-            render_dataset_metrics(ready_df)
 
         # st.tabs 在 streamlit>=1.50 無法可靠回報作用中分頁；用 radio 追蹤焦點給 Agent。
         stage = st.radio(
@@ -93,10 +67,10 @@ def render_linear_svm_page() -> None:
         )
         if stage == STAGE_HARD_LABEL:
             st.session_state[quiz.SESSION_PAGE_FOCUS] = "hard"
-            _render_hard_margin_tab(builtin=builtin, ready_df=ready_df)
+            _render_hard_margin_tab()
         else:
             st.session_state[quiz.SESSION_PAGE_FOCUS] = "soft"
-            _render_soft_margin_tab(builtin=builtin, ready_df=ready_df)
+            _render_soft_margin_tab()
         _compose_agent_context()
 
     with side:
@@ -106,23 +80,20 @@ def render_linear_svm_page() -> None:
         )
 
 
-def _render_hard_margin_tab(*, builtin: bool, ready_df: pd.DataFrame | None) -> None:
+def _render_hard_margin_tab() -> None:
     st.markdown("##### 這一階段在問什麼")
     st.info(
         "兩類若分得開，最好的直線是 **margin 最大** 的那條；"
         "卡住邊界的點叫 support vector。"
     )
     prepared = _prepare_tab_data(
-        builtin=builtin,
-        ready_df=ready_df,
         builtin_path=SVM_BLOBS_PATH,
         builtin_label="內建範例資料：可線性分開的兩特徵二元分類（80 筆）",
-        key_prefix="svm_hard",
         note="每一列是一個樣本：特徵為 x，類別為 y（本頁固定使用 -1 / +1）。資料大致可被直線分開。",
     )
     if prepared is None:
         return
-    working, feature_matrix, features, target, scaler, source_label = prepared
+    working, feature_matrix, features, target, source_label = prepared
 
     st.markdown("##### 模型公式")
     st.latex(r"f_{\mathbf{w},b}(\mathbf{x})=\mathbf{w}\cdot\mathbf{x}+b")
@@ -148,10 +119,8 @@ def _render_hard_margin_tab(*, builtin: bool, ready_df: pd.DataFrame | None) -> 
         st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
 
     result_key = "linear_svm_hard_last_artifact"
-    signature = (source_label, tuple(features), target, len(working), builtin, "hard")
+    signature = (source_label, tuple(features), target, len(working), "hard")
     can_plot_2d = len(features) == 2
-    if not can_plot_2d:
-        st.caption("目前選超過 2 個 features，訓練後無法繪製 2D 決策邊界圖。")
 
     artifact = _resolve_or_train_artifact(
         train_clicked=train_clicked and unlocked,
@@ -159,13 +128,11 @@ def _render_hard_margin_tab(*, builtin: bool, ready_df: pd.DataFrame | None) -> 
         working=working,
         features=features,
         target=target,
-        scaler=scaler,
         source_label=source_label,
         C=HARD_DEFAULT_C,
         result_key=result_key,
         signature=signature,
         can_plot_2d=can_plot_2d,
-        builtin=builtin,
         idle_message="答完兩題後，按下「開始訓練」以顯示決策邊界與 support vectors。",
         stale_caption="顯示最近一次訓練結果；換資料或欄位後請重新訓練。",
     )
@@ -206,23 +173,20 @@ def _render_hard_margin_tab(*, builtin: bool, ready_df: pd.DataFrame | None) -> 
     _render_svm_prompts(quiz.hard_focus_prompt_lines(focus, unlocked=unlocked))
 
 
-def _render_soft_margin_tab(*, builtin: bool, ready_df: pd.DataFrame | None) -> None:
+def _render_soft_margin_tab() -> None:
     st.markdown("##### 這一階段在問什麼")
     st.info(
         "上一階段假設資料分得開。這裡類別常有重疊，直線無法完美分開時，"
         "需要 **Soft Margin**：允許一些點落入 margin／分錯；**C** 決定顧 margin 還是顧分對。"
     )
     prepared = _prepare_tab_data(
-        builtin=builtin,
-        ready_df=ready_df,
         builtin_path=SVM_SOFT_PATH,
         builtin_label="內建範例資料：類別重疊的兩特徵二元分類（soft margin，80 筆）",
-        key_prefix="svm_soft",
         note="資料有重疊，不容易用一條直線完美分開——適合觀察 Soft Margin 與 C。",
     )
     if prepared is None:
         return
-    working, feature_matrix, features, target, scaler, source_label = prepared
+    working, feature_matrix, features, target, source_label = prepared
 
     st.markdown("##### 模型公式")
     st.latex(r"f_{\mathbf{w},b}(\mathbf{x})=\mathbf{w}\cdot\mathbf{x}+b")
@@ -262,10 +226,8 @@ def _render_soft_margin_tab(*, builtin: bool, ready_df: pd.DataFrame | None) -> 
         st.caption("解鎖後可改 C 再按「開始訓練」，對照邊界與 support vectors 的變化。")
 
     result_key = "linear_svm_soft_last_artifact"
-    signature = (source_label, tuple(features), target, float(C), len(working), builtin, "soft")
+    signature = (source_label, tuple(features), target, float(C), len(working), "soft")
     can_plot_2d = len(features) == 2
-    if not can_plot_2d:
-        st.caption("目前選超過 2 個 features，訓練後無法繪製 2D 決策邊界圖。")
 
     artifact = _resolve_or_train_artifact(
         train_clicked=train_clicked and unlocked,
@@ -273,13 +235,11 @@ def _render_soft_margin_tab(*, builtin: bool, ready_df: pd.DataFrame | None) -> 
         working=working,
         features=features,
         target=target,
-        scaler=scaler,
         source_label=source_label,
         C=float(C),
         result_key=result_key,
         signature=signature,
         can_plot_2d=can_plot_2d,
-        builtin=builtin,
         idle_message="設定 C 並答完兩題後，按下「開始訓練」。",
         stale_caption="顯示最近一次訓練結果；調整 C 後請重新按「開始訓練」。",
     )
@@ -325,60 +285,23 @@ def _render_soft_margin_tab(*, builtin: bool, ready_df: pd.DataFrame | None) -> 
 
 def _prepare_tab_data(
     *,
-    builtin: bool,
-    ready_df: pd.DataFrame | None,
     builtin_path: Path,
     builtin_label: str,
-    key_prefix: str,
     note: str,
-) -> tuple[pd.DataFrame, pd.DataFrame, list[str], str, dict | None, str] | None:
-    if builtin:
-        df = pd.read_csv(builtin_path)
-        render_dataset_metrics(df)
-        features = list(SVM_FEATURES)
-        target = SVM_TARGET
-        working = _svm_training_frame(df, features, target, builtin=True)
-        source_label = builtin_label
-    else:
-        assert ready_df is not None
-        df = ready_df
-        numeric_columns = _numeric_columns(df)
-        if len(numeric_columns) < 3:
-            st.warning("至少需要 2 個 features 與 1 個 target。")
-            return None
-        default_target = _default_column(numeric_columns, SVM_TARGET)
-        target = st.selectbox(
-            "選擇 target（y，-1/+1）",
-            numeric_columns,
-            index=numeric_columns.index(default_target) if default_target in numeric_columns else 0,
-            key=f"{key_prefix}_target",
-        )
-        if not validate_svm_target(df[target]):
-            st.warning("target 必須剛好包含 -1 與 +1。請先在前處理頁完成轉碼。")
-            return None
-        feature_options = [column for column in numeric_columns if column != target]
-        default_features = [column for column in SVM_FEATURES if column in feature_options]
-        if not default_features:
-            default_features = feature_options[: min(2, len(feature_options))]
-        features = st.multiselect(
-            "選擇 features（x）",
-            feature_options,
-            default=default_features,
-            key=f"{key_prefix}_features",
-        )
-        if len(features) < 1:
-            st.warning("請至少選擇 1 個 feature。")
-            return None
-        working = _svm_training_frame(df, features, target, builtin=False)
-        source_label = f"目前 ready.csv：{_display_path(READY_DATASET_PATH)}"
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str], str, str] | None:
+    df = pd.read_csv(builtin_path)
+    render_dataset_metrics(df)
+    features = list(SVM_FEATURES)
+    target = SVM_TARGET
+    working = _svm_training_frame(df, features, target)
+    source_label = builtin_label
 
     if len(working) < 2:
         st.warning("可用樣本少於 2 筆，無法訓練。")
         return None
 
-    _render_svm_data_intro(working, features=features, target=target, builtin=builtin, note=note)
-    feature_matrix, scaler = _prepare_svm_features(working, features, builtin=builtin)
-    return working, feature_matrix, features, target, scaler, source_label
+    _render_svm_data_intro(working, features=features, target=target, note=note)
+    return working, working[features], features, target, source_label
 
 
 def _resolve_or_train_artifact(
@@ -388,13 +311,11 @@ def _resolve_or_train_artifact(
     working: pd.DataFrame,
     features: list[str],
     target: str,
-    scaler: dict | None,
     source_label: str,
     C: float,
     result_key: str,
     signature: tuple,
     can_plot_2d: bool,
-    builtin: bool,
     idle_message: str,
     stale_caption: str,
 ) -> LinearSvmArtifact | None:
@@ -410,7 +331,7 @@ def _resolve_or_train_artifact(
             features=list(features),
             target=target,
             C=float(C),
-            scaler=scaler,
+            scaler=None,
             data_source=source_label,
             feature_frame=feature_matrix,
             target_series=working[target],
@@ -425,7 +346,7 @@ def _resolve_or_train_artifact(
                 coef=artifact.coef,
                 intercept=artifact.intercept,
                 support_vectors=artifact.support_vectors,
-                paired_scatter=builtin,
+                paired_scatter=True,
             )
             st.pyplot(fig, clear_figure=True)
             plt.close(fig)
@@ -444,7 +365,7 @@ def _resolve_or_train_artifact(
                 coef=artifact.coef,
                 intercept=artifact.intercept,
                 support_vectors=artifact.support_vectors,
-                paired_scatter=builtin,
+                paired_scatter=True,
             )
             st.pyplot(fig, clear_figure=True)
             plt.close(fig)
@@ -909,41 +830,18 @@ def _send_soft_hint(
     st.rerun()
 
 
-def _numeric_columns(df: pd.DataFrame) -> list[str]:
-    return [str(column) for column in df.select_dtypes(include="number").columns]
-
-
-def _default_column(columns: list[str], preferred: str) -> str:
-    return preferred if preferred in columns else columns[0]
-
-
 def _svm_training_frame(
     df: pd.DataFrame,
     features: list[str],
     target: str,
-    *,
-    builtin: bool,
 ) -> pd.DataFrame:
     columns = features + [target]
     frame = df[columns].copy()
     for column in columns:
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
     frame = frame.dropna().reset_index(drop=True)
-    if builtin:
-        frame[target] = np.where(frame[target].to_numpy(dtype=int) == 1, 1, -1)
+    frame[target] = np.where(frame[target].to_numpy(dtype=int) == 1, 1, -1)
     return frame
-
-
-def _prepare_svm_features(
-    working: pd.DataFrame,
-    features: list[str],
-    *,
-    builtin: bool,
-) -> tuple[pd.DataFrame, dict | None]:
-    if builtin:
-        return working[features], None
-    scaler = create_standard_scaler(working, features)
-    return apply_standard_scaler(working, scaler), scaler
 
 
 def _render_svm_data_intro(
@@ -951,7 +849,6 @@ def _render_svm_data_intro(
     *,
     features: list[str],
     target: str,
-    builtin: bool,
     note: str | None = None,
 ) -> None:
     st.markdown("##### Data 資訊")
@@ -978,21 +875,10 @@ def _render_svm_data_intro(
     with st.expander("資料預覽", expanded=False):
         st.dataframe(frame[features + [target]].head(10), width="stretch", hide_index=True)
     st.markdown("##### 資料視覺化")
-    if builtin and len(features) == 2:
-        st.caption("特徵空間分佈（Paired 色圖）")
-        fig = build_svm_paired_data_figure(frame, features, target)
-        st.pyplot(fig, clear_figure=True)
-        plt.close(fig)
-    else:
-        render_figures_in_streamlit(
-            build_classification_data_figures(_classification_view(frame, target), features, target)
-        )
-
-
-def _classification_view(frame: pd.DataFrame, target: str) -> pd.DataFrame:
-    view = frame.copy()
-    view[target] = np.where(view[target].to_numpy(dtype=int) == 1, 1, 0)
-    return view
+    st.caption("特徵空間分佈（Paired 色圖）")
+    fig = build_svm_paired_data_figure(frame, features, target)
+    st.pyplot(fig, clear_figure=True)
+    plt.close(fig)
 
 
 def _render_svm_training_results(

@@ -54,7 +54,10 @@ def overview() -> None:
         st.markdown("##### 資料生命週期")
         st.write("Original 原始資料：上傳後保留，不直接修改。")
         st.write("Working 工作資料：Agent 協作整理與診斷的主要工作區。")
-        st.write("Ready 分析就緒資料：整理完成後凍結，供後續學習、分析與訓練使用。")
+        st.write(
+            "Ready 分析就緒資料：整理完成後凍結，供圖表探索、降維、分群等分析頁使用；"
+            "監督式教學頁（回歸／邏輯迴歸／線性支援向量機等）使用各頁內建範例資料。"
+        )
         with st.expander("技術資訊", expanded=False):
             st.caption(f"Original 原始資料檔：`{_display_path(ORIGINAL_DATASET_PATH)}`")
             st.caption(f"Working 工作資料檔：`{_display_path(WORKING_DATASET_PATH)}`")
@@ -75,7 +78,7 @@ def overview() -> None:
 1. 在「資料上傳與預覽」上傳或更換 CSV。
 2. 到「AI 協作資料整理」診斷 `working.csv`，請右側 Agent 一步一步整理資料。
 3. 在「建立 Ready 分析就緒資料」產生 `ready.csv`。
-4. 後續學習頁面預設讀取 `ready.csv`。
+4. 圖表探索、降維、分群等分析頁讀取 `ready.csv`；監督式教學頁（回歸／邏輯迴歸／線性支援向量機等）使用各頁內建範例資料。
 """
         )
 
@@ -108,7 +111,7 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "15_Multiple_Linear_Regression.py"), title="多變量線性回歸"),
         st.Page(str(SHELL_ROOT / "pages" / "16_Logistic_Regression.py"), title="邏輯迴歸"),
         st.Page(str(SHELL_ROOT / "pages" / "17_Regularized_Logistic_Regression.py"), title="正則化邏輯迴歸"),
-        st.Page(str(SHELL_ROOT / "pages" / "18_Linear_SVM.py"), title="線性 SVM"),
+        st.Page(str(SHELL_ROOT / "pages" / "18_Linear_SVM.py"), title="線性支援向量機"),
         st.Page(str(SHELL_ROOT / "pages" / "19_Decision_Tree_Concepts.py"), title="決策樹概念"),
         st.Page(str(SHELL_ROOT / "pages" / "20_XGBoost.py"), title="XGBoost"),
     ],
