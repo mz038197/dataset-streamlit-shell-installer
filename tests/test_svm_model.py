@@ -39,6 +39,13 @@ BLOBS_CSV = (
     / "classification"
     / "svm_blobs_80.csv"
 )
+SOFT_CSV = (
+    TEMPLATE_ROOT
+    / "dataset_streamlit_shell"
+    / "built-in-data"
+    / "classification"
+    / "svm_soft_margin_80.csv"
+)
 
 
 @pytest.fixture
@@ -60,6 +67,19 @@ def test_fit_linear_svc_has_support_vectors(signed_blobs_frame: pd.DataFrame) ->
     y = signed_blobs_frame[target]
     clf = fit_linear_svc(x, y, C=1.0)
     assert clf.support_vectors_.shape[0] > 0
+
+
+def test_fit_soft_margin_builtin_has_support_vectors() -> None:
+    frame = pd.read_csv(SOFT_CSV)
+    frame["類別"] = np.where(frame["類別"].to_numpy(dtype=int) == 1, 1, -1)
+    features = ["特徵1", "特徵2"]
+    clf = fit_linear_svc(frame[features], frame["類別"], C=1.0)
+    assert clf.support_vectors_.shape[0] > 0
+    # Overlapping data: even large C should not reach perfect accuracy.
+    hard = fit_linear_svc(frame[features], frame["類別"], C=1e6)
+    x = frame[features].to_numpy(dtype=float)
+    y = frame["類別"].to_numpy(dtype=float)
+    assert hard.score(x, y) < 1.0
 
 
 def test_artifact_json_round_trip(signed_blobs_frame: pd.DataFrame, tmp_path: Path) -> None:

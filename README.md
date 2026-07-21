@@ -96,7 +96,7 @@ The installed `dataset_streamlit_shell/` template includes supervised learning p
 - **Linear regression** (built-in restaurant profit and house price CSVs under `built-in-data/regression/`)
 - **Logistic regression** — university admission demo from `built-in-data/classification/university_admission.csv` (Coursera ex2data1)
 - **Regularized logistic regression** — microchip test demo from `built-in-data/classification/microchip_test.csv` (Coursera ex2data2, degree-6 feature map and λ)
-- **Linear SVM** — built-in two-feature binary demo from `built-in-data/classification/svm_blobs_80.csv`. Uses `sklearn.svm.SVC(kernel='linear')`; shows the final decision boundary and support vectors. Requires `scikit-learn`.
+- **Linear SVM** — two-stage hard → soft margin: `svm_blobs_80.csv` (linearly separable) then `svm_soft_margin_80.csv` (overlapping classes), both under `built-in-data/classification/`. Uses `sklearn.svm.SVC(kernel='linear')`; hard stage omits C on the surface, soft stage centers on C. Shows decision boundary and support vectors. Requires `scikit-learn`.
 - **Decision tree concepts** — built-in 10-row cat toy CSV from `built-in-data/classification/cat_toy_10.csv`. Shows entropy, information gain table, and `DecisionTreeClassifier` with student-chosen Gini/Entropy criterion and `max_depth` 1–2. Builtin data only; no model JSON save.
 - **XGBoost** — built-in heart disease CSV from `built-in-data/classification/heart_disease.csv` (Traditional Chinese column names). Auto one-hot encoding, 80/20 train/validation split, hyperparameter sweep curves, and final `XGBClassifier` with early stopping. Requires `xgboost`. Builtin data only; no model JSON save.
 

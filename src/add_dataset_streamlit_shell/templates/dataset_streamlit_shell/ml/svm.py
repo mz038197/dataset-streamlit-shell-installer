@@ -268,6 +268,8 @@ def build_svm_agent_context(
     row_count: int,
     artifact: LinearSvmArtifact | None = None,
     note: str = "",
+    include_C: bool = True,
+    prompt_train: bool = True,
 ) -> str:
     parts = [
         f"目前頁面：{page_name}。",
@@ -275,10 +277,20 @@ def build_svm_agent_context(
         f"可用訓練資料筆數：{row_count}。",
         "目前 features：" + "、".join(features) + "。",
         f"目前 target：{target}（需為 -1 / +1）。",
-        f"懲罰係數 C：{C:g}。",
     ]
+    if include_C:
+        parts.append(f"懲罰係數 C：{C:g}。")
+    else:
+        parts.append("本階段聚焦硬間隔／最大化 margin。")
     if artifact is None:
-        parts.append("目前尚未完成本組設定的訓練，請引導學生先按「開始訓練」觀察決策邊界與 support vectors。")
+        if prompt_train:
+            parts.append(
+                "目前尚未完成本組設定的訓練，請引導學生先按「開始訓練」觀察決策邊界與 support vectors。"
+            )
+        else:
+            parts.append(
+                "目前尚未完成本組設定的訓練；「開始訓練」尚未解鎖，請先協助完成訓練前預測關卡，不要建議按該按鈕。"
+            )
     else:
         parts.append(f"intercept：{artifact.intercept:g}。")
         weights = "、".join(
