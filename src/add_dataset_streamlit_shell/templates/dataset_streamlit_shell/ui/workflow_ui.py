@@ -28,6 +28,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     render_dataset_metrics,
     reset_working_dataset_from_source,
 )
+from dataset_streamlit_shell.ui import multiple_regression_quiz as multi_quiz
 from dataset_streamlit_shell.ui.simple_regression_quiz import (
     ALPHA_OPTIONS,
     PLEASE_SELECT,
@@ -1615,6 +1616,15 @@ def render_multiple_linear_regression_page() -> None:
         _render_cost_formula()
         st.caption("此處的 w 對應 Z-score 縮放後的 features；保存模型時會一併保存 mean 與 scale。")
 
+        quiz_unlocked = _render_multiple_regression_pretrain_quiz(
+            features=selected_features,
+            target=target,
+            learning_rate=float(learning_rate),
+            source_label=source_label,
+            epochs=int(epochs),
+            row_count=len(working),
+        )
+
         result_key = "multiple_regression_last_artifact"
         context_key = "多變量線性回歸_agent_context"
         signature = (
@@ -1630,10 +1640,14 @@ def render_multiple_linear_regression_page() -> None:
             type="primary",
             width="stretch",
             key="train_multiple_regression",
+            disabled=not quiz_unlocked,
         )
+        if not quiz_unlocked:
+            st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+
         artifact: LinearModelArtifact | None = None
         prediction: pd.Series | None = None
-        if train_clicked:
+        if train_clicked and quiz_unlocked:
             steps = gradient_descent_steps(
                 scaled_features,
                 working[target],
@@ -1677,19 +1691,44 @@ def render_multiple_linear_regression_page() -> None:
                 artifact = stored["artifact"]
                 prediction = predict_from_artifact(artifact, working[artifact.features])
                 st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+            elif quiz_unlocked:
+                st.info("兩題已過關。按下「開始訓練」觀察預測值與 Cost 的演進。")
             else:
-                st.info("設定 learning rate 與 epoch 後，按下「開始訓練」觀察預測值與 Cost 的演進。")
+                st.info("先完成上方兩題訓練前預測，再開始訓練。")
 
-        st.session_state[context_key] = build_regression_agent_context(
-            page_name="多變量線性回歸",
-            data_source=source_label,
+        purpose_choice = str(st.session_state.get(multi_quiz.SESSION_PURPOSE, multi_quiz.PLEASE_SELECT))
+        weights_choice = str(st.session_state.get(multi_quiz.SESSION_WEIGHTS, multi_quiz.PLEASE_SELECT))
+        quiz_note = multi_quiz.build_quiz_agent_appendix(
+            purpose_status=multi_quiz.quiz_choice_status(
+                purpose_choice,
+                correct=multi_quiz.is_purpose_correct(purpose_choice),
+            ),
+            weights_status=multi_quiz.quiz_choice_status(
+                weights_choice,
+                correct=multi_quiz.is_weights_correct(weights_choice),
+            ),
+            focus_qid=st.session_state.get(multi_quiz.SESSION_FOCUS),
             features=selected_features,
             target=target,
             learning_rate=float(learning_rate),
-            epochs=int(epochs),
-            row_count=len(working),
-            artifact=artifact,
-            note="多變量頁會先對 features 做 Z-score 特徵縮放。",
+            unlocked=quiz_unlocked,
+            use_housing_example="ready.csv" not in source_label,
+        )
+        st.session_state[context_key] = (
+            build_regression_agent_context(
+                page_name="多變量線性回歸",
+                data_source=source_label,
+                features=selected_features,
+                target=target,
+                learning_rate=float(learning_rate),
+                epochs=int(epochs),
+                row_count=len(working),
+                artifact=artifact,
+                note="多變量頁會先對 features 做 Z-score 特徵縮放。",
+                prompt_train=quiz_unlocked,
+            )
+            + "\n"
+            + quiz_note
         )
         if artifact is not None and prediction is not None:
             _render_training_results(artifact, working, target, prediction)
@@ -1703,13 +1742,8 @@ def render_multiple_linear_regression_page() -> None:
             page_key="multiple_regression",
             trained_artifact=artifact,
         )
-        _render_regression_prompts(
-            [
-                "請解釋每個 w 的正負方向，以及它和 target 的關係。",
-                "請說明為什麼多變量線性回歸常需要特徵縮放。",
-                "請找出預測誤差最大的資料列，並說明可能原因。",
-            ]
-        )
+        focus = st.session_state.get(multi_quiz.SESSION_FOCUS)
+        _render_regression_prompts(multi_quiz.focus_prompt_lines(focus, unlocked=quiz_unlocked))
 
     _regression_page_shell(
         "多變量線性回歸",
@@ -1945,6 +1979,215 @@ def _render_simple_regression_pretrain_quiz(
         st.success("2／2 題已準備好訓練。")
     else:
         done = int(slope_ok) + int(alpha_ok)
+        st.info(f"進度：{done}／2 題答對（需全部正確才解鎖訓練）。")
+    return unlocked
+
+
+def _reset_multiple_regression_quiz_answers() -> None:
+    st.session_state[multi_quiz.SESSION_PURPOSE] = multi_quiz.PLEASE_SELECT
+    st.session_state[multi_quiz.SESSION_WEIGHTS] = multi_quiz.PLEASE_SELECT
+    st.session_state[multi_quiz.SESSION_FOCUS] = multi_quiz.QID_PURPOSE
+
+
+def _multiple_reg_quiz_extra_context(
+    *,
+    features: list[str],
+    target: str,
+    learning_rate: float,
+    epochs: int,
+    row_count: int,
+    source_label: str,
+) -> str:
+    purpose_choice = str(
+        st.session_state.get(multi_quiz.SESSION_PURPOSE, multi_quiz.PLEASE_SELECT)
+    )
+    weights_choice = str(
+        st.session_state.get(multi_quiz.SESSION_WEIGHTS, multi_quiz.PLEASE_SELECT)
+    )
+    unlocked = multi_quiz.both_quiz_correct(purpose_choice, weights_choice)
+    appendix = multi_quiz.build_quiz_agent_appendix(
+        purpose_status=multi_quiz.quiz_choice_status(
+            purpose_choice,
+            correct=multi_quiz.is_purpose_correct(purpose_choice),
+        ),
+        weights_status=multi_quiz.quiz_choice_status(
+            weights_choice,
+            correct=multi_quiz.is_weights_correct(weights_choice),
+        ),
+        focus_qid=st.session_state.get(multi_quiz.SESSION_FOCUS),
+        features=features,
+        target=target,
+        learning_rate=learning_rate,
+        unlocked=unlocked,
+        use_housing_example="ready.csv" not in source_label,
+    )
+    return (
+        build_regression_agent_context(
+            page_name="多變量線性回歸",
+            data_source=source_label,
+            features=features,
+            target=target,
+            learning_rate=learning_rate,
+            epochs=epochs,
+            row_count=row_count,
+            artifact=None,
+            note="多變量頁會先對 features 做 Z-score 特徵縮放。",
+            prompt_train=unlocked,
+        )
+        + "\n"
+        + appendix
+    )
+
+
+def _send_multiple_reg_agent_hint(
+    qid: str,
+    *,
+    features: list[str],
+    target: str,
+    learning_rate: float,
+    epochs: int,
+    row_count: int,
+    source_label: str,
+) -> None:
+    ts_key = f"multiple_reg_hint_ts_{qid}"
+    now = time.time()
+    if not multi_quiz.can_send_hint(st.session_state.get(ts_key), now):
+        st.caption("提示發送中，請稍候再按。")
+        return
+    if not st.session_state.get("data_agent_connected"):
+        st.warning("請先在右側啟用資料 Agent，再按「Agent 提示」。")
+        return
+    st.session_state[multi_quiz.SESSION_FOCUS] = qid
+    st.session_state[ts_key] = now
+    extra = _multiple_reg_quiz_extra_context(
+        features=features,
+        target=target,
+        learning_rate=learning_rate,
+        epochs=epochs,
+        row_count=row_count,
+        source_label=source_label,
+    )
+    with st.spinner("正在詢問 Agent…"):
+        invoke_data_agent(
+            multi_quiz.hint_user_text(qid, features=features, target=target),
+            extra_context=extra,
+            display_user_text=multi_quiz.hint_display_text(qid),
+        )
+    st.rerun()
+
+
+def _render_multiple_regression_pretrain_quiz(
+    *,
+    features: list[str],
+    target: str,
+    learning_rate: float,
+    source_label: str,
+    epochs: int,
+    row_count: int,
+) -> bool:
+    if multi_quiz.needs_quiz_reset(st.session_state.get(multi_quiz.SESSION_PAIR), features, target):
+        _reset_multiple_regression_quiz_answers()
+    st.session_state[multi_quiz.SESSION_PAIR] = multi_quiz.pair_key(features, target)
+
+    if multi_quiz.SESSION_PURPOSE not in st.session_state:
+        st.session_state[multi_quiz.SESSION_PURPOSE] = multi_quiz.PLEASE_SELECT
+    if multi_quiz.SESSION_WEIGHTS not in st.session_state:
+        st.session_state[multi_quiz.SESSION_WEIGHTS] = multi_quiz.PLEASE_SELECT
+    if multi_quiz.SESSION_FOCUS not in st.session_state:
+        st.session_state[multi_quiz.SESSION_FOCUS] = multi_quiz.QID_PURPOSE
+
+    st.markdown("##### 訓練前先猜一下")
+    st.caption(
+        "兩題都答對後，「開始訓練」才會啟用。"
+        "題目聚焦多變量的目的與 w／b 意義；卡住時可按「Agent 提示」。"
+    )
+
+    agent_ready = bool(st.session_state.get("data_agent_connected"))
+
+    q1_col, h1_col = st.columns([4, 1])
+    with q1_col:
+        purpose_choice = st.radio(
+            "題1：相對於單變量只用一個 x，多變量的主要目的比較接近？",
+            [multi_quiz.PLEASE_SELECT, *multi_quiz.PURPOSE_OPTIONS],
+            key=multi_quiz.SESSION_PURPOSE,
+        )
+    with h1_col:
+        st.write("")
+        if st.button(
+            "Agent 提示",
+            key="multiple_reg_hint_purpose",
+            disabled=not agent_ready,
+            width="stretch",
+            help="一鍵請右側 Agent 給「為什麼多 feature」的线索",
+        ):
+            _send_multiple_reg_agent_hint(
+                multi_quiz.QID_PURPOSE,
+                features=features,
+                target=target,
+                learning_rate=learning_rate,
+                epochs=epochs,
+                row_count=row_count,
+                source_label=source_label,
+            )
+        elif not agent_ready:
+            st.caption("先啟用 Agent")
+
+    purpose_ok = multi_quiz.is_purpose_correct(str(purpose_choice))
+    if str(purpose_choice) == multi_quiz.PLEASE_SELECT:
+        st.caption("請先選擇題1。")
+        st.session_state[multi_quiz.SESSION_FOCUS] = multi_quiz.QID_PURPOSE
+    elif purpose_ok:
+        st.caption("題1 OK。")
+    else:
+        st.caption("題1 再想想「多個 x 一起做什麼」，可按「Agent 提示」。")
+        st.session_state[multi_quiz.SESSION_FOCUS] = multi_quiz.QID_PURPOSE
+
+    q2_col, h2_col = st.columns([4, 1])
+    with q2_col:
+        weights_choice = st.radio(
+            "題2：訓練完成後，這組 w、b 主要代表？",
+            [multi_quiz.PLEASE_SELECT, *multi_quiz.WEIGHTS_OPTIONS],
+            key=multi_quiz.SESSION_WEIGHTS,
+        )
+    with h2_col:
+        st.write("")
+        if st.button(
+            "Agent 提示",
+            key="multiple_reg_hint_weights",
+            disabled=not agent_ready,
+            width="stretch",
+            help="一鍵請右側 Agent 給 w／b 意義的线索",
+        ):
+            _send_multiple_reg_agent_hint(
+                multi_quiz.QID_WEIGHTS,
+                features=features,
+                target=target,
+                learning_rate=learning_rate,
+                epochs=epochs,
+                row_count=row_count,
+                source_label=source_label,
+            )
+        elif not agent_ready:
+            st.caption("先啟用 Agent")
+
+    weights_ok = multi_quiz.is_weights_correct(str(weights_choice))
+    if str(weights_choice) == multi_quiz.PLEASE_SELECT:
+        st.caption("請先選擇題2。")
+        if purpose_ok:
+            st.session_state[multi_quiz.SESSION_FOCUS] = multi_quiz.QID_WEIGHTS
+    elif weights_ok:
+        st.caption("題2 OK。")
+        if not purpose_ok:
+            st.session_state[multi_quiz.SESSION_FOCUS] = multi_quiz.QID_PURPOSE
+    else:
+        st.caption("題2 再想想多個 w 與 b 在表達什麼，可按「Agent 提示」。")
+        st.session_state[multi_quiz.SESSION_FOCUS] = multi_quiz.QID_WEIGHTS
+
+    unlocked = multi_quiz.both_quiz_correct(str(purpose_choice), str(weights_choice))
+    if unlocked:
+        st.success("2／2 題已準備好訓練。")
+    else:
+        done = int(purpose_ok) + int(weights_ok)
         st.info(f"進度：{done}／2 題答對（需全部正確才解鎖訓練）。")
     return unlocked
 
