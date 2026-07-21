@@ -1238,7 +1238,10 @@ def render_encoding_correlation_page() -> None:
 def render_ready_page() -> None:
     def body(df: pd.DataFrame) -> None:
         st.markdown("##### 建立 Ready 分析就緒資料")
-        st.caption("將目前 Working 工作資料凍結為穩定的 `ready.csv`，供後續學習、分析與訓練使用。")
+        st.caption(
+            "將目前 Working 工作資料凍結為穩定的 `ready.csv`，"
+            "供圖表探索、降維、分群等分析頁使用；監督式教學頁使用各頁內建範例資料。"
+        )
         missing_total = int(df.isna().sum().sum())
         text_columns = text_or_category_columns(df)
         duplicate_rows = int(df.duplicated().sum())
@@ -1252,10 +1255,10 @@ def render_ready_page() -> None:
             st.warning(
                 f"仍有 {len(text_columns)} 個文字/類別欄位："
                 + "、".join(f"`{column}`" for column in text_columns)
-                + "。後續分析或訓練可能需要先做編碼，或在分析頁只選數值欄位。"
+                + "。後續分析頁可能需要先做編碼，或在分析頁只選數值欄位。"
             )
         if missing_total:
-            st.warning("仍有缺失值。後續分析或訓練前建議先完成缺失值處理。")
+            st.warning("仍有缺失值。後續分析前建議先完成缺失值處理。")
         if st.button("建立 ready.csv", type="primary", width="stretch"):
             create_ready_dataset(df)
             append_cleaning_log(
@@ -1527,7 +1530,7 @@ def render_simple_linear_regression_page() -> None:
 
     _regression_page_shell(
         "單變量線性回歸",
-        "使用內建餐廳獲利資料或目前 ready.csv，觀察一條回歸線如何擬合資料。",
+        "使用內建餐廳獲利資料，觀察一條回歸線如何擬合資料。",
         "內建範例資料：城市人口與餐廳獲利",
         RESTAURANT_PROFIT_PATH,
         body,
@@ -1747,7 +1750,7 @@ def render_multiple_linear_regression_page() -> None:
 
     _regression_page_shell(
         "多變量線性回歸",
-        "使用內建房價資料或目前 ready.csv，觀察多個 features 如何共同預測 target。",
+        "使用內建房價資料，觀察多個 features 如何共同預測 target。",
         "內建範例資料：房價預測",
         HOUSE_PRICES_PATH,
         body,
@@ -2204,25 +2207,8 @@ def _regression_page_shell(
     with main:
         st.title(title)
         st.caption(caption)
-        source = st.radio(
-            "資料來源",
-            ["內建範例資料", "目前 ready.csv"],
-            horizontal=True,
-            key=f"{title}_data_source",
-        )
-        if source == "內建範例資料":
-            df = pd.read_csv(builtin_path)
-            source_label = builtin_label
-            st.success(
-                "目前使用本頁內建教學資料。資料已整理完成，目的是專注理解演算法。"
-            )
-        else:
-            df = load_ready_dataset()
-            source_label = f"目前 ready.csv：{_display_path(READY_DATASET_PATH)}"
-            if df is None:
-                st.warning("尚未建立 Ready 分析就緒資料。請先建立 ready.csv，或改用內建範例資料。")
-                return
-            st.info(f"目前使用 `{_display_path(READY_DATASET_PATH)}`。")
+        df = pd.read_csv(builtin_path)
+        source_label = builtin_label
         render_dataset_metrics(df)
         st.session_state[context_key] = f"目前頁面：{title}。資料來源：{source_label}。"
         render_main(df, source_label)
@@ -2230,7 +2216,7 @@ def _regression_page_shell(
         extra_context = str(
             st.session_state.get(
                 context_key,
-                f"目前頁面：{title}。資料來源：{source if 'source' in locals() else '未選擇'}。",
+                f"目前頁面：{title}。資料來源：{builtin_label}。",
             )
         )
         render_chat_panel(
