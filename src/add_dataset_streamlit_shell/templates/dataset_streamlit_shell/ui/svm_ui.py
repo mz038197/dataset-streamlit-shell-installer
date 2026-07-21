@@ -445,9 +445,9 @@ def _render_hard_margin_formula() -> None:
     )
     with st.expander("為什麼目標會變成 ½‖w‖²？（逐步推導）", expanded=False):
         st.markdown("**1. 平行線距離**")
-        st.markdown("兩條平行線 \(w^\top x+b=c_1\)、\(w^\top x+b=c_2\) 的距離為：")
+        st.markdown(r"兩條平行線 $w^\top x+b=c_1$、$w^\top x+b=c_2$ 的距離為：")
         st.latex(r"\frac{|c_1-c_2|}{\|w\|}")
-        st.markdown("SVM 邊界取 \(+1\) 與 \(-1\)：")
+        st.markdown(r"SVM 邊界取 $+1$ 與 $-1$：")
         st.latex(r"\mathrm{Margin}=\frac{|1-(-1)|}{\|w\|}=\frac{2}{\|w\|}")
         st.caption(r"決策邊界到其中一邊的距離是 $1/\|w\|$。")
 
