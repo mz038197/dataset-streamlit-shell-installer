@@ -210,30 +210,6 @@ def soft_hint_display_text(qid: str) -> str:
     return "（Agent 提示）請說明 C 變大時的取捨，不要直接講正解。"
 
 
-def hard_focus_prompt_lines(focus_qid: str | None, *, unlocked: bool) -> list[str]:
-    if not unlocked:
-        if focus_qid == QID_NORM:
-            return ["可按題2旁的「Agent 提示」詢問 Margin 與 ‖w‖（請 Agent 不要直接講正解）。"]
-        return ["可按題1旁的「Agent 提示」詢問為什麼目標不能沒有限制（請 Agent 不要直接講正解）。"]
-    return [
-        "請解釋這張圖上的 support vector 代表什麼。",
-        "請說明為什麼最大化 Margin 等價於最小化 ‖w‖。",
-        "請比較線性 SVM 與邏輯迴歸在這份資料上的差異。",
-    ]
-
-
-def soft_focus_prompt_lines(focus_qid: str | None, *, unlocked: bool) -> list[str]:
-    if not unlocked:
-        if focus_qid == QID_C:
-            return ["可按題2旁的「Agent 提示」詢問 C 變大時的偏向（請 Agent 不要直接講正解）。"]
-        return ["可按題1旁的「Agent 提示」詢問硬間隔遇到不可分時會怎樣（請 Agent 不要直接講正解）。"]
-    return [
-        "若把 C 調大或調小再訓練一次，決策邊界與 support vectors 可能如何改變？",
-        "請解釋 soft margin 允許什麼，以及和硬間隔差在哪。",
-        "請指出圖上哪些點比較像「被允許犯錯／靠近邊界」的樣本。",
-    ]
-
-
 SKLEARN_HARD_EXAMPLE = '''\
 import pandas as pd
 from sklearn.svm import SVC

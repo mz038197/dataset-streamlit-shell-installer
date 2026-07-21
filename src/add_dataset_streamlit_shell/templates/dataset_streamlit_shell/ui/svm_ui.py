@@ -46,7 +46,7 @@ SVM_SOFT_PATH = CLASSIFICATION_DEMO_DIR / "svm_soft_margin_80.csv"
 SVM_FEATURES = ["特徵1", "特徵2"]
 SVM_TARGET = "類別"
 HARD_DEFAULT_C = 1.0
-PAGE_TITLE = "線性支援向量機"
+PAGE_TITLE = "線性支持向量機"
 CONTEXT_KEY = f"{PAGE_TITLE}_agent_context"
 STAGE_HARD_LABEL = "線性可分（最大化 margin）"
 STAGE_SOFT_LABEL = "Soft Margin"
@@ -89,7 +89,6 @@ def _render_hard_margin_tab() -> None:
     prepared = _prepare_tab_data(
         builtin_path=SVM_BLOBS_PATH,
         builtin_label="內建範例資料：可線性分開的兩特徵二元分類（80 筆）",
-        note="每一列是一個樣本：特徵為 x，類別為 y（本頁固定使用 -1 / +1）。資料大致可被直線分開。",
     )
     if prepared is None:
         return
@@ -133,7 +132,6 @@ def _render_hard_margin_tab() -> None:
         result_key=result_key,
         signature=signature,
         can_plot_2d=can_plot_2d,
-        idle_message="答完兩題後，按下「開始訓練」以顯示決策邊界與 support vectors。",
         stale_caption="顯示最近一次訓練結果；換資料或欄位後請重新訓練。",
     )
 
@@ -170,8 +168,6 @@ def _render_hard_margin_tab() -> None:
         st.code(quiz.SKLEARN_HARD_EXAMPLE, language="python")
         st.caption("範例使用 `SVC(kernel=\"linear\")`。")
 
-    _render_svm_prompts(quiz.hard_focus_prompt_lines(focus, unlocked=unlocked))
-
 
 def _render_soft_margin_tab() -> None:
     st.markdown("##### 這一階段在問什麼")
@@ -182,7 +178,6 @@ def _render_soft_margin_tab() -> None:
     prepared = _prepare_tab_data(
         builtin_path=SVM_SOFT_PATH,
         builtin_label="內建範例資料：類別重疊的兩特徵二元分類（soft margin，80 筆）",
-        note="資料有重疊，不容易用一條直線完美分開——適合觀察 Soft Margin 與 C。",
     )
     if prepared is None:
         return
@@ -240,7 +235,6 @@ def _render_soft_margin_tab() -> None:
         result_key=result_key,
         signature=signature,
         can_plot_2d=can_plot_2d,
-        idle_message="設定 C 並答完兩題後，按下「開始訓練」。",
         stale_caption="顯示最近一次訓練結果；調整 C 後請重新按「開始訓練」。",
     )
 
@@ -280,14 +274,11 @@ def _render_soft_margin_tab() -> None:
         st.code(quiz.SKLEARN_SOFT_EXAMPLE, language="python")
         st.caption("與階段 1 同骨架，差在資料與明確寫出 C。")
 
-    _render_svm_prompts(quiz.soft_focus_prompt_lines(focus, unlocked=unlocked))
-
 
 def _prepare_tab_data(
     *,
     builtin_path: Path,
     builtin_label: str,
-    note: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, list[str], str, str] | None:
     df = pd.read_csv(builtin_path)
     render_dataset_metrics(df)
@@ -300,7 +291,7 @@ def _prepare_tab_data(
         st.warning("可用樣本少於 2 筆，無法訓練。")
         return None
 
-    _render_svm_data_intro(working, features=features, target=target, note=note)
+    _render_svm_data_intro(working, features=features, target=target)
     return working, working[features], features, target, source_label
 
 
@@ -316,7 +307,6 @@ def _resolve_or_train_artifact(
     result_key: str,
     signature: tuple,
     can_plot_2d: bool,
-    idle_message: str,
     stale_caption: str,
 ) -> LinearSvmArtifact | None:
     artifact: LinearSvmArtifact | None = None
@@ -371,7 +361,6 @@ def _resolve_or_train_artifact(
             plt.close(fig)
         return artifact
 
-    st.info(idle_message)
     return None
 
 
@@ -849,10 +838,8 @@ def _render_svm_data_intro(
     *,
     features: list[str],
     target: str,
-    note: str | None = None,
 ) -> None:
     st.markdown("##### Data 資訊")
-    st.info(note or "每一列是一個樣本：特徵為 x，類別為 y（本頁固定使用 -1 / +1）。")
     role_rows = []
     for column in features + [target]:
         series = pd.to_numeric(frame[column], errors="coerce")
@@ -983,9 +970,3 @@ def _resolve_svm_artifact(
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         st.error(f"無法讀取模型 JSON：{exc}")
         return None
-
-
-def _render_svm_prompts(prompts: list[str]) -> None:
-    st.markdown("##### 建議問 Agent")
-    for prompt in prompts:
-        st.code(prompt, language="text")

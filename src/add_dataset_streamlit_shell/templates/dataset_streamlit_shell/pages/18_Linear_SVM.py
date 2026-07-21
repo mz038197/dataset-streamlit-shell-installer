@@ -12,6 +12,6 @@ if str(PROJECT_ROOT) not in sys.path:
 from dataset_streamlit_shell.ui.data_ui import inject_style
 from dataset_streamlit_shell.ui.svm_ui import render_linear_svm_page
 
-st.set_page_config(page_title="線性支援向量機", page_icon="SV", layout="wide")
+st.set_page_config(page_title="線性支持向量機", page_icon="SV", layout="wide")
 inject_style()
 render_linear_svm_page()
