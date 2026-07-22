@@ -103,9 +103,6 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "8_Ready.py"), title="建立 Ready 分析就緒資料"),
         st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="圖表探索"),
     ],
-    "降維分析": [
-        st.Page(str(SHELL_ROOT / "pages" / "10_PCA.py"), title="PCA 主成分分析"),
-    ],
     "機器學習 · 監督式": [
         st.Page(str(SHELL_ROOT / "pages" / "14_Simple_Linear_Regression.py"), title="單變量線性回歸"),
         st.Page(str(SHELL_ROOT / "pages" / "15_Multiple_Linear_Regression.py"), title="多變量線性回歸"),
@@ -148,6 +145,9 @@ pages = {
             str(SHELL_ROOT / "pages" / "26_Promptable_Segmentation.py"),
             title="提示式分割（Promptable Segmentation / SAM）",
         ),
+    ],
+    "降維分析": [
+        st.Page(str(SHELL_ROOT / "pages" / "10_PCA.py"), title="PCA 主成分分析"),
     ],
 }
 
