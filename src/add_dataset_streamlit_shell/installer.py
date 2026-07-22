@@ -19,6 +19,7 @@ PROJECT_DEPENDENCIES = (
     "streamlit>=1.50",
     "pandas",
     "matplotlib",
+    "plotly",
     "numpy",
     "scikit-learn",
     "xgboost",
