@@ -31,7 +31,7 @@ uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git
 By default, installation and update also run this in the target project:
 
 ```powershell
-uv add --upgrade-package openai-tts "streamlit>=1.50" pandas matplotlib numpy scikit-learn xgboost "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
+uv add --upgrade-package openai-tts "streamlit>=1.50" pandas matplotlib plotly numpy scikit-learn xgboost "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
 ```
 
 To copy or update the shell without changing project dependencies:
@@ -97,6 +97,7 @@ The installed `dataset_streamlit_shell/` template includes supervised learning p
 - **Logistic regression** — university admission demo from `built-in-data/classification/university_admission.csv` (Coursera ex2data1)
 - **Regularized logistic regression** — microchip test demo from `built-in-data/classification/microchip_test.csv` (Coursera ex2data2, degree-6 feature map and λ)
 - **Linear SVM** — two-stage hard → soft margin: `svm_blobs_80.csv` (linearly separable) then `svm_soft_margin_80.csv` (overlapping classes), both under `built-in-data/classification/`. Uses `sklearn.svm.SVC(kernel='linear')`; hard stage omits C on the surface, soft stage centers on C. Shows decision boundary and support vectors. Requires `scikit-learn`.
+- **K-近鄰分類** — two-stage neighbors/voting → choose k: `knn_blobs_80.csv` then `knn_scale_trap_80.csv` (stretched feature scale). Pre-train quiz unlock; Plotly chart for click-to-set query point and k-neighbor lines. Requires `scikit-learn` and `plotly`.
 - **Decision tree concepts** — built-in 10-row cat toy CSV from `built-in-data/classification/cat_toy_10.csv`. Shows entropy, information gain table, and `DecisionTreeClassifier` with student-chosen Gini/Entropy criterion and `max_depth` 1–2. Builtin data only; no model JSON save.
 - **XGBoost** — built-in heart disease CSV from `built-in-data/classification/heart_disease.csv` (Traditional Chinese column names). Auto one-hot encoding, 80/20 train/validation split, hyperparameter sweep curves, and final `XGBClassifier` with early stopping. Requires `xgboost`. Builtin data only; no model JSON save.
 
@@ -116,7 +117,7 @@ Requires stable network, ~3.4 GB free disk space, and `gdown` (installed with sh
 
 - Copies `dataset_streamlit_shell/` into the current project.
 - Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
-- Installs required project dependencies with `uv add "streamlit>=1.50" pandas matplotlib numpy scikit-learn xgboost` and `openai-tts` by default.
+- Installs required project dependencies with `uv add "streamlit>=1.50" pandas matplotlib plotly numpy scikit-learn xgboost` and `openai-tts` by default.
 - Persists TTS preferences to `dataset_streamlit_shell/workspace/user_settings.json` across page changes and browser restarts.
 - Refuses to overwrite an existing shell unless `--force` is used.
 - Supports `--update` to refresh shell code while preserving runtime data.
