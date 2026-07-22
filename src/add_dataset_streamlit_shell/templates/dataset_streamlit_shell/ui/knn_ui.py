@@ -532,7 +532,7 @@ def _render_neighbors_pretrain_quiz(
     q1_col, h1_col = st.columns([4, 1])
     with q1_col:
         inst_choice = st.radio(
-            "題1：用 K-近鄰做預測時，模型有沒有先學一組權重 \(w\)？",
+            "題1：用 K-近鄰做預測時，模型有沒有先學一組權重 $w$？",
             [quiz.PLEASE_SELECT, *quiz.INST_OPTIONS],
             key=quiz.SESSION_INST,
         )
