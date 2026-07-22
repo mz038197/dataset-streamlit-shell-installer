@@ -87,12 +87,11 @@ def overview() -> None:
 
 
 pages = {
-    "資料工作區": [
+    "": [
         st.Page(overview, title="總覽", default=True),
-        st.Page(str(SHELL_ROOT / "pages" / "1_Database.py"), title="資料上傳與預覽"),
-        st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="圖表探索"),
     ],
     "AI 協作資料整理": [
+        st.Page(str(SHELL_ROOT / "pages" / "1_Database.py"), title="資料上傳與預覽"),
         st.Page(str(SHELL_ROOT / "pages" / "3_Field_Quality.py"), title="欄位與資料概覽"),
         st.Page(str(SHELL_ROOT / "pages" / "4_Duplicates.py"), title="刪除重複資料列"),
         st.Page(str(SHELL_ROOT / "pages" / "5_Numeric_Diagnostics.py"), title="缺失值處理"),
@@ -102,6 +101,7 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "9_Correlation.py"), title="數值相關性"),
         st.Page(str(SHELL_ROOT / "pages" / "13_Feature_Scaling.py"), title="特徵縮放"),
         st.Page(str(SHELL_ROOT / "pages" / "8_Ready.py"), title="建立 Ready 分析就緒資料"),
+        st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="圖表探索"),
     ],
     "降維分析": [
         st.Page(str(SHELL_ROOT / "pages" / "10_PCA.py"), title="PCA 主成分分析"),
