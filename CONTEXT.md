@@ -27,3 +27,23 @@ _Avoid_: 類神經網路式實驗迴圈；硬鎖「必須先跟 Agent 說話才�
 **查詢點（K-近鄰分類）**:
 用來示範預測的單一座標點；畫出其 k 個最近訓練鄰居（可連線），讓「鄰居與投票」可見。以圖上 click 指定；本頁因此採用可點選的互動圖（Plotly），不沿用其他 ML 頁的 matplotlib＋st.pyplot 主路徑。
 _Avoid_: 第一版以 confusion matrix／classification report 當主視覺；強制全專案改 Plotly
+
+**卷積神經網路（CNN）**:
+影像辨識觀念教學頁的正式名稱；以小視窗（kernel）在圖上滑動找局部特徵，再經活化與縮小後分類。敘事以指定觀念主軸影片為骨幹，開頭保留「圖片＝矩陣」前置；互動示範用來驗證觀念，不是實驗迴圈主體。
+_Avoid_: CNN 介紹（可作檔名／口語）、Convolutional Neural Network 當頁標題主文、把 inductive bias 專名當第一版主菜
+
+**學習階段（卷積神經網路）**:
+頁內用 horizontal radio 切換的教學段落（不用 tabs）。六段依序為：圖片與矩陣；為什麼需要 CNN；卷積與特徵圖；ReLU 與 Pooling；CNN 整條流程；動手做 CNN。
+_Avoid_: Tab、分頁（指 st.tabs 實作）；把六段併回「局部只改兩 tab」的舊結構
+
+**觀念主軸影片（卷積神經網路）**:
+DataMListic《CNNs - Explained》（video_id `YGILT182T6w`）。階段1不嵌入；階段2～6嵌入同一支片並附該段建議時間戳；正文為繁中整理，影片為對照。
+_Avoid_: 影片僅備課不進學生 UI；硬鎖「必須看完整支才能往下」；第一版灌譯 inductive bias 專名
+
+**訓練前預測（卷積神經網路）**:
+階段6解鎖「開始訓練」前的兩題概念關卡：kernel／卷積在做什麼，以及 pooling 留下什麼。
+_Avoid_: 階段6直接訓練無關卡；把「為什麼不用 Dense」或 ReLU 當解鎖硬門檻；硬鎖「必須先跟 Agent 說話才能訓練」
+
+**史話補充（卷積神經網路）**:
+Hubel & Wiesel 與 LeNet-5 等歷史／生物啟發內容；降級為可展開補充，不佔「為什麼需要 CNN」主線。
+_Avoid_: 與影片動機並列當階段2正文主軸
