@@ -77,6 +77,7 @@ configure_matplotlib_for_traditional_chinese()
 
 PromptList = list[str]
 CORRELATION_FORMULA_IMAGE_PATH = SHELL_ROOT / "assets" / "correlation_formula.png"
+ENCODING_REFERENCE_IMAGE_PATH = SHELL_ROOT / "assets" / "encoding_onehot_vs_label.png"
 CATEGORICAL_SELECTION_STATE_KEY = "confirmed_categorical_columns"
 CATEGORICAL_SELECTION_WIDGET_KEY = "selected_categorical_columns_widget"
 CATEGORICAL_SELECTION_EDIT_WIDGET_KEY = "selected_categorical_columns_edit_widget"
@@ -820,9 +821,21 @@ def render_categorical_page() -> None:
     )
 
 
+def _render_encoding_reference() -> None:
+    with st.expander("One-Hot 與 Label Encoding 對照", expanded=False):
+        if ENCODING_REFERENCE_IMAGE_PATH.is_file():
+            st.image(str(ENCODING_REFERENCE_IMAGE_PATH), width="stretch")
+        else:
+            st.caption("編碼說明圖尚未就緒。")
+        st.caption(
+            "本頁請先和 Agent 確認欄位要用 One-Hot、Label Encoding，或保留原欄位。"
+        )
+
+
 def render_encoding_page() -> None:
     def body(df: pd.DataFrame) -> None:
         st.markdown("##### 診斷：類別欄位編碼")
+        _render_encoding_reference()
         all_columns = [str(column) for column in df.columns]
         categorical = _selected_categorical_columns(df)
         if categorical:

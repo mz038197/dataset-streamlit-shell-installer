@@ -21,10 +21,14 @@ def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> Non
     assert (result.target / "ui" / "data_ui.py").exists()
     assert (result.target / "pages" / "1_Database.py").exists()
     assert (result.target / "workspace" / ".gitkeep").exists()
+    assert (result.target / "assets" / "encoding_onehot_vs_label.png").is_file()
     assert (tmp_path / "sessions" / ".gitkeep").exists()
     assert not (result.target / "sessions").exists()
     data_ui = (result.target / "ui" / "data_ui.py").read_text(encoding="utf-8")
     assert 'SESSION_DIR = PROJECT_ROOT / "sessions"' in data_ui
+    workflow_ui = (result.target / "ui" / "workflow_ui.py").read_text(encoding="utf-8")
+    assert "One-Hot 與 Label Encoding 對照" in workflow_ui
+    assert "encoding_onehot_vs_label.png" in workflow_ui
 
 
 def test_install_shell_can_require_agent_core(tmp_path: Path) -> None:
