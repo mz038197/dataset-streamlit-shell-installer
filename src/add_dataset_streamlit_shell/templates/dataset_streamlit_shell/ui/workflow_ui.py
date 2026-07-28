@@ -1255,7 +1255,7 @@ def render_ready_page() -> None:
         st.markdown("##### 建立 Ready 分析就緒資料")
         st.caption(
             "將目前 Working 工作資料凍結為穩定的 `ready.csv`，"
-            "供圖表探索、降維、分群等分析頁使用；監督式教學頁使用各頁內建範例資料。"
+            "供圖表探索、降維等分析頁使用；監督式與非監督式教學頁使用各頁內建範例資料。"
         )
         missing_total = int(df.isna().sum().sum())
         text_columns = text_or_category_columns(df)
