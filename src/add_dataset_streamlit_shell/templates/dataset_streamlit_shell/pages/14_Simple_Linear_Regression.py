@@ -10,8 +10,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataset_streamlit_shell.ui.data_ui import inject_style
-from dataset_streamlit_shell.ui.workflow_ui import render_simple_linear_regression_page
+from dataset_streamlit_shell.ui.workflow_ui import render_linear_regression_page
 
-st.set_page_config(page_title="單變量線性回歸", page_icon="LR", layout="wide")
+st.set_page_config(page_title="線性回歸", page_icon="LR", layout="wide")
 inject_style()
-render_simple_linear_regression_page()
+render_linear_regression_page()

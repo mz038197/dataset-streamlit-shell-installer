@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-import json
 from pathlib import Path
 import time
 
@@ -55,16 +54,23 @@ from dataset_streamlit_shell.ui.simple_regression_quiz import (
     slope_label_from_weight,
 )
 from dataset_streamlit_shell.ml.regression import (
+    COST_DJ_DB_LATEX,
+    COST_DJ_DW_LATEX,
+    COST_GD_B_LATEX,
+    COST_GD_W_LATEX,
+    COST_J_LATEX,
     GradientDescentStep,
     LinearModelArtifact,
+    MULTIPLE_REGRESSION_FEATURES,
+    MULTIPLE_REGRESSION_TARGET,
+    SIMPLE_REGRESSION_FEATURE,
+    SIMPLE_REGRESSION_TARGET,
     apply_standard_scaler,
     build_regression_agent_context,
     create_standard_scaler,
-    format_prediction_formula,
     gradient_descent_steps,
     predict_from_artifact,
     predict_with_parameters,
-    save_model_artifact,
 )
 from dataset_streamlit_shell.plotting import (
     build_regression_data_figures,
@@ -1326,443 +1332,400 @@ def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.Da
 
 
 REGRESSION_DEMO_DIR = SHELL_ROOT / "built-in-data" / "regression"
-REGRESSION_MODEL_DIR = SHELL_ROOT / "workspace" / "models" / "regression"
 RESTAURANT_PROFIT_PATH = REGRESSION_DEMO_DIR / "restaurant_profit.csv"
 HOUSE_PRICES_PATH = REGRESSION_DEMO_DIR / "house_prices.csv"
 
+LR_PAGE_TITLE = "線性回歸"
+LR_CONTEXT_KEY = f"{LR_PAGE_TITLE}_agent_context"
+LR_STAGE_SIMPLE = "單變量"
+LR_STAGE_MULTIPLE = "多變量"
+SIMPLE_SOURCE_LABEL = "內建範例資料：城市人口與餐廳獲利"
+MULTIPLE_SOURCE_LABEL = "內建範例資料：房價預測"
 
-def render_simple_linear_regression_page() -> None:
-    def body(df: pd.DataFrame, source_label: str) -> None:
-        st.markdown("##### 單變量線性回歸")
-        st.info(
-            "本頁專注在教材的第一個回歸模型：用一個 feature 預測一個連續 target，"
-            "觀察回歸線、預測誤差與成本函數 J(w,b)。"
+
+def render_linear_regression_page() -> None:
+    main, side = st.columns([5, 3], gap="large")
+    with main:
+        st.title(LR_PAGE_TITLE)
+        st.caption("先用單一特徵擬合直線，再用多特徵（含 Z-score 縮放）共同預測。")
+        # st.tabs 在 streamlit>=1.50 無法可靠回報作用中分頁；用 radio 追蹤焦點給 Agent。
+        stage = st.radio(
+            "學習階段",
+            [LR_STAGE_SIMPLE, LR_STAGE_MULTIPLE],
+            horizontal=True,
+            key="lr_learning_stage",
         )
-        numeric_columns = _numeric_regression_columns(df)
-        if len(numeric_columns) < 2:
-            st.warning("單變量線性回歸至少需要 2 個數值欄位：1 個 feature 與 1 個 target。")
-            return
-
-        default_feature = _default_column(numeric_columns, "城市人口_萬人")
-        default_target = _default_column(numeric_columns, "餐廳獲利_萬美元", exclude={default_feature})
-        c1, c2 = st.columns(2)
-        feature = c1.selectbox(
-            "選擇 feature（x）",
-            numeric_columns,
-            index=numeric_columns.index(default_feature),
-            key="simple_regression_feature",
-        )
-        target_options = [column for column in numeric_columns if column != feature]
-        target = c2.selectbox(
-            "選擇 target（y）",
-            target_options,
-            index=target_options.index(default_target) if default_target in target_options else 0,
-            key="simple_regression_target",
+        if stage == LR_STAGE_SIMPLE:
+            _render_simple_regression_stage()
+        else:
+            _render_multiple_regression_stage()
+    with side:
+        render_chat_panel(
+            extra_context=str(
+                st.session_state.get(LR_CONTEXT_KEY, f"目前頁面：{LR_PAGE_TITLE}。")
+            ),
+            page_name=LR_PAGE_TITLE,
         )
 
-        working = _regression_training_frame(df, [feature], target)
-        if len(working) < 2:
-            st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
-            return
 
-        _render_regression_data_intro(
+def _render_simple_regression_stage() -> None:
+    df = pd.read_csv(RESTAURANT_PROFIT_PATH)
+    source_label = SIMPLE_SOURCE_LABEL
+    render_dataset_metrics(df)
+
+    feature = SIMPLE_REGRESSION_FEATURE
+    target = SIMPLE_REGRESSION_TARGET
+    if feature not in df.columns or target not in df.columns:
+        st.warning("內建餐廳資料缺少固定欄位，無法開始單變量線性回歸。")
+        return
+
+    working = _regression_training_frame(df, [feature], target)
+    if len(working) < 2:
+        st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
+        return
+
+    _render_regression_data_intro(
+        working,
+        features=[feature],
+        target=target,
+        dataset_note=(
+            "每一列是一個城市市場：x 是城市人口，y 是餐廳獲利。"
+            "目標是找出一條直線來描述兩者關係。"
+        ),
+    )
+
+    st.markdown("##### 訓練設定")
+    c1, c2 = st.columns(2)
+    learning_rate = c1.number_input(
+        "學習率 α",
+        min_value=0.0001,
+        max_value=1.0,
+        value=0.01,
+        step=0.001,
+        format="%.4f",
+        key="simple_regression_learning_rate",
+    )
+    epochs = c2.number_input(
+        "Epoch / 迭代次數",
+        min_value=1,
+        max_value=5000,
+        value=1500,
+        step=100,
+        key="simple_regression_epochs",
+    )
+    st.markdown("##### 模型公式")
+    st.latex(r"Y = WX + B")
+    _render_cost_formula()
+
+    expected_slope = expected_slope_direction(working, feature, target)
+    quiz_unlocked = _render_simple_regression_pretrain_quiz(
+        working,
+        feature=feature,
+        target=target,
+        learning_rate=float(learning_rate),
+        expected_slope=expected_slope,
+        source_label=source_label,
+        epochs=int(epochs),
+    )
+
+    result_key = "simple_regression_last_artifact"
+    signature = (source_label, feature, target, float(learning_rate), int(epochs), len(working))
+    train_clicked = st.button(
+        "開始訓練",
+        type="primary",
+        width="stretch",
+        key="train_simple_regression",
+        disabled=not quiz_unlocked,
+    )
+    if not quiz_unlocked:
+        st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+
+    artifact: LinearModelArtifact | None = None
+    prediction: pd.Series | None = None
+    slope_guess = st.session_state.get(SESSION_SLOPE, PLEASE_SELECT)
+    if train_clicked and quiz_unlocked:
+        steps = gradient_descent_steps(
+            working[[feature]],
+            working[target],
+            learning_rate=float(learning_rate),
+            epochs=int(epochs),
+        )
+        chart_left, chart_right = st.columns(2)
+        line_placeholder = chart_left.empty()
+        cost_placeholder = chart_right.empty()
+        status_placeholder = st.empty()
+        _animate_simple_gradient_descent(
             working,
+            feature,
+            target,
+            steps,
+            line_placeholder,
+            cost_placeholder,
+            status_placeholder,
+        )
+
+        final_step = steps[-1]
+        prediction = predict_with_parameters(
+            working[[feature]],
+            final_step.weights,
+            final_step.intercept,
+        )
+        artifact = LinearModelArtifact(
+            model_kind="simple_linear_regression",
             features=[feature],
             target=target,
-            dataset_note="每一列是一個城市市場：x 是城市人口，y 是餐廳獲利。目標是找出一條直線來描述兩者關係。",
+            weights=[float(final_step.weights[0])],
+            intercept=float(final_step.intercept),
+            scaler=None,
+            training_cost=float(final_step.cost),
+            data_source=source_label,
         )
-
-        st.markdown("##### 訓練設定")
-        c1, c2 = st.columns(2)
-        learning_rate = c1.number_input(
-            "學習率 α",
-            min_value=0.0001,
-            max_value=1.0,
-            value=0.01,
-            step=0.001,
-            format="%.4f",
-            key="simple_regression_learning_rate",
+        st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+        actual_dir = slope_label_from_weight(
+            float(final_step.weights[0]),
+            x_std=float(working[feature].astype(float).std(ddof=0)),
+            y_std=float(working[target].astype(float).std(ddof=0)),
         )
-        epochs = c2.number_input(
-            "Epoch / 迭代次數",
-            min_value=1,
-            max_value=5000,
-            value=1500,
-            step=100,
-            key="simple_regression_epochs",
+        st.caption(
+            f"你猜的斜率方向：{slope_guess}；"
+            f"實際 w≈{float(final_step.weights[0]):.4g}（{actual_dir}）。"
         )
-        st.markdown("##### 模型公式")
-        st.latex(r"Y = WX + B")
-        _render_cost_formula()
-
-        expected_slope = expected_slope_direction(working, feature, target)
-        quiz_unlocked = _render_simple_regression_pretrain_quiz(
-            working,
-            feature=feature,
-            target=target,
-            learning_rate=float(learning_rate),
-            expected_slope=expected_slope,
-            source_label=source_label,
-            epochs=int(epochs),
-        )
-
-        result_key = "simple_regression_last_artifact"
-        signature = (source_label, feature, target, float(learning_rate), int(epochs), len(working))
-        context_key = "單變量線性回歸_agent_context"
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            width="stretch",
-            key="train_simple_regression",
-            disabled=not quiz_unlocked,
-        )
-        if not quiz_unlocked:
-            st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
-
-        artifact: LinearModelArtifact | None = None
-        prediction: pd.Series | None = None
-        slope_guess = st.session_state.get(SESSION_SLOPE, PLEASE_SELECT)
-        if train_clicked and quiz_unlocked:
-            steps = gradient_descent_steps(
-                working[[feature]],
-                working[target],
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-            )
-            chart_left, chart_right = st.columns(2)
-            line_placeholder = chart_left.empty()
-            cost_placeholder = chart_right.empty()
-            status_placeholder = st.empty()
-            _animate_simple_gradient_descent(
-                working,
-                feature,
-                target,
-                steps,
-                line_placeholder,
-                cost_placeholder,
-                status_placeholder,
-            )
-
-            final_step = steps[-1]
-            prediction = predict_with_parameters(
-                working[[feature]],
-                final_step.weights,
-                final_step.intercept,
-            )
-            artifact = LinearModelArtifact(
-                model_kind="simple_linear_regression",
-                features=[feature],
-                target=target,
-                weights=[float(final_step.weights[0])],
-                intercept=float(final_step.intercept),
-                scaler=None,
-                training_cost=float(final_step.cost),
-                data_source=source_label,
-            )
-            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
-            actual_dir = slope_label_from_weight(
-                float(final_step.weights[0]),
-                x_std=float(working[feature].astype(float).std(ddof=0)),
-                y_std=float(working[target].astype(float).std(ddof=0)),
-            )
-            st.caption(
-                f"你猜的斜率方向：{slope_guess}；"
-                f"實際 w≈{float(final_step.weights[0]):.4g}（{actual_dir}）。"
-            )
+    else:
+        stored = st.session_state.get(result_key)
+        if isinstance(stored, dict) and stored.get("signature") == signature:
+            artifact = stored["artifact"]
+            prediction = predict_from_artifact(artifact, working[artifact.features])
+            st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+            if artifact is not None and slope_guess in SLOPE_OPTIONS:
+                actual_dir = slope_label_from_weight(
+                    float(artifact.weights[0]),
+                    x_std=float(working[feature].astype(float).std(ddof=0)),
+                    y_std=float(working[target].astype(float).std(ddof=0)),
+                )
+                st.caption(
+                    f"你猜的斜率方向：{slope_guess}；"
+                    f"實際 w≈{float(artifact.weights[0]):.4g}（{actual_dir}）。"
+                )
+        elif quiz_unlocked:
+            st.info("兩題已過關。按下「開始訓練」觀察回歸線與 Cost 的演進。")
         else:
-            stored = st.session_state.get(result_key)
-            if isinstance(stored, dict) and stored.get("signature") == signature:
-                artifact = stored["artifact"]
-                prediction = predict_from_artifact(artifact, working[artifact.features])
-                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
-                if artifact is not None and slope_guess in SLOPE_OPTIONS:
-                    actual_dir = slope_label_from_weight(
-                        float(artifact.weights[0]),
-                        x_std=float(working[feature].astype(float).std(ddof=0)),
-                        y_std=float(working[target].astype(float).std(ddof=0)),
-                    )
-                    st.caption(
-                        f"你猜的斜率方向：{slope_guess}；"
-                        f"實際 w≈{float(artifact.weights[0]):.4g}（{actual_dir}）。"
-                    )
-            elif quiz_unlocked:
-                st.info("兩題已過關。按下「開始訓練」觀察回歸線與 Cost 的演進。")
-            else:
-                st.info("先完成上方兩題訓練前預測，再開始訓練。")
+            st.info("先完成上方兩題訓練前預測，再開始訓練。")
 
-        slope_choice = str(st.session_state.get(SESSION_SLOPE, PLEASE_SELECT))
-        alpha_choice = str(st.session_state.get(SESSION_ALPHA, PLEASE_SELECT))
-        quiz_note = build_quiz_agent_appendix(
-            slope_status=quiz_choice_status(
-                slope_choice,
-                correct=is_slope_correct(slope_choice, expected_slope),
-            ),
-            alpha_status=quiz_choice_status(
-                alpha_choice,
-                correct=is_alpha_correct(alpha_choice),
-            ),
-            focus_qid=st.session_state.get(SESSION_FOCUS),
-            feature=feature,
-            target=target,
-            learning_rate=float(learning_rate),
-            unlocked=quiz_unlocked,
-        )
-        st.session_state[context_key] = (
-            build_regression_agent_context(
-                page_name="單變量線性回歸",
-                data_source=source_label,
-                features=[feature],
-                target=target,
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-                row_count=len(working),
-                artifact=artifact,
-                prompt_train=quiz_unlocked,
-            )
-            + "\n"
-            + quiz_note
-        )
-        if artifact is not None and prediction is not None:
-            _render_training_results(artifact, working, target, prediction)
-            _render_regression_save_section(
-                artifact=artifact,
-                filename_prefix="simple_linear_regression",
-                page_key="simple_regression",
-            )
-        _render_regression_inference_section(
-            page_key="simple_regression",
-            trained_artifact=artifact,
-        )
-        focus = st.session_state.get(SESSION_FOCUS)
-        _render_regression_prompts(focus_prompt_lines(focus, unlocked=quiz_unlocked))
-
-    _regression_page_shell(
-        "單變量線性回歸",
-        "使用內建餐廳獲利資料，觀察一條回歸線如何擬合資料。",
-        "內建範例資料：城市人口與餐廳獲利",
-        RESTAURANT_PROFIT_PATH,
-        body,
+    slope_choice = str(st.session_state.get(SESSION_SLOPE, PLEASE_SELECT))
+    alpha_choice = str(st.session_state.get(SESSION_ALPHA, PLEASE_SELECT))
+    quiz_note = build_quiz_agent_appendix(
+        slope_status=quiz_choice_status(
+            slope_choice,
+            correct=is_slope_correct(slope_choice, expected_slope),
+        ),
+        alpha_status=quiz_choice_status(
+            alpha_choice,
+            correct=is_alpha_correct(alpha_choice),
+        ),
+        focus_qid=st.session_state.get(SESSION_FOCUS),
+        feature=feature,
+        target=target,
+        learning_rate=float(learning_rate),
+        unlocked=quiz_unlocked,
     )
-
-
-def render_multiple_linear_regression_page() -> None:
-    def body(df: pd.DataFrame, source_label: str) -> None:
-        st.markdown("##### 多變量線性回歸")
-        st.info(
-            "本頁使用多個數值 features 預測一個連續 target。"
-            "features 會自動做 Z-score 特徵縮放，模型 JSON 也會保存縮放參數供 inference 使用。"
-        )
-        numeric_columns = _numeric_regression_columns(df)
-        if len(numeric_columns) < 3:
-            st.warning("多變量線性回歸至少需要 2 個數值 features 與 1 個 target。")
-            return
-
-        default_features = [
-            column
-            for column in ["面積_平方英尺", "房間數", "樓層數", "屋齡_年"]
-            if column in numeric_columns
-        ]
-        if not default_features:
-            default_features = numeric_columns[: min(4, len(numeric_columns) - 1)]
-        default_target = _default_column(numeric_columns, "房價_千美元", exclude=set(default_features))
-
-        target = st.selectbox(
-            "選擇 target（y）",
-            numeric_columns,
-            index=numeric_columns.index(default_target),
-            key="multiple_regression_target",
-        )
-        feature_options = [column for column in numeric_columns if column != target]
-        selected_features = st.multiselect(
-            "選擇 features（x1, x2, ...）",
-            feature_options,
-            default=[feature for feature in default_features if feature in feature_options],
-            key="multiple_regression_features",
-        )
-        if len(selected_features) < 2:
-            st.warning("請至少選擇 2 個 features。")
-            return
-
-        working = _regression_training_frame(df, selected_features, target)
-        if len(working) < 2:
-            st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
-            return
-
-        try:
-            scaler = create_standard_scaler(working, selected_features)
-        except ValueError as exc:
-            st.warning(f"無法自動縮放：{exc}")
-            return
-        scaled_features = apply_standard_scaler(working, scaler)
-
-        _render_regression_data_intro(
-            working,
-            features=selected_features,
-            target=target,
-            dataset_note="每一列是一間房屋：多個 x features 共同預測房價 y。features 會先做 Z-score 縮放，再進行梯度下降。",
-        )
-
-        st.markdown("##### 訓練設定")
-        c1, c2 = st.columns(2)
-        learning_rate = c1.number_input(
-            "學習率 α",
-            min_value=0.0001,
-            max_value=1.0,
-            value=0.1,
-            step=0.001,
-            format="%.4f",
-            key="multiple_regression_learning_rate",
-        )
-        epochs = c2.number_input(
-            "Epoch / 迭代次數",
-            min_value=1,
-            max_value=5000,
-            value=1000,
-            step=100,
-            key="multiple_regression_epochs",
-        )
-
-        st.markdown("##### 模型公式")
-        st.latex(r"f_{\mathbf{w},b}(\mathbf{x}) = w_1x_1 + w_2x_2 + ... + b")
-        _render_cost_formula()
-        st.caption("此處的 w 對應 Z-score 縮放後的 features；保存模型時會一併保存 mean 與 scale。")
-
-        quiz_unlocked = _render_multiple_regression_pretrain_quiz(
-            features=selected_features,
+    st.session_state[LR_CONTEXT_KEY] = (
+        build_regression_agent_context(
+            page_name=f"{LR_PAGE_TITLE}（{LR_STAGE_SIMPLE}）",
+            data_source=source_label,
+            features=[feature],
             target=target,
             learning_rate=float(learning_rate),
-            source_label=source_label,
             epochs=int(epochs),
             row_count=len(working),
+            artifact=artifact,
+            prompt_train=quiz_unlocked,
         )
+        + "\n"
+        + quiz_note
+    )
+    if artifact is not None and prediction is not None:
+        _render_training_results(artifact, working, target, prediction)
+    focus = st.session_state.get(SESSION_FOCUS)
+    _render_regression_prompts(focus_prompt_lines(focus, unlocked=quiz_unlocked))
 
-        result_key = "multiple_regression_last_artifact"
-        context_key = "多變量線性回歸_agent_context"
-        signature = (
-            source_label,
-            tuple(selected_features),
+
+def _render_multiple_regression_stage() -> None:
+    df = pd.read_csv(HOUSE_PRICES_PATH)
+    source_label = MULTIPLE_SOURCE_LABEL
+    render_dataset_metrics(df)
+
+    selected_features = list(MULTIPLE_REGRESSION_FEATURES)
+    target = MULTIPLE_REGRESSION_TARGET
+    missing = [column for column in selected_features + [target] if column not in df.columns]
+    if missing:
+        st.warning(f"內建房價資料缺少固定欄位：{', '.join(missing)}。")
+        return
+
+    working = _regression_training_frame(df, selected_features, target)
+    if len(working) < 2:
+        st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
+        return
+
+    try:
+        scaler = create_standard_scaler(working, selected_features)
+    except ValueError as exc:
+        st.warning(f"無法自動縮放：{exc}")
+        return
+    scaled_features = apply_standard_scaler(working, scaler)
+
+    _render_regression_data_intro(
+        working,
+        features=selected_features,
+        target=target,
+        dataset_note=(
+            "每一列是一間房屋：多個 x features 共同預測房價 y。"
+            "features 會先做 Z-score 縮放，再進行梯度下降。"
+        ),
+    )
+
+    st.markdown("##### 訓練設定")
+    c1, c2 = st.columns(2)
+    learning_rate = c1.number_input(
+        "學習率 α",
+        min_value=0.0001,
+        max_value=1.0,
+        value=0.1,
+        step=0.001,
+        format="%.4f",
+        key="multiple_regression_learning_rate",
+    )
+    epochs = c2.number_input(
+        "Epoch / 迭代次數",
+        min_value=1,
+        max_value=5000,
+        value=1000,
+        step=100,
+        key="multiple_regression_epochs",
+    )
+
+    st.markdown("##### 模型公式")
+    st.latex(r"f_{\mathbf{w},b}(\mathbf{x}) = w_1x_1 + w_2x_2 + ... + b")
+    _render_cost_formula()
+    st.caption("此處的 w 對應 Z-score 縮放後的 features。")
+
+    quiz_unlocked = _render_multiple_regression_pretrain_quiz(
+        features=selected_features,
+        target=target,
+        learning_rate=float(learning_rate),
+        source_label=source_label,
+        epochs=int(epochs),
+        row_count=len(working),
+    )
+
+    result_key = "multiple_regression_last_artifact"
+    signature = (
+        source_label,
+        tuple(selected_features),
+        target,
+        float(learning_rate),
+        int(epochs),
+        len(working),
+    )
+    train_clicked = st.button(
+        "開始訓練",
+        type="primary",
+        width="stretch",
+        key="train_multiple_regression",
+        disabled=not quiz_unlocked,
+    )
+    if not quiz_unlocked:
+        st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+
+    artifact: LinearModelArtifact | None = None
+    prediction: pd.Series | None = None
+    if train_clicked and quiz_unlocked:
+        steps = gradient_descent_steps(
+            scaled_features,
+            working[target],
+            learning_rate=float(learning_rate),
+            epochs=int(epochs),
+        )
+        chart_left, chart_right = st.columns(2)
+        prediction_placeholder = chart_left.empty()
+        cost_placeholder = chart_right.empty()
+        status_placeholder = st.empty()
+        _animate_multiple_gradient_descent(
+            scaled_features,
+            working[target],
             target,
-            float(learning_rate),
-            int(epochs),
-            len(working),
+            steps,
+            prediction_placeholder,
+            cost_placeholder,
+            status_placeholder,
         )
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            width="stretch",
-            key="train_multiple_regression",
-            disabled=not quiz_unlocked,
+
+        final_step = steps[-1]
+        prediction = predict_with_parameters(
+            scaled_features,
+            final_step.weights,
+            final_step.intercept,
         )
-        if not quiz_unlocked:
-            st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
-
-        artifact: LinearModelArtifact | None = None
-        prediction: pd.Series | None = None
-        if train_clicked and quiz_unlocked:
-            steps = gradient_descent_steps(
-                scaled_features,
-                working[target],
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-            )
-            chart_left, chart_right = st.columns(2)
-            prediction_placeholder = chart_left.empty()
-            cost_placeholder = chart_right.empty()
-            status_placeholder = st.empty()
-            _animate_multiple_gradient_descent(
-                scaled_features,
-                working[target],
-                target,
-                steps,
-                prediction_placeholder,
-                cost_placeholder,
-                status_placeholder,
-            )
-
-            final_step = steps[-1]
-            prediction = predict_with_parameters(
-                scaled_features,
-                final_step.weights,
-                final_step.intercept,
-            )
-            artifact = LinearModelArtifact(
-                model_kind="multiple_linear_regression",
-                features=selected_features,
-                target=target,
-                weights=[float(value) for value in final_step.weights],
-                intercept=float(final_step.intercept),
-                scaler=scaler,
-                training_cost=float(final_step.cost),
-                data_source=source_label,
-            )
-            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+        artifact = LinearModelArtifact(
+            model_kind="multiple_linear_regression",
+            features=selected_features,
+            target=target,
+            weights=[float(value) for value in final_step.weights],
+            intercept=float(final_step.intercept),
+            scaler=scaler,
+            training_cost=float(final_step.cost),
+            data_source=source_label,
+        )
+        st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+    else:
+        stored = st.session_state.get(result_key)
+        if isinstance(stored, dict) and stored.get("signature") == signature:
+            artifact = stored["artifact"]
+            prediction = predict_from_artifact(artifact, working[artifact.features])
+            st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+        elif quiz_unlocked:
+            st.info("兩題已過關。按下「開始訓練」觀察預測值與 Cost 的演進。")
         else:
-            stored = st.session_state.get(result_key)
-            if isinstance(stored, dict) and stored.get("signature") == signature:
-                artifact = stored["artifact"]
-                prediction = predict_from_artifact(artifact, working[artifact.features])
-                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
-            elif quiz_unlocked:
-                st.info("兩題已過關。按下「開始訓練」觀察預測值與 Cost 的演進。")
-            else:
-                st.info("先完成上方兩題訓練前預測，再開始訓練。")
+            st.info("先完成上方兩題訓練前預測，再開始訓練。")
 
-        purpose_choice = str(st.session_state.get(multi_quiz.SESSION_PURPOSE, multi_quiz.PLEASE_SELECT))
-        weights_choice = str(st.session_state.get(multi_quiz.SESSION_WEIGHTS, multi_quiz.PLEASE_SELECT))
-        quiz_note = multi_quiz.build_quiz_agent_appendix(
-            purpose_status=multi_quiz.quiz_choice_status(
-                purpose_choice,
-                correct=multi_quiz.is_purpose_correct(purpose_choice),
-            ),
-            weights_status=multi_quiz.quiz_choice_status(
-                weights_choice,
-                correct=multi_quiz.is_weights_correct(weights_choice),
-            ),
-            focus_qid=st.session_state.get(multi_quiz.SESSION_FOCUS),
+    purpose_choice = str(st.session_state.get(multi_quiz.SESSION_PURPOSE, multi_quiz.PLEASE_SELECT))
+    weights_choice = str(st.session_state.get(multi_quiz.SESSION_WEIGHTS, multi_quiz.PLEASE_SELECT))
+    quiz_note = multi_quiz.build_quiz_agent_appendix(
+        purpose_status=multi_quiz.quiz_choice_status(
+            purpose_choice,
+            correct=multi_quiz.is_purpose_correct(purpose_choice),
+        ),
+        weights_status=multi_quiz.quiz_choice_status(
+            weights_choice,
+            correct=multi_quiz.is_weights_correct(weights_choice),
+        ),
+        focus_qid=st.session_state.get(multi_quiz.SESSION_FOCUS),
+        features=selected_features,
+        target=target,
+        learning_rate=float(learning_rate),
+        unlocked=quiz_unlocked,
+        use_housing_example="ready.csv" not in source_label,
+    )
+    st.session_state[LR_CONTEXT_KEY] = (
+        build_regression_agent_context(
+            page_name=f"{LR_PAGE_TITLE}（{LR_STAGE_MULTIPLE}）",
+            data_source=source_label,
             features=selected_features,
             target=target,
             learning_rate=float(learning_rate),
-            unlocked=quiz_unlocked,
-            use_housing_example="ready.csv" not in source_label,
+            epochs=int(epochs),
+            row_count=len(working),
+            artifact=artifact,
+            note="多變量階段會先對 features 做 Z-score 特徵縮放。",
+            prompt_train=quiz_unlocked,
         )
-        st.session_state[context_key] = (
-            build_regression_agent_context(
-                page_name="多變量線性回歸",
-                data_source=source_label,
-                features=selected_features,
-                target=target,
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-                row_count=len(working),
-                artifact=artifact,
-                note="多變量頁會先對 features 做 Z-score 特徵縮放。",
-                prompt_train=quiz_unlocked,
-            )
-            + "\n"
-            + quiz_note
-        )
-        if artifact is not None and prediction is not None:
-            _render_training_results(artifact, working, target, prediction)
-            _render_feature_target_overview(working, selected_features, target)
-            _render_regression_save_section(
-                artifact=artifact,
-                filename_prefix="multiple_linear_regression",
-                page_key="multiple_regression",
-            )
-        _render_regression_inference_section(
-            page_key="multiple_regression",
-            trained_artifact=artifact,
-        )
-        focus = st.session_state.get(multi_quiz.SESSION_FOCUS)
-        _render_regression_prompts(multi_quiz.focus_prompt_lines(focus, unlocked=quiz_unlocked))
-
-    _regression_page_shell(
-        "多變量線性回歸",
-        "使用內建房價資料，觀察多個 features 如何共同預測 target。",
-        "內建範例資料：房價預測",
-        HOUSE_PRICES_PATH,
-        body,
+        + "\n"
+        + quiz_note
     )
+    if artifact is not None and prediction is not None:
+        _render_training_results(artifact, working, target, prediction)
+        _render_feature_target_overview(working, selected_features, target)
+    focus = st.session_state.get(multi_quiz.SESSION_FOCUS)
+    _render_regression_prompts(multi_quiz.focus_prompt_lines(focus, unlocked=quiz_unlocked))
 
 
 def _reset_simple_regression_quiz_answers() -> None:
@@ -2203,50 +2166,6 @@ def _render_multiple_regression_pretrain_quiz(
     return unlocked
 
 
-def _regression_page_shell(
-    title: str,
-    caption: str,
-    builtin_label: str,
-    builtin_path: Path,
-    render_main: Callable[[pd.DataFrame, str], None],
-) -> None:
-    main, side = st.columns([5, 3], gap="large")
-    context_key = f"{title}_agent_context"
-    with main:
-        st.title(title)
-        st.caption(caption)
-        df = pd.read_csv(builtin_path)
-        source_label = builtin_label
-        render_dataset_metrics(df)
-        st.session_state[context_key] = f"目前頁面：{title}。資料來源：{source_label}。"
-        render_main(df, source_label)
-    with side:
-        extra_context = str(
-            st.session_state.get(
-                context_key,
-                f"目前頁面：{title}。資料來源：{builtin_label}。",
-            )
-        )
-        render_chat_panel(
-            extra_context=extra_context,
-            page_name=title,
-        )
-
-
-def _numeric_regression_columns(df: pd.DataFrame) -> list[str]:
-    return [str(column) for column in df.select_dtypes(include="number").columns]
-
-
-def _default_column(columns: list[str], preferred: str, *, exclude: set[str] | None = None) -> str:
-    exclude = exclude or set()
-    if preferred in columns and preferred not in exclude:
-        return preferred
-    for column in columns:
-        if column not in exclude:
-            return column
-    return columns[0]
-
-
 def _regression_training_frame(
     df: pd.DataFrame,
     features: list[str],
@@ -2258,9 +2177,20 @@ def _regression_training_frame(
 
 
 def _render_cost_formula() -> None:
-    with st.expander("成本函數 J(w,b)", expanded=False):
-        st.latex(r"J(w,b) = \frac{1}{2m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})^2")
+    with st.expander("成本與梯度下降", expanded=False):
+        st.latex(COST_J_LATEX)
         st.caption("本頁以教材中的 Cost J 作為主要指標；Cost 越小，代表整體平方誤差越小。")
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**梯度下降演算法**")
+            st.markdown("`repeat until convergence:` `{`")
+            st.latex(COST_GD_W_LATEX)
+            st.latex(COST_GD_B_LATEX)
+            st.markdown("`}`")
+        with right:
+            st.markdown("**導數項**")
+            st.latex(COST_DJ_DW_LATEX)
+            st.latex(COST_DJ_DB_LATEX)
 
 
 def _render_regression_data_intro(
@@ -2451,140 +2381,6 @@ def _render_training_results(
         )
         st.dataframe(weights, width="stretch", hide_index=True)
     _render_prediction_error_table(working, target, prediction)
-
-
-def _render_regression_save_section(
-    artifact: LinearModelArtifact,
-    filename_prefix: str,
-    page_key: str,
-) -> None:
-    st.markdown("##### 保存模型 JSON")
-    st.caption(
-        "將目前訓練結果存成 JSON，供之後上傳並做預測。"
-        "檔案會保存到 `dataset_streamlit_shell/workspace/models/regression/`。"
-    )
-    if st.button(
-        "保存模型 JSON",
-        type="primary",
-        width="stretch",
-        key=f"save_{page_key}",
-    ):
-        REGRESSION_MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = REGRESSION_MODEL_DIR / f"{filename_prefix}_{stamp}.json"
-        save_model_artifact(artifact, path)
-        st.success(f"已保存模型：`{_display_path(path)}`")
-
-
-def _load_uploaded_model_artifact(uploaded_file) -> LinearModelArtifact:
-    payload = json.loads(uploaded_file.getvalue().decode("utf-8"))
-    return _model_artifact_from_payload(payload)
-
-
-def _model_artifact_from_payload(payload: dict) -> LinearModelArtifact:
-    return LinearModelArtifact(
-        model_kind=str(payload["model_kind"]),
-        features=[str(feature) for feature in payload["features"]],
-        target=str(payload["target"]),
-        weights=[float(weight) for weight in payload["weights"]],
-        intercept=float(payload["intercept"]),
-        scaler=payload.get("scaler"),
-        training_cost=float(payload["training_cost"]),
-        data_source=str(payload["data_source"]),
-        schema_version=int(payload.get("schema_version", 1)),
-        created_at=str(payload.get("created_at", datetime.now().isoformat(timespec="seconds"))),
-    )
-
-
-def _render_regression_inference_section(
-    *,
-    page_key: str,
-    trained_artifact: LinearModelArtifact | None,
-) -> None:
-    st.markdown("##### 手動預測")
-    trained_available = trained_artifact is not None
-    if trained_available:
-        st.caption(
-            "輸入新的 feature 值，使用本次訓練結果或上傳的模型 JSON 預測 target。"
-        )
-    else:
-        st.caption(
-            "尚未訓練時，可直接上傳先前保存的模型 JSON，輸入 feature 值後計算預測。"
-        )
-    source_options: list[str] = []
-    if trained_available:
-        source_options.append("本次訓練結果")
-    source_options.append("上傳模型 JSON")
-
-    if len(source_options) == 1:
-        inference_source = source_options[0]
-    else:
-        inference_source = st.radio(
-            "預測使用的模型",
-            source_options,
-            horizontal=True,
-            key=f"{page_key}_inference_source",
-        )
-
-    active_artifact: LinearModelArtifact | None = None
-    if inference_source == "本次訓練結果" and trained_available:
-        active_artifact = trained_artifact
-        st.success(f"使用本次訓練結果預測 target：`{trained_artifact.target}`")
-    else:
-        uploaded = st.file_uploader(
-            "上傳模型 JSON",
-            type=["json"],
-            key=f"{page_key}_upload",
-        )
-        if uploaded is None:
-            st.info("請上傳先前保存的模型 JSON 檔案。")
-            return
-        try:
-            active_artifact = _load_uploaded_model_artifact(uploaded)
-            st.success(
-                f"已載入模型：`{active_artifact.model_kind}`，"
-                f"target = `{active_artifact.target}`，"
-                f"features = {', '.join(active_artifact.features)}"
-            )
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-            st.error(f"無法讀取模型 JSON：{exc}")
-            return
-
-    input_values: dict[str, float] = {}
-    input_cols = st.columns(min(len(active_artifact.features), 3) or 1)
-    for index, feature in enumerate(active_artifact.features):
-        with input_cols[index % len(input_cols)]:
-            default_value = 0.0
-            if active_artifact.scaler is not None:
-                default_value = float(active_artifact.scaler["mean"].get(feature, 0.0))
-            input_values[feature] = st.number_input(
-                feature,
-                value=default_value,
-                format="%.4f",
-                key=f"{page_key}_input_{feature}",
-            )
-
-    if st.button("計算預測", type="primary", width="stretch", key=f"{page_key}_predict"):
-        feature_frame = pd.DataFrame([input_values])
-        prediction = float(predict_from_artifact(active_artifact, feature_frame).iloc[0])
-        st.markdown("##### 預測結果")
-        c1, c2 = st.columns(2)
-        c1.metric("預測 target", active_artifact.target)
-        c2.metric("預測值", f"{prediction:.4f}")
-        with st.expander("計算過程", expanded=False):
-            st.write(format_prediction_formula(active_artifact))
-            if active_artifact.scaler is not None:
-                st.caption("多變量模型會先依 JSON 內的 mean/scale 做 Z-score，再代入權重計算。")
-            st.dataframe(
-                pd.DataFrame(
-                    {
-                        "feature": active_artifact.features,
-                        "輸入值": [input_values[feature] for feature in active_artifact.features],
-                    }
-                ),
-                width="stretch",
-                hide_index=True,
-            )
 
 
 def _render_regression_prompts(prompts: list[str]) -> None:

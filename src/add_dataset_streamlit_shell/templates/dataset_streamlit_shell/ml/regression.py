@@ -9,6 +9,24 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+# 線性回歸教學頁固定欄位（對應 built-in-data/regression CSV）
+SIMPLE_REGRESSION_FEATURE = "城市人口_萬人"
+SIMPLE_REGRESSION_TARGET = "餐廳獲利_萬美元"
+MULTIPLE_REGRESSION_FEATURES = ("面積_平方英尺", "房間數", "樓層數", "屋齡_年")
+MULTIPLE_REGRESSION_TARGET = "房價_千美元"
+
+COST_J_LATEX = r"J(w,b) = \frac{1}{2m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})^2"
+COST_GD_W_LATEX = r"w = w - \alpha \frac{\partial J(w,b)}{\partial w}"
+COST_GD_B_LATEX = r"b = b - \alpha \frac{\partial J(w,b)}{\partial b}"
+COST_DJ_DW_LATEX = (
+    r"\frac{\partial J(w,b)}{\partial w} = "
+    r"\frac{1}{m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})x^{(i)}"
+)
+COST_DJ_DB_LATEX = (
+    r"\frac{\partial J(w,b)}{\partial b} = "
+    r"\frac{1}{m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})"
+)
+
 
 @dataclass(frozen=True)
 class LinearModelArtifact:
