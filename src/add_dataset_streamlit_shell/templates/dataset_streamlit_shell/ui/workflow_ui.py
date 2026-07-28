@@ -114,10 +114,6 @@ def _page_shell(
     with main:
         st.title(title)
         st.caption(caption)
-        st.info(
-            f"目前整理基準：`{_display_path(WORKING_DATASET_PATH)}`。"
-            "左側負責診斷與驗證；需要修改資料時，請在右側請 Agent 協作。"
-        )
         df = load_working_dataset()
         if df is None:
             st.warning("尚未建立工作資料。請先到「資料上傳與預覽」上傳 CSV。")
@@ -1320,7 +1316,6 @@ def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.Da
     with main:
         st.title(title)
         st.caption(caption)
-        st.info(f"目前分析基準：Ready 分析就緒資料 `{_display_path(READY_DATASET_PATH)}`。")
         df = load_ready_dataset()
         if df is None:
             st.warning("尚未建立 Ready 分析就緒資料。請先到「建立 Ready 分析就緒資料」頁完成匯出。")
