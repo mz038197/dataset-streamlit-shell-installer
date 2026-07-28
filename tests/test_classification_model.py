@@ -163,6 +163,31 @@ def test_university_admission_csv_loads() -> None:
     assert validate_binary_target(frame["是否錄取"])
 
 
+def test_university_admission_default_recipe_converges() -> None:
+    """對齊 UI 教案：Z-score + α=0.001 + 10000 → Cost≈0.30、正確率明顯高於多數類基線。"""
+    from dataset_streamlit_shell.ml.regression import (
+        apply_standard_scaler,
+        create_standard_scaler,
+    )
+
+    frame = pd.read_csv(ADMISSION_PATH)
+    features = ["考試1分數", "考試2分數"]
+    target = "是否錄取"
+    scaler = create_standard_scaler(frame, features)
+    feature_matrix = apply_standard_scaler(frame[features], scaler)
+    steps = logistic_gradient_descent_steps(
+        feature_matrix,
+        frame[target],
+        learning_rate=0.001,
+        epochs=10000,
+    )
+    final = steps[-1]
+    assert final.cost < 0.35
+    assert final.cost < steps[0].cost
+    proba = predict_proba(feature_matrix, final.weights, final.intercept)
+    assert training_accuracy(frame[target], proba, 0.5) >= 85.0
+
+
 def test_build_classification_agent_context() -> None:
     context = build_classification_agent_context(
         page_name="邏輯迴歸",

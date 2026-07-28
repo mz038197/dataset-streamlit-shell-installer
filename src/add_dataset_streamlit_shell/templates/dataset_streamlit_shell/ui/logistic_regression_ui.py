@@ -40,6 +40,7 @@ from dataset_streamlit_shell.ml.classification import (
 from dataset_streamlit_shell.ml.regression import (
     GradientDescentStep,
     apply_standard_scaler,
+    create_standard_scaler,
 )
 from dataset_streamlit_shell.plotting import (
     build_classification_data_figures,
@@ -82,8 +83,9 @@ def render_logistic_regression_page() -> None:
             target=target,
             dataset_note="每一列是一位申請者：兩科筆試為 x，是否錄取為 y（1=錄取、0=未錄取）。",
         )
-        feature_matrix = working[features]
-        scaler = None
+        # 考試分數尺度約 30–100；未縮放時 α≈0.01 會讓 Cost 爆炸，教案 α=0.001 也幾乎不降。
+        scaler = create_standard_scaler(working, features)
+        feature_matrix = apply_standard_scaler(working[features], scaler)
 
         st.markdown("##### 訓練設定")
         c1, c2 = st.columns(2)
@@ -91,7 +93,7 @@ def render_logistic_regression_page() -> None:
             "學習率 α",
             min_value=0.0001,
             max_value=1.0,
-            value=0.01,
+            value=0.001,
             step=0.001,
             format="%.4f",
             key="logistic_learning_rate",
@@ -99,12 +101,14 @@ def render_logistic_regression_page() -> None:
         epochs = c2.number_input(
             "Epoch / 迭代次數",
             min_value=1,
-            max_value=5000,
-            value=10,
+            max_value=20000,
+            value=10000,
             step=1,
             key="logistic_epochs",
         )
-        st.caption("教案參考：α=0.001、10000 次迭代，Cost 約可降至 0.30。")
+        st.caption(
+            "訓練前會對特徵做 Z-score 縮放。教案參考：α=0.001、10000 次迭代，Cost 約可降至 0.30。"
+        )
         st.markdown("##### 模型公式")
         st.latex(r"f_{\mathbf{w},b}(\mathbf{x})=\mathrm{sigmoid}(\mathbf{w}\cdot\mathbf{x}+b)")
         _render_sigmoid_visualization()
@@ -260,8 +264,8 @@ def render_regularized_logistic_regression_page() -> None:
         epochs = c2.number_input(
             "Epoch / 迭代次數",
             min_value=1,
-            max_value=5000,
-            value=10,
+            max_value=20000,
+            value=10000,
             step=1,
             key="regularized_epochs",
         )
@@ -274,7 +278,7 @@ def render_regularized_logistic_regression_page() -> None:
             format="%.4f",
             key="regularized_lambda",
         )
-        st.caption("教案參考：α=0.01、λ=0.01、10000 次迭代。")
+        st.caption("教案參考：α=0.01、λ=0.01、10000 次迭代（預設已對齊）。")
         st.markdown("##### 模型公式")
         st.latex(
             r"J(\mathbf{w},b)=-\frac{1}{m}\sum loss + \frac{\lambda}{2m}\sum_j w_j^2"
@@ -598,22 +602,28 @@ def _render_logistic_boundary_plot(
 ) -> None:
     x1_name, x2_name = features[0], features[1]
     plot_frame = frame[[x1_name, x2_name]]
+    w1, w2 = float(step.weights[0]), float(step.weights[1])
+    intercept = float(step.intercept)
+    # 散點維持原始分數尺度；若訓練用 Z-score，把邊界反變換回原始座標
     if scaler is not None:
-        scaled = apply_standard_scaler(plot_frame, scaler)
-        w1, w2 = step.weights[0], step.weights[1]
-        x1 = scaled[x1_name]
-        x2 = scaled[x2_name]
+        m1 = float(scaler["mean"][x1_name])
+        s1 = float(scaler["scale"][x1_name])
+        m2 = float(scaler["mean"][x2_name])
+        s2 = float(scaler["scale"][x2_name])
+        w1_plot = w1 / s1
+        w2_plot = w2 / s2
+        intercept_plot = intercept - w1 * m1 / s1 - w2 * m2 / s2
     else:
-        w1, w2 = step.weights[0], step.weights[1]
-        x1 = plot_frame[x1_name]
-        x2 = plot_frame[x2_name]
+        w1_plot, w2_plot, intercept_plot = w1, w2, intercept
+    x1 = plot_frame[x1_name]
+    x2 = plot_frame[x2_name]
     fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
     positives = frame[target] == 1
     negatives = frame[target] == 0
     scatter_binary_classes(ax, x1, x2, positives=positives, negatives=negatives)
-    if abs(w2) > 1e-12:
+    if abs(w2_plot) > 1e-12:
         line_x = np.linspace(float(x1.min()), float(x1.max()), 100)
-        line_y = -(w1 * line_x + step.intercept) / w2
+        line_y = -(w1_plot * line_x + intercept_plot) / w2_plot
         ax.plot(line_x, line_y, color="blue", label="決策邊界")
     ax.set_xlabel(x1_name)
     ax.set_ylabel(x2_name)
