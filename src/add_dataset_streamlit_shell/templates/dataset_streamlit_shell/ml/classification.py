@@ -22,6 +22,32 @@ CONTOUR_U_MIN = -1.0
 CONTOUR_U_MAX = 1.5
 DEFAULT_MAP_DEGREE = 6
 
+COST_J_LOGISTIC_LATEX = (
+    r"J(w,b) = -\frac{1}{m}\sum_{i=0}^{m-1}\Big["
+    r"y^{(i)}\log(f_{w,b}(x^{(i)}))+(1-y^{(i)})\log(1-f_{w,b}(x^{(i)}))"
+    r"\Big]"
+)
+COST_J_LOGISTIC_REG_LATEX = (
+    r"J(w,b) = -\frac{1}{m}\sum_{i=0}^{m-1}\Big["
+    r"y^{(i)}\log(f_{w,b}(x^{(i)}))+(1-y^{(i)})\log(1-f_{w,b}(x^{(i)}))"
+    r"\Big] + \frac{\lambda}{2m}\sum_{j=0}^{n-1}w_j^2"
+)
+COST_GD_W_LOGISTIC_LATEX = r"w_j = w_j - \alpha \frac{\partial J(w,b)}{\partial w_j}"
+COST_GD_B_LOGISTIC_LATEX = r"b = b - \alpha \frac{\partial J(w,b)}{\partial b}"
+COST_DJ_DW_LOGISTIC_LATEX = (
+    r"\frac{\partial J(w,b)}{\partial w_j} = "
+    r"\frac{1}{m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})x_j^{(i)}"
+)
+COST_DJ_DB_LOGISTIC_LATEX = (
+    r"\frac{\partial J(w,b)}{\partial b} = "
+    r"\frac{1}{m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})"
+)
+COST_DJ_DW_LOGISTIC_REG_LATEX = (
+    r"\frac{\partial J(w,b)}{\partial w_j} = "
+    r"\frac{1}{m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})x_j^{(i)}"
+    r" + \frac{\lambda}{m}w_j"
+)
+
 
 @dataclass(frozen=True)
 class LogisticModelArtifact:

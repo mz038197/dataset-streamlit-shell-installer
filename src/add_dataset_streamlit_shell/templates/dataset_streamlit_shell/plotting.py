@@ -381,7 +381,7 @@ def build_sigmoid_figure(
         ax.hlines(hy, z_min, hz, colors="#34a853", linestyles=":", linewidth=1)
     ax.set_xlim(z_min, z_max)
     ax.set_ylim(-0.05, 1.05)
-    ax.set_xlabel(r"$z=\mathbf{w}\cdot\mathbf{x}+b$")
+    ax.set_xlabel(r"$z=w\cdot x+b$")
     ax.set_ylabel(r"$\sigma(z)$（預測機率）")
     ax.set_title("Sigmoid 函數")
     ax.legend(loc="lower right")

@@ -94,13 +94,12 @@ The TTS panel is available even before Agent Core is connected.
 The installed `dataset_streamlit_shell/` template includes supervised learning pages aligned with the course labs:
 
 - **Linear regression** (built-in restaurant profit and house price CSVs under `built-in-data/regression/`)
-- **Logistic regression** — university admission demo from `built-in-data/classification/university_admission.csv` (Coursera ex2data1)
-- **Regularized logistic regression** — microchip test demo from `built-in-data/classification/microchip_test.csv` (Coursera ex2data2, degree-6 feature map and λ)
+- **Logistic regression** — two stages: linear boundary (`university_admission.csv`, Coursera ex2data1) → polynomial features & λ (`microchip_test.csv`, ex2data2, degree-6 map). Pre-train quiz on each stage; cost expander aligned with linear regression (J + GD + derivatives).
 - **Linear SVM** — two-stage hard → soft margin: `svm_blobs_80.csv` (linearly separable) then `svm_soft_margin_80.csv` (overlapping classes), both under `built-in-data/classification/`. Uses `sklearn.svm.SVC(kernel='linear')`; hard stage omits C on the surface, soft stage centers on C. Shows decision boundary and support vectors. Requires `scikit-learn`.
 - **K-近鄰分類** — two-stage neighbors/voting → choose k: `knn_blobs_80.csv` then `knn_scale_trap_80.csv` (stretched feature scale). Pre-train quiz unlock; Plotly chart for click-to-set query point and k-neighbor lines. Requires `scikit-learn` and `plotly`.
 - **決策樹與集成** — three stages: single tree (cat toy `cat_toy_10.csv`, entropy / information gain) → random forest / Bagging (`n_estimators`, tree vs forest val accuracy on heart disease) → XGBoost / Boosting (`learning_rate`, shared 80/20 split, forest baseline). Pre-train quiz on each stage; Bagging vs Boosting contrast on stage 3. Requires `scikit-learn` and `xgboost`. Builtin data only; no model JSON save.
 
-Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/`. Logistic pages use hand-written gradient descent and logistic Cost J; the linear SVM page uses scikit-learn `SVC`. Classification threshold is adjusted after training on logistic pages and is not stored in the model JSON (regularization λ is stored for the regularized page). Decision tree / ensemble pages do not save models in this release.
+Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/` for pages that still expose save. The logistic page does not save model JSON in this release; it uses hand-written gradient descent and logistic Cost J. The linear SVM page uses scikit-learn `SVC`. Classification threshold is adjusted after training on the logistic page and is not stored in artifacts (λ is part of the in-session regularized-stage artifact only). Decision tree / ensemble pages do not save models in this release.
 
 ### Promptable segmentation (SAM 3)
 

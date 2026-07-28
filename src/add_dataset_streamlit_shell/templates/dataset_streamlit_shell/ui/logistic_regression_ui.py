@@ -8,14 +8,16 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
-    render_chat_panel,
-    render_dataset_metrics,
-)
 from dataset_streamlit_shell.ml.classification import (
     CONTOUR_U_MAX,
     CONTOUR_U_MIN,
+    COST_DJ_DB_LOGISTIC_LATEX,
+    COST_DJ_DW_LOGISTIC_LATEX,
+    COST_DJ_DW_LOGISTIC_REG_LATEX,
+    COST_GD_B_LOGISTIC_LATEX,
+    COST_GD_W_LOGISTIC_LATEX,
+    COST_J_LOGISTIC_LATEX,
+    COST_J_LOGISTIC_REG_LATEX,
     DEFAULT_MAP_DEGREE,
     MODEL_KIND_LOGISTIC,
     MODEL_KIND_REGULARIZED,
@@ -44,6 +46,13 @@ from dataset_streamlit_shell.plotting import (
     render_figures_in_streamlit,
     scatter_binary_classes,
 )
+from dataset_streamlit_shell.ui import logistic_quiz as quiz
+from dataset_streamlit_shell.ui.data_ui import (
+    SHELL_ROOT,
+    invoke_data_agent,
+    render_chat_panel,
+    render_dataset_metrics,
+)
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -56,338 +65,514 @@ ADMISSION_TARGET = "是否錄取"
 MICROCHIP_FEATURES = ["檢測分數1", "檢測分數2"]
 MICROCHIP_TARGET = "是否通過"
 
+PAGE_TITLE = "邏輯迴歸"
+CONTEXT_KEY = f"{PAGE_TITLE}_agent_context"
+MODEL_FORMULA_LATEX = r"f_{w,b}(x)=\frac{1}{1+e^{-(w\cdot x+b)}}"
+
 
 def render_logistic_regression_page() -> None:
-    def body(df: pd.DataFrame, source_label: str) -> None:
-        st.markdown("##### 邏輯迴歸")
-        features = list(ADMISSION_FEATURES)
-        target = ADMISSION_TARGET
-        working = _classification_training_frame(df, features, target)
-        if len(working) < 2:
-            st.warning("可用樣本少於 2 筆，無法訓練。")
-            return
-
-        _render_classification_data_intro(
-            working,
-            features=features,
-            target=target,
-            dataset_note="每一列是一位申請者：兩科筆試為 x，是否錄取為 y（1=錄取、0=未錄取）。",
-        )
-        # 考試分數尺度約 30–100；未縮放時 α≈0.01 會讓 Cost 爆炸，教案 α=0.001 也幾乎不降。
-        scaler = create_standard_scaler(working, features)
-        feature_matrix = apply_standard_scaler(working[features], scaler)
-
-        st.markdown("##### 訓練設定")
-        c1, c2 = st.columns(2)
-        learning_rate = c1.number_input(
-            "學習率 α",
-            min_value=0.0001,
-            max_value=1.0,
-            value=0.001,
-            step=0.001,
-            format="%.4f",
-            key="logistic_learning_rate",
-        )
-        epochs = c2.number_input(
-            "Epoch / 迭代次數",
-            min_value=1,
-            max_value=20000,
-            value=10000,
-            step=1,
-            key="logistic_epochs",
-        )
-        st.caption(
-            "訓練前會對特徵做 Z-score 縮放。教案參考：α=0.001、10000 次迭代，Cost 約可降至 0.30。"
-        )
-        st.markdown("##### 模型公式")
-        st.latex(r"f_{\mathbf{w},b}(\mathbf{x})=\mathrm{sigmoid}(\mathbf{w}\cdot\mathbf{x}+b)")
-        _render_sigmoid_visualization()
-        _render_logistic_cost_formula()
-
-        result_key = "logistic_regression_last_artifact"
-        context_key = "邏輯迴歸_agent_context"
-        signature = (
-            source_label,
-            tuple(features),
-            target,
-            float(learning_rate),
-            int(epochs),
-            len(working),
-        )
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            width="stretch",
-            key="train_logistic_regression",
-        )
-        artifact: LogisticModelArtifact | None = None
-        if train_clicked:
-            steps = logistic_gradient_descent_steps(
-                feature_matrix,
-                working[target],
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-            )
-            chart_left, chart_right = st.columns(2)
-            boundary_placeholder = chart_left.empty()
-            cost_placeholder = chart_right.empty()
-            status_placeholder = st.empty()
-            if len(features) == 2:
-                _animate_logistic_boundary(
-                    working,
-                    features,
-                    target,
-                    steps,
-                    boundary_placeholder,
-                    cost_placeholder,
-                    status_placeholder,
-                    scaler=scaler,
-                )
-            else:
-                _animate_logistic_proba(
-                    working[target],
-                    feature_matrix,
-                    steps,
-                    boundary_placeholder,
-                    cost_placeholder,
-                    status_placeholder,
-                )
-            final_step = steps[-1]
-            artifact = LogisticModelArtifact(
-                model_kind=MODEL_KIND_LOGISTIC,
-                features=list(features),
-                target=target,
-                weights=[float(value) for value in final_step.weights],
-                intercept=float(final_step.intercept),
-                scaler=scaler,
-                training_cost=float(final_step.cost),
-                data_source=source_label,
-            )
-            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
-        else:
-            stored = st.session_state.get(result_key)
-            if isinstance(stored, dict) and stored.get("signature") == signature:
-                artifact = stored["artifact"]
-                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
-            else:
-                st.info("設定 α 與 epoch 後，按下「開始訓練」觀察決策邊界與 Cost 的演進。")
-
-        threshold = _classification_threshold_slider("logistic", enabled=artifact is not None)
-        st.session_state[context_key] = build_classification_agent_context(
-            page_name="邏輯迴歸",
-            data_source=source_label,
-            features=features,
-            target=target,
-            learning_rate=float(learning_rate),
-            epochs=int(epochs),
-            row_count=len(working),
-            artifact=artifact,
-            threshold=threshold if artifact is not None else None,
-        )
-        if artifact is not None:
-            probability = predict_proba_from_logistic_artifact(artifact, working[artifact.features])
-            _render_logistic_training_results(artifact, working, target, probability, threshold)
-        _render_classification_prompts(
-            [
-                "請解釋這條決策邊界代表什麼，以及錄取機率如何隨考試分數改變。",
-                "請用 Cost J 說明模型目前擬合得好不好。",
-                "調整 threshold 後，訓練集正確率如何變化？",
-            ]
-        )
-
-    _classification_page_shell(
-        "邏輯迴歸",
-        "使用內建大學錄取資料，練習二元邏輯迴歸與決策邊界。",
-        "內建範例資料：大學錄取（ex2data1）",
-        UNIVERSITY_ADMISSION_PATH,
-        body,
-    )
-
-
-def render_regularized_logistic_regression_page() -> None:
-    def body(df: pd.DataFrame, source_label: str) -> None:
-        st.markdown("##### 正則化邏輯迴歸")
-        base_features = list(MICROCHIP_FEATURES)
-        target = MICROCHIP_TARGET
-        working = _classification_training_frame(df, base_features, target)
-
-        if len(working) < 2:
-            st.warning("可用樣本少於 2 筆，無法訓練。")
-            return
-
-        mapped, mapped_features = map_feature(working, base_features, degree=DEFAULT_MAP_DEGREE)
-        _render_classification_data_intro(
-            working,
-            features=base_features,
-            target=target,
-            dataset_note=(
-                f"原始 2 個 features 會映射為 {len(mapped_features)} 維多項式特徵（degree={DEFAULT_MAP_DEGREE}），"
-                "再進行正則化邏輯迴歸。"
-            ),
-        )
-
-        st.markdown("##### 訓練設定")
-        c1, c2, c3 = st.columns(3)
-        learning_rate = c1.number_input(
-            "學習率 α",
-            min_value=0.0001,
-            max_value=1.0,
-            value=0.01,
-            step=0.001,
-            format="%.4f",
-            key="regularized_learning_rate",
-        )
-        epochs = c2.number_input(
-            "Epoch / 迭代次數",
-            min_value=1,
-            max_value=20000,
-            value=10000,
-            step=1,
-            key="regularized_epochs",
-        )
-        lambda_ = c3.number_input(
-            "正則化 λ",
-            min_value=0.0,
-            max_value=10.0,
-            value=0.01,
-            step=0.001,
-            format="%.4f",
-            key="regularized_lambda",
-        )
-        st.caption("教案參考：α=0.01、λ=0.01、10000 次迭代（預設已對齊）。")
-        st.markdown("##### 模型公式")
-        st.latex(
-            r"J(\mathbf{w},b)=-\frac{1}{m}\sum loss + \frac{\lambda}{2m}\sum_j w_j^2"
-        )
-        _render_logistic_cost_formula(regularized=True)
-
-        result_key = "regularized_logistic_last_artifact"
-        context_key = "正則化邏輯迴歸_agent_context"
-        signature = (
-            source_label,
-            tuple(base_features),
-            target,
-            float(learning_rate),
-            int(epochs),
-            float(lambda_),
-            len(working),
-        )
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            width="stretch",
-            key="train_regularized_logistic",
-        )
-        artifact: RegularizedLogisticModelArtifact | None = None
-        if train_clicked:
-            rng = np.random.default_rng(1)
-            initial_w = rng.random(len(mapped_features)) - 0.5
-            steps = logistic_gradient_descent_steps(
-                mapped,
-                working[target],
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-                initial_weights=initial_w.tolist(),
-                initial_intercept=1.0,
-                lambda_=float(lambda_),
-                regularized=True,
-            )
-            chart_left, chart_right = st.columns(2)
-            contour_placeholder = chart_left.empty()
-            cost_placeholder = chart_right.empty()
-            status_placeholder = st.empty()
-            _animate_regularized_contour(
-                working,
-                base_features,
-                target,
-                mapped_features,
-                steps,
-                contour_placeholder,
-                cost_placeholder,
-                status_placeholder,
-            )
-            final_step = steps[-1]
-            artifact = RegularizedLogisticModelArtifact(
-                model_kind=MODEL_KIND_REGULARIZED,
-                base_features=list(base_features),
-                mapped_features=list(mapped_features),
-                target=target,
-                weights=[float(value) for value in final_step.weights],
-                intercept=float(final_step.intercept),
-                map_degree=DEFAULT_MAP_DEGREE,
-                lambda_=float(lambda_),
-                training_cost=float(final_step.cost),
-                data_source=source_label,
-            )
-            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
-        else:
-            stored = st.session_state.get(result_key)
-            if isinstance(stored, dict) and stored.get("signature") == signature:
-                artifact = stored["artifact"]
-                st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
-            else:
-                st.info("設定 α、epoch、λ 後，按下「開始訓練」觀察 contour 與 Cost 的演進。")
-
-        threshold = _classification_threshold_slider("regularized", enabled=artifact is not None)
-        st.session_state[context_key] = build_classification_agent_context(
-            page_name="正則化邏輯迴歸",
-            data_source=source_label,
-            features=base_features,
-            target=target,
-            learning_rate=float(learning_rate),
-            epochs=int(epochs),
-            row_count=len(working),
-            artifact=artifact,
-            lambda_=float(lambda_),
-            map_degree=DEFAULT_MAP_DEGREE,
-            threshold=threshold if artifact is not None else None,
-        )
-        if artifact is not None:
-            probability = predict_proba_from_regularized_artifact(artifact, working)
-            _render_logistic_training_results(artifact, working, target, probability, threshold)
-        _render_classification_prompts(
-            [
-                "請解釋為什麼晶片資料需要多項式特徵映射與正則化。",
-                "λ 變大時，決策邊界與 Cost 可能如何改變？",
-                "請找出被判錯的樣本，推測可能原因。",
-            ]
-        )
-
-    _classification_page_shell(
-        "正則化邏輯迴歸",
-        "使用內建晶片檢測資料（2 個 features），練習特徵映射與 λ。",
-        "內建範例資料：晶片檢測（ex2data2）",
-        MICROCHIP_TEST_PATH,
-        body,
-    )
-
-
-def _classification_page_shell(
-    title: str,
-    caption: str,
-    builtin_label: str,
-    builtin_path: Path,
-    render_main,
-) -> None:
     main, side = st.columns([5, 3], gap="large")
-    context_key = f"{title}_agent_context"
     with main:
-        st.title(title)
-        st.caption(caption)
-        df = pd.read_csv(builtin_path)
-        source_label = builtin_label
-        render_dataset_metrics(df)
-        render_main(df, source_label)
+        st.title(PAGE_TITLE)
+        st.caption("先用直線決策邊界建立 sigmoid／Cost，再看多項式映射與 λ 正則化。")
+        stage = st.radio(
+            "學習階段",
+            list(quiz.LEARNING_STAGES),
+            horizontal=True,
+            key="logistic_learning_stage",
+        )
+        if stage == quiz.STAGE_BOUNDARY:
+            _render_boundary_stage()
+        else:
+            _render_poly_lambda_stage()
     with side:
         render_chat_panel(
-            extra_context=str(
-                st.session_state.get(
-                    context_key,
-                    f"目前頁面：{title}。資料來源：{builtin_label}。",
-                )
-            ),
-            page_name=title,
+            extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
+            page_name=PAGE_TITLE,
         )
+
+
+def _render_boundary_stage() -> None:
+    df = pd.read_csv(UNIVERSITY_ADMISSION_PATH)
+    source_label = "內建範例資料：大學錄取（ex2data1）"
+    render_dataset_metrics(df)
+
+    features = list(ADMISSION_FEATURES)
+    target = ADMISSION_TARGET
+    working = _classification_training_frame(df, features, target)
+    if len(working) < 2:
+        st.warning("可用樣本少於 2 筆，無法訓練。")
+        return
+
+    _render_classification_data_intro(
+        working,
+        features=features,
+        target=target,
+        dataset_note="每一列是一位申請者：兩科筆試為 x，是否錄取為 y（1=錄取、0=未錄取）。",
+    )
+    # 考試分數尺度約 30–100；未縮放時 α≈0.01 會讓 Cost 爆炸，教案 α=0.001 也幾乎不降。
+    scaler = create_standard_scaler(working, features)
+    feature_matrix = apply_standard_scaler(working[features], scaler)
+
+    st.markdown("##### 訓練設定")
+    c1, c2 = st.columns(2)
+    learning_rate = c1.number_input(
+        "學習率 α",
+        min_value=0.0001,
+        max_value=1.0,
+        value=0.001,
+        step=0.001,
+        format="%.4f",
+        key="logistic_learning_rate",
+    )
+    epochs = c2.number_input(
+        "Epoch / 迭代次數",
+        min_value=1,
+        max_value=20000,
+        value=10000,
+        step=1,
+        key="logistic_epochs",
+    )
+    st.caption(
+        "訓練前會對特徵做 Z-score 縮放。教案參考：α=0.001、10000 次迭代，Cost 約可降至 0.30。"
+    )
+    st.markdown("##### 模型公式")
+    st.latex(MODEL_FORMULA_LATEX)
+    _render_sigmoid_visualization()
+    _render_logistic_cost_formula(regularized=False)
+
+    quiz_unlocked = _render_boundary_pretrain_quiz()
+    result_key = "logistic_regression_last_artifact"
+    signature = (
+        source_label,
+        tuple(features),
+        target,
+        float(learning_rate),
+        int(epochs),
+        len(working),
+    )
+    if not quiz_unlocked:
+        st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+    train_clicked = st.button(
+        "開始訓練",
+        type="primary",
+        width="stretch",
+        key="train_logistic_regression",
+        disabled=not quiz_unlocked,
+    )
+    artifact: LogisticModelArtifact | None = None
+    if train_clicked and quiz_unlocked:
+        steps = logistic_gradient_descent_steps(
+            feature_matrix,
+            working[target],
+            learning_rate=float(learning_rate),
+            epochs=int(epochs),
+        )
+        chart_left, chart_right = st.columns(2)
+        boundary_placeholder = chart_left.empty()
+        cost_placeholder = chart_right.empty()
+        status_placeholder = st.empty()
+        _animate_logistic_boundary(
+            working,
+            features,
+            target,
+            steps,
+            boundary_placeholder,
+            cost_placeholder,
+            status_placeholder,
+            scaler=scaler,
+        )
+        final_step = steps[-1]
+        artifact = LogisticModelArtifact(
+            model_kind=MODEL_KIND_LOGISTIC,
+            features=list(features),
+            target=target,
+            weights=[float(value) for value in final_step.weights],
+            intercept=float(final_step.intercept),
+            scaler=scaler,
+            training_cost=float(final_step.cost),
+            data_source=source_label,
+        )
+        st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+    else:
+        stored = st.session_state.get(result_key)
+        if isinstance(stored, dict) and stored.get("signature") == signature:
+            artifact = stored["artifact"]
+            st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+        elif quiz_unlocked:
+            st.info("兩題已過關。按下「開始訓練」觀察決策邊界與 Cost 的演進。")
+
+    threshold = _classification_threshold_slider("logistic", enabled=artifact is not None)
+    focus = st.session_state.get(quiz.SESSION_FOCUS_BOUNDARY)
+    appendix = _boundary_quiz_appendix(unlocked=quiz_unlocked, focus_qid=focus)
+    base_context = build_classification_agent_context(
+        page_name=PAGE_TITLE,
+        data_source=source_label,
+        features=features,
+        target=target,
+        learning_rate=float(learning_rate),
+        epochs=int(epochs),
+        row_count=len(working),
+        artifact=artifact,
+        threshold=threshold if artifact is not None else None,
+    )
+    st.session_state[CONTEXT_KEY] = f"{base_context}\n{appendix}"
+    if artifact is not None:
+        probability = predict_proba_from_logistic_artifact(artifact, working[artifact.features])
+        _render_logistic_training_results(artifact, working, target, probability, threshold)
+    _render_classification_prompts(
+        quiz.focus_prompt_lines(focus, stage=quiz.STAGE_BOUNDARY, unlocked=quiz_unlocked)
+    )
+
+
+def _render_poly_lambda_stage() -> None:
+    df = pd.read_csv(MICROCHIP_TEST_PATH)
+    source_label = "內建範例資料：晶片檢測（ex2data2）"
+    render_dataset_metrics(df)
+
+    base_features = list(MICROCHIP_FEATURES)
+    target = MICROCHIP_TARGET
+    working = _classification_training_frame(df, base_features, target)
+    if len(working) < 2:
+        st.warning("可用樣本少於 2 筆，無法訓練。")
+        return
+
+    mapped, mapped_features = map_feature(working, base_features, degree=DEFAULT_MAP_DEGREE)
+    _render_classification_data_intro(
+        working,
+        features=base_features,
+        target=target,
+        dataset_note=(
+            f"原始 2 個 features 會映射為 {len(mapped_features)} 維多項式特徵"
+            f"（degree={DEFAULT_MAP_DEGREE}），再以 λ 做正則化邏輯迴歸。"
+        ),
+    )
+
+    st.markdown("##### 訓練設定")
+    c1, c2, c3 = st.columns(3)
+    learning_rate = c1.number_input(
+        "學習率 α",
+        min_value=0.0001,
+        max_value=1.0,
+        value=0.01,
+        step=0.001,
+        format="%.4f",
+        key="regularized_learning_rate",
+    )
+    epochs = c2.number_input(
+        "Epoch / 迭代次數",
+        min_value=1,
+        max_value=20000,
+        value=10000,
+        step=1,
+        key="regularized_epochs",
+    )
+    lambda_ = c3.number_input(
+        "正則化 λ",
+        min_value=0.0,
+        max_value=10.0,
+        value=0.01,
+        step=0.001,
+        format="%.4f",
+        key="regularized_lambda",
+    )
+    st.caption("教案參考：α=0.01、λ=0.01、10000 次迭代（預設已對齊）。")
+    st.markdown("##### 模型公式")
+    st.latex(rf"x \mapsto \phi(x)\ (\mathrm{{degree}}={DEFAULT_MAP_DEGREE})")
+    st.latex(r"f_{w,b}(x)=\frac{1}{1+e^{-(w\cdot \phi(x)+b)}}")
+    _render_logistic_cost_formula(regularized=True)
+
+    quiz_unlocked = _render_poly_pretrain_quiz()
+    result_key = "regularized_logistic_last_artifact"
+    signature = (
+        source_label,
+        tuple(base_features),
+        target,
+        float(learning_rate),
+        int(epochs),
+        float(lambda_),
+        len(working),
+    )
+    if not quiz_unlocked:
+        st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+    train_clicked = st.button(
+        "開始訓練",
+        type="primary",
+        width="stretch",
+        key="train_regularized_logistic",
+        disabled=not quiz_unlocked,
+    )
+    artifact: RegularizedLogisticModelArtifact | None = None
+    if train_clicked and quiz_unlocked:
+        rng = np.random.default_rng(1)
+        initial_w = rng.random(len(mapped_features)) - 0.5
+        steps = logistic_gradient_descent_steps(
+            mapped,
+            working[target],
+            learning_rate=float(learning_rate),
+            epochs=int(epochs),
+            initial_weights=initial_w.tolist(),
+            initial_intercept=1.0,
+            lambda_=float(lambda_),
+            regularized=True,
+        )
+        chart_left, chart_right = st.columns(2)
+        contour_placeholder = chart_left.empty()
+        cost_placeholder = chart_right.empty()
+        status_placeholder = st.empty()
+        _animate_regularized_contour(
+            working,
+            base_features,
+            target,
+            mapped_features,
+            steps,
+            contour_placeholder,
+            cost_placeholder,
+            status_placeholder,
+        )
+        final_step = steps[-1]
+        artifact = RegularizedLogisticModelArtifact(
+            model_kind=MODEL_KIND_REGULARIZED,
+            base_features=list(base_features),
+            mapped_features=list(mapped_features),
+            target=target,
+            weights=[float(value) for value in final_step.weights],
+            intercept=float(final_step.intercept),
+            map_degree=DEFAULT_MAP_DEGREE,
+            lambda_=float(lambda_),
+            training_cost=float(final_step.cost),
+            data_source=source_label,
+        )
+        st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+    else:
+        stored = st.session_state.get(result_key)
+        if isinstance(stored, dict) and stored.get("signature") == signature:
+            artifact = stored["artifact"]
+            st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+        elif quiz_unlocked:
+            st.info("兩題已過關。按下「開始訓練」觀察 contour 與 Cost 的演進。")
+
+    threshold = _classification_threshold_slider("regularized", enabled=artifact is not None)
+    focus = st.session_state.get(quiz.SESSION_FOCUS_POLY)
+    appendix = _poly_quiz_appendix(unlocked=quiz_unlocked, focus_qid=focus)
+    base_context = build_classification_agent_context(
+        page_name=PAGE_TITLE,
+        data_source=source_label,
+        features=base_features,
+        target=target,
+        learning_rate=float(learning_rate),
+        epochs=int(epochs),
+        row_count=len(working),
+        artifact=artifact,
+        lambda_=float(lambda_),
+        map_degree=DEFAULT_MAP_DEGREE,
+        threshold=threshold if artifact is not None else None,
+    )
+    st.session_state[CONTEXT_KEY] = f"{base_context}\n{appendix}"
+    if artifact is not None:
+        probability = predict_proba_from_regularized_artifact(artifact, working)
+        _render_logistic_training_results(artifact, working, target, probability, threshold)
+    _render_classification_prompts(
+        quiz.focus_prompt_lines(focus, stage=quiz.STAGE_POLY_LAMBDA, unlocked=quiz_unlocked)
+    )
+
+
+def _render_boundary_pretrain_quiz() -> bool:
+    st.markdown("##### 訓練前先猜一下")
+    st.caption("兩題都答對後，「開始訓練」才會啟用。卡住時可按「Agent 提示」問線索（不會直接給正解）。")
+    st.session_state.setdefault(quiz.SESSION_SIGMOID, quiz.PLEASE_SELECT)
+    st.session_state.setdefault(quiz.SESSION_COST, quiz.PLEASE_SELECT)
+    st.session_state.setdefault(quiz.SESSION_FOCUS_BOUNDARY, quiz.QID_SIGMOID)
+
+    agent_ready = bool(st.session_state.get("data_agent_connected"))
+
+    q1_col, h1_col = st.columns([4, 1])
+    with q1_col:
+        sigmoid_choice = st.radio(
+            "題1：sigmoid 輸出大致代表什麼？",
+            [quiz.PLEASE_SELECT, *quiz.SIGMOID_OPTIONS],
+            key=quiz.SESSION_SIGMOID,
+        )
+    with h1_col:
+        st.write("")
+        if st.button("Agent 提示", key="logistic_hint_sigmoid", disabled=not agent_ready, width="stretch"):
+            _send_boundary_quiz_hint(quiz.QID_SIGMOID)
+        elif not agent_ready:
+            st.caption("先啟用 Agent")
+
+    sigmoid_ok = quiz.is_sigmoid_correct(str(sigmoid_choice))
+    if str(sigmoid_choice) == quiz.PLEASE_SELECT:
+        st.caption("請先選擇題1。")
+        st.session_state[quiz.SESSION_FOCUS_BOUNDARY] = quiz.QID_SIGMOID
+    elif sigmoid_ok:
+        st.caption("題1 OK。")
+    else:
+        st.caption("題1 再想想：輸出是不是 0～1 的機率？可按「Agent 提示」。")
+        st.session_state[quiz.SESSION_FOCUS_BOUNDARY] = quiz.QID_SIGMOID
+
+    q2_col, h2_col = st.columns([4, 1])
+    with q2_col:
+        cost_choice = st.radio(
+            "題2：訓練時的 Cost 與分類 threshold 的關係比較接近？",
+            [quiz.PLEASE_SELECT, *quiz.COST_OPTIONS],
+            key=quiz.SESSION_COST,
+        )
+    with h2_col:
+        st.write("")
+        if st.button("Agent 提示", key="logistic_hint_cost", disabled=not agent_ready, width="stretch"):
+            _send_boundary_quiz_hint(quiz.QID_COST)
+        elif not agent_ready:
+            st.caption("先啟用 Agent")
+
+    cost_ok = quiz.is_cost_correct(str(cost_choice))
+    if str(cost_choice) == quiz.PLEASE_SELECT:
+        st.caption("請先選擇題2。")
+        if sigmoid_ok:
+            st.session_state[quiz.SESSION_FOCUS_BOUNDARY] = quiz.QID_COST
+    elif cost_ok:
+        st.caption("題2 OK。")
+    else:
+        st.caption("題2 再想想 Cost 看的是機率擬合還是 threshold，可按「Agent 提示」。")
+        st.session_state[quiz.SESSION_FOCUS_BOUNDARY] = quiz.QID_COST
+
+    unlocked = quiz.both_boundary_quiz_correct(str(sigmoid_choice), str(cost_choice))
+    if unlocked:
+        st.success("2／2 題已準備好訓練。")
+    else:
+        st.info(f"進度：{int(sigmoid_ok) + int(cost_ok)}／2 題答對（需全部正確才解鎖訓練）。")
+    return unlocked
+
+
+def _render_poly_pretrain_quiz() -> bool:
+    st.markdown("##### 訓練前先猜一下")
+    st.caption("兩題都答對後，「開始訓練」才會啟用。卡住時可按「Agent 提示」問線索（不會直接給正解）。")
+    st.session_state.setdefault(quiz.SESSION_MAP, quiz.PLEASE_SELECT)
+    st.session_state.setdefault(quiz.SESSION_LAMBDA, quiz.PLEASE_SELECT)
+    st.session_state.setdefault(quiz.SESSION_FOCUS_POLY, quiz.QID_MAP)
+
+    agent_ready = bool(st.session_state.get("data_agent_connected"))
+
+    q1_col, h1_col = st.columns([4, 1])
+    with q1_col:
+        map_choice = st.radio(
+            "題1：為什麼常把兩個檢測分數做成多項式特徵映射？",
+            [quiz.PLEASE_SELECT, *quiz.MAP_OPTIONS],
+            key=quiz.SESSION_MAP,
+        )
+    with h1_col:
+        st.write("")
+        if st.button("Agent 提示", key="logistic_hint_map", disabled=not agent_ready, width="stretch"):
+            _send_poly_quiz_hint(quiz.QID_MAP)
+        elif not agent_ready:
+            st.caption("先啟用 Agent")
+
+    map_ok = quiz.is_map_correct(str(map_choice))
+    if str(map_choice) == quiz.PLEASE_SELECT:
+        st.caption("請先選擇題1。")
+        st.session_state[quiz.SESSION_FOCUS_POLY] = quiz.QID_MAP
+    elif map_ok:
+        st.caption("題1 OK。")
+    else:
+        st.caption("題1 再想想：直線邊界夠不夠用？可按「Agent 提示」。")
+        st.session_state[quiz.SESSION_FOCUS_POLY] = quiz.QID_MAP
+
+    q2_col, h2_col = st.columns([4, 1])
+    with q2_col:
+        lambda_choice = st.radio(
+            "題2：λ 變大時，決策邊界／過擬合傾向比較可能？",
+            [quiz.PLEASE_SELECT, *quiz.LAMBDA_OPTIONS],
+            key=quiz.SESSION_LAMBDA,
+        )
+    with h2_col:
+        st.write("")
+        if st.button("Agent 提示", key="logistic_hint_lambda", disabled=not agent_ready, width="stretch"):
+            _send_poly_quiz_hint(quiz.QID_LAMBDA)
+        elif not agent_ready:
+            st.caption("先啟用 Agent")
+
+    lambda_ok = quiz.is_lambda_correct(str(lambda_choice))
+    if str(lambda_choice) == quiz.PLEASE_SELECT:
+        st.caption("請先選擇題2。")
+        if map_ok:
+            st.session_state[quiz.SESSION_FOCUS_POLY] = quiz.QID_LAMBDA
+    elif lambda_ok:
+        st.caption("題2 OK。")
+    else:
+        st.caption("題2 再想想 λ 對權重大小與邊界彎曲的影響，可按「Agent 提示」。")
+        st.session_state[quiz.SESSION_FOCUS_POLY] = quiz.QID_LAMBDA
+
+    unlocked = quiz.both_poly_quiz_correct(str(map_choice), str(lambda_choice))
+    if unlocked:
+        st.success("2／2 題已準備好訓練。")
+    else:
+        st.info(f"進度：{int(map_ok) + int(lambda_ok)}／2 題答對（需全部正確才解鎖訓練）。")
+    return unlocked
+
+
+def _boundary_quiz_appendix(*, unlocked: bool, focus_qid: str | None) -> str:
+    sigmoid_choice = str(st.session_state.get(quiz.SESSION_SIGMOID, quiz.PLEASE_SELECT))
+    cost_choice = str(st.session_state.get(quiz.SESSION_COST, quiz.PLEASE_SELECT))
+    return quiz.build_boundary_quiz_agent_appendix(
+        sigmoid_status=quiz.quiz_choice_status(
+            sigmoid_choice, correct=quiz.is_sigmoid_correct(sigmoid_choice)
+        ),
+        cost_status=quiz.quiz_choice_status(
+            cost_choice, correct=quiz.is_cost_correct(cost_choice)
+        ),
+        focus_qid=focus_qid,
+        unlocked=unlocked,
+    )
+
+
+def _poly_quiz_appendix(*, unlocked: bool, focus_qid: str | None) -> str:
+    map_choice = str(st.session_state.get(quiz.SESSION_MAP, quiz.PLEASE_SELECT))
+    lambda_choice = str(st.session_state.get(quiz.SESSION_LAMBDA, quiz.PLEASE_SELECT))
+    return quiz.build_poly_quiz_agent_appendix(
+        map_status=quiz.quiz_choice_status(map_choice, correct=quiz.is_map_correct(map_choice)),
+        lambda_status=quiz.quiz_choice_status(
+            lambda_choice, correct=quiz.is_lambda_correct(lambda_choice)
+        ),
+        focus_qid=focus_qid,
+        unlocked=unlocked,
+    )
+
+
+def _send_boundary_quiz_hint(qid: str) -> None:
+    ts_key = f"logistic_hint_ts_{qid}"
+    now = time.time()
+    if not quiz.can_send_hint(st.session_state.get(ts_key), now):
+        st.caption("提示冷卻中，稍后再試。")
+        return
+    st.session_state[ts_key] = now
+    st.session_state[quiz.SESSION_FOCUS_BOUNDARY] = qid
+    sigmoid_choice = str(st.session_state.get(quiz.SESSION_SIGMOID, quiz.PLEASE_SELECT))
+    cost_choice = str(st.session_state.get(quiz.SESSION_COST, quiz.PLEASE_SELECT))
+    unlocked = quiz.both_boundary_quiz_correct(sigmoid_choice, cost_choice)
+    invoke_data_agent(
+        quiz.hint_user_text(qid),
+        extra_context=_boundary_quiz_appendix(unlocked=unlocked, focus_qid=qid),
+        display_user_text=quiz.hint_display_text(qid),
+    )
+    st.rerun()
+
+
+def _send_poly_quiz_hint(qid: str) -> None:
+    ts_key = f"logistic_hint_ts_{qid}"
+    now = time.time()
+    if not quiz.can_send_hint(st.session_state.get(ts_key), now):
+        st.caption("提示冷卻中，稍后再試。")
+        return
+    st.session_state[ts_key] = now
+    st.session_state[quiz.SESSION_FOCUS_POLY] = qid
+    map_choice = str(st.session_state.get(quiz.SESSION_MAP, quiz.PLEASE_SELECT))
+    lambda_choice = str(st.session_state.get(quiz.SESSION_LAMBDA, quiz.PLEASE_SELECT))
+    unlocked = quiz.both_poly_quiz_correct(map_choice, lambda_choice)
+    invoke_data_agent(
+        quiz.hint_user_text(qid),
+        extra_context=_poly_quiz_appendix(unlocked=unlocked, focus_qid=qid),
+        display_user_text=quiz.hint_display_text(qid),
+    )
+    st.rerun()
 
 
 def _classification_training_frame(
@@ -455,16 +640,29 @@ def _render_sigmoid_visualization() -> None:
 
 
 def _render_logistic_cost_formula(*, regularized: bool = False) -> None:
-    with st.expander("成本函數 J(w,b)", expanded=False):
+    with st.expander("成本與梯度下降", expanded=False):
         if regularized:
-            st.latex(
-                r"J=-\frac{1}{m}\sum_i loss + \frac{\lambda}{2m}\sum_j w_j^2"
-            )
+            st.latex(COST_J_LOGISTIC_REG_LATEX)
+            st.caption("Cost 依 sigmoid 機率 f 計算，另加 λ 對 w 的正則化；與分類 threshold 無關。")
         else:
-            st.latex(
-                r"J=-\frac{1}{m}\sum_i\Big[y^{(i)}\log f^{(i)}+(1-y^{(i)})\log(1-f^{(i)})\Big]"
-            )
-        st.caption("Cost 只依 sigmoid 機率 f 計算，與分類 threshold 無關。")
+            st.latex(COST_J_LOGISTIC_LATEX)
+            st.caption("Cost 只依 sigmoid 機率 f 計算，與分類 threshold 無關。")
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**梯度下降演算法**")
+            st.markdown("`repeat until convergence:` `{`")
+            st.latex(COST_GD_W_LOGISTIC_LATEX)
+            st.latex(COST_GD_B_LOGISTIC_LATEX)
+            st.markdown("`}`")
+        with right:
+            st.markdown("**導數項**")
+            if regularized:
+                st.latex(COST_DJ_DW_LOGISTIC_REG_LATEX)
+            else:
+                st.latex(COST_DJ_DW_LOGISTIC_LATEX)
+            st.latex(COST_DJ_DB_LOGISTIC_LATEX)
+            if regularized:
+                st.caption("對 b 的導數不加 λ 項。")
 
 
 def _classification_threshold_slider(page_key: str, *, enabled: bool) -> float:
@@ -498,24 +696,6 @@ def _animate_logistic_boundary(
         status_placeholder.caption(
             f"Iteration {step.iteration:,} / {steps[-1].iteration:,}，"
             f"Cost J = {step.cost:.4f}"
-        )
-        time.sleep(0.02)
-
-
-def _animate_logistic_proba(
-    actual: pd.Series,
-    feature_matrix: pd.DataFrame,
-    steps: list[GradientDescentStep],
-    plot_placeholder,
-    cost_placeholder,
-    status_placeholder,
-) -> None:
-    for step in _animation_steps(steps):
-        probability = predict_proba(feature_matrix, step.weights, step.intercept)
-        _render_actual_probability_plot(actual, probability, plot_placeholder)
-        _render_cost_history_plot(steps[: step.iteration + 1], cost_placeholder)
-        status_placeholder.caption(
-            f"Iteration {step.iteration:,} / {steps[-1].iteration:,}，Cost J = {step.cost:.4f}"
         )
         time.sleep(0.02)
 
@@ -650,20 +830,6 @@ def _render_cost_history_plot(steps: list[GradientDescentStep], placeholder) -> 
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Cost J")
     ax.set_title("Cost vs Iteration")
-    placeholder.pyplot(fig, clear_figure=True)
-    plt.close(fig)
-
-
-def _render_actual_probability_plot(
-    actual: pd.Series,
-    probability: pd.Series,
-    placeholder,
-) -> None:
-    fig, ax = plt.subplots(figsize=(6.6, 5.2), constrained_layout=True)
-    ax.scatter(actual, probability, alpha=0.75)
-    ax.set_xlabel("實際 y")
-    ax.set_ylabel("預測機率 f(x)")
-    ax.set_title("實際標籤 vs 預測機率")
     placeholder.pyplot(fig, clear_figure=True)
     plt.close(fig)
 

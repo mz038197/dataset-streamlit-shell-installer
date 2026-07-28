@@ -106,7 +106,6 @@ pages = {
     "機器學習 · 監督式": [
         st.Page(str(SHELL_ROOT / "pages" / "14_Simple_Linear_Regression.py"), title="線性回歸"),
         st.Page(str(SHELL_ROOT / "pages" / "16_Logistic_Regression.py"), title="邏輯迴歸"),
-        st.Page(str(SHELL_ROOT / "pages" / "17_Regularized_Logistic_Regression.py"), title="正則化邏輯迴歸"),
         st.Page(str(SHELL_ROOT / "pages" / "18_Linear_SVM.py"), title="線性支持向量機"),
         st.Page(str(SHELL_ROOT / "pages" / "19_KNN_Classification.py"), title="K-近鄰分類"),
         st.Page(str(SHELL_ROOT / "pages" / "19_Decision_Tree_Concepts.py"), title="決策樹與集成"),
