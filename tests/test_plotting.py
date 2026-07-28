@@ -16,7 +16,10 @@ if str(TEMPLATE_ROOT) not in sys.path:
 import pandas as pd
 
 from dataset_streamlit_shell.plotting import (
+    CLASS_NEGATIVE_STYLE,
+    CLASS_POSITIVE_STYLE,
     build_classification_data_figures,
+    build_linear_svm_result_figure,
     build_regression_data_figures,
     build_sigmoid_figure,
     configure_matplotlib_for_traditional_chinese,
@@ -70,3 +73,49 @@ def test_build_classification_data_figures_two_features() -> None:
     )
     figures = build_classification_data_figures(frame, ["x1", "x2"], "label")
     assert len(figures) == 1
+
+
+def test_binary_class_scatter_defaults_to_zero_one_labels() -> None:
+    assert CLASS_NEGATIVE_STYLE["label"] == "y=0"
+    assert CLASS_POSITIVE_STYLE["label"] == "y=1"
+
+
+def test_classification_data_figure_legend_uses_zero_one() -> None:
+    import matplotlib.pyplot as plt
+
+    frame = pd.DataFrame(
+        {
+            "x1": [0.5, 3.0, 1.0],
+            "x2": [1.5, 0.5, 2.5],
+            "label": [0, 1, 1],
+        }
+    )
+    _, fig = build_classification_data_figures(frame, ["x1", "x2"], "label")[0]
+    _, labels = fig.axes[0].get_legend_handles_labels()
+    assert labels == ["y=0", "y=1"]
+    plt.close(fig)
+
+
+def test_linear_svm_result_figure_legend_keeps_plus_minus_one() -> None:
+    import matplotlib.pyplot as plt
+
+    frame = pd.DataFrame(
+        {
+            "x1": [0.0, 1.0, 0.0, 1.0],
+            "x2": [0.0, 0.0, 1.0, 1.0],
+            "y": [-1, -1, 1, 1],
+        }
+    )
+    fig = build_linear_svm_result_figure(
+        frame,
+        ["x1", "x2"],
+        "y",
+        coef=[1.0, 1.0],
+        intercept=-0.5,
+        support_vectors=[[0.0, 1.0], [1.0, 0.0]],
+    )
+    _, labels = fig.axes[0].get_legend_handles_labels()
+    assert "y=-1" in labels
+    assert "y=+1" in labels
+    assert "y=0" not in labels
+    plt.close(fig)

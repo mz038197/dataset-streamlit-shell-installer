@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import time
-from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -12,7 +10,6 @@ import streamlit as st
 
 from dataset_streamlit_shell.ui.data_ui import (
     SHELL_ROOT,
-    _display_path,
     render_chat_panel,
     render_dataset_metrics,
 )
@@ -25,7 +22,6 @@ from dataset_streamlit_shell.ml.classification import (
     ClassificationArtifact,
     LogisticModelArtifact,
     RegularizedLogisticModelArtifact,
-    artifact_from_payload,
     build_classification_agent_context,
     logistic_gradient_descent_steps,
     map_feature,
@@ -34,7 +30,6 @@ from dataset_streamlit_shell.ml.classification import (
     predict_proba,
     predict_proba_from_logistic_artifact,
     predict_proba_from_regularized_artifact,
-    save_classification_artifact,
     training_accuracy,
 )
 from dataset_streamlit_shell.ml.regression import (
@@ -53,7 +48,6 @@ from dataset_streamlit_shell.plotting import (
 configure_matplotlib_for_traditional_chinese()
 
 CLASSIFICATION_DEMO_DIR = SHELL_ROOT / "built-in-data" / "classification"
-CLASSIFICATION_MODEL_DIR = SHELL_ROOT / "workspace" / "models" / "classification"
 UNIVERSITY_ADMISSION_PATH = CLASSIFICATION_DEMO_DIR / "university_admission.csv"
 MICROCHIP_TEST_PATH = CLASSIFICATION_DEMO_DIR / "microchip_test.csv"
 
@@ -66,10 +60,6 @@ MICROCHIP_TARGET = "是否通過"
 def render_logistic_regression_page() -> None:
     def body(df: pd.DataFrame, source_label: str) -> None:
         st.markdown("##### 邏輯迴歸")
-        st.info(
-            "依兩科考試成績預測是否錄取。訓練使用 logistic Cost J 與梯度下降；"
-            "分類 threshold 在訓練完成後才用於解讀預測類別。"
-        )
         features = list(ADMISSION_FEATURES)
         target = ADMISSION_TARGET
         working = _classification_training_frame(df, features, target)
@@ -197,16 +187,6 @@ def render_logistic_regression_page() -> None:
         if artifact is not None:
             probability = predict_proba_from_logistic_artifact(artifact, working[artifact.features])
             _render_logistic_training_results(artifact, working, target, probability, threshold)
-            _render_classification_save_section(
-                artifact,
-                filename_prefix="logistic_regression",
-                page_key="logistic",
-            )
-        _render_logistic_inference_section(
-            page_key="logistic",
-            trained_artifact=artifact,
-            threshold=threshold,
-        )
         _render_classification_prompts(
             [
                 "請解釋這條決策邊界代表什麼，以及錄取機率如何隨考試分數改變。",
@@ -227,10 +207,6 @@ def render_logistic_regression_page() -> None:
 def render_regularized_logistic_regression_page() -> None:
     def body(df: pd.DataFrame, source_label: str) -> None:
         st.markdown("##### 正則化邏輯迴歸")
-        st.info(
-            "晶片兩項檢測分數預測是否通過。訓練前會將 2 個 features 映射為 6 次多項式（27 維），"
-            "並以 λ 做正則化；threshold 僅用於訓練後的類別預測。"
-        )
         base_features = list(MICROCHIP_FEATURES)
         target = MICROCHIP_TARGET
         working = _classification_training_frame(df, base_features, target)
@@ -369,16 +345,6 @@ def render_regularized_logistic_regression_page() -> None:
         if artifact is not None:
             probability = predict_proba_from_regularized_artifact(artifact, working)
             _render_logistic_training_results(artifact, working, target, probability, threshold)
-            _render_classification_save_section(
-                artifact,
-                filename_prefix="regularized_logistic_regression",
-                page_key="regularized",
-            )
-        _render_regularized_inference_section(
-            page_key="regularized",
-            trained_artifact=artifact,
-            threshold=threshold,
-        )
         _render_classification_prompts(
             [
                 "請解釋為什麼晶片資料需要多項式特徵映射與正則化。",
@@ -726,126 +692,6 @@ def _render_logistic_training_results(
         }
     )
     st.dataframe(result.head(30).style.format({"probability": "{:.4f}"}), width="stretch")
-
-
-def _render_classification_save_section(
-    artifact: ClassificationArtifact,
-    filename_prefix: str,
-    page_key: str,
-) -> None:
-    st.markdown("##### 保存模型 JSON")
-    st.caption("檔案保存至 `dataset_streamlit_shell/workspace/models/classification/`。")
-    if st.button(
-        "保存模型 JSON",
-        type="primary",
-        width="stretch",
-        key=f"save_{page_key}",
-    ):
-        CLASSIFICATION_MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = CLASSIFICATION_MODEL_DIR / f"{filename_prefix}_{stamp}.json"
-        save_classification_artifact(artifact, path)
-        st.success(f"已保存模型：`{_display_path(path)}`")
-
-
-def _render_logistic_inference_section(
-    *,
-    page_key: str,
-    trained_artifact: LogisticModelArtifact | None,
-    threshold: float,
-) -> None:
-    st.markdown("##### 手動預測")
-    st.caption("上傳的 JSON 必須為 `logistic_regression`。")
-    active = _resolve_classification_artifact(
-        page_key=page_key,
-        trained_artifact=trained_artifact,
-        expected_kind=MODEL_KIND_LOGISTIC,
-    )
-    if active is None:
-        return
-    input_values: dict[str, float] = {}
-    cols = st.columns(min(len(active.features), 3) or 1)
-    for index, feature in enumerate(active.features):
-        with cols[index % len(cols)]:
-            default_value = 0.0
-            if active.scaler is not None:
-                default_value = float(active.scaler["mean"].get(feature, 0.0))
-            input_values[feature] = st.number_input(feature, value=default_value, key=f"{page_key}_{feature}")
-    if st.button("計算預測", type="primary", key=f"{page_key}_predict"):
-        frame = pd.DataFrame([input_values])
-        prob = float(predict_proba_from_logistic_artifact(active, frame).iloc[0])
-        pred_class = int(prob >= threshold)
-        st.metric("預測機率", f"{prob:.4f}")
-        st.metric("預測類別", str(pred_class))
-
-
-def _render_regularized_inference_section(
-    *,
-    page_key: str,
-    trained_artifact: RegularizedLogisticModelArtifact | None,
-    threshold: float,
-) -> None:
-    st.markdown("##### 手動預測")
-    st.caption("上傳的 JSON 必須為 `regularized_logistic_regression`；請輸入 2 個原始 features。")
-    active = _resolve_classification_artifact(
-        page_key=page_key,
-        trained_artifact=trained_artifact,
-        expected_kind=MODEL_KIND_REGULARIZED,
-    )
-    if active is None or not isinstance(active, RegularizedLogisticModelArtifact):
-        return
-    input_values: dict[str, float] = {}
-    cols = st.columns(2)
-    for index, feature in enumerate(active.base_features):
-        with cols[index]:
-            input_values[feature] = st.number_input(
-                feature,
-                value=0.0,
-                key=f"{page_key}_{feature}",
-            )
-    if st.button("計算預測", type="primary", key=f"{page_key}_predict"):
-        frame = pd.DataFrame([input_values])
-        prob = float(predict_proba_from_regularized_artifact(active, frame).iloc[0])
-        pred_class = int(prob >= threshold)
-        st.metric("預測機率", f"{prob:.4f}")
-        st.metric("預測類別", str(pred_class))
-
-
-def _resolve_classification_artifact(
-    *,
-    page_key: str,
-    trained_artifact: ClassificationArtifact | None,
-    expected_kind: str,
-) -> ClassificationArtifact | None:
-    options: list[str] = []
-    if trained_artifact is not None:
-        options.append("本次訓練結果")
-    options.append("上傳模型 JSON")
-    source = options[0] if len(options) == 1 else st.radio(
-        "預測使用的模型",
-        options,
-        horizontal=True,
-        key=f"{page_key}_inference_source",
-    )
-    if source == "本次訓練結果" and trained_artifact is not None:
-        if trained_artifact.model_kind != expected_kind:
-            st.error("本次訓練模型類型與此頁不符。")
-            return None
-        return trained_artifact
-    uploaded = st.file_uploader("上傳模型 JSON", type=["json"], key=f"{page_key}_upload")
-    if uploaded is None:
-        st.info("請上傳先前保存的模型 JSON。")
-        return None
-    try:
-        artifact = artifact_from_payload(
-            json.loads(uploaded.getvalue().decode("utf-8")),
-            expected_kind=expected_kind,
-        )
-        st.success(f"已載入模型：{artifact.model_kind}")
-        return artifact
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-        st.error(f"無法讀取模型 JSON：{exc}")
-        return None
 
 
 def _render_classification_prompts(prompts: list[str]) -> None:

@@ -50,13 +50,13 @@ CLASS_NEGATIVE_STYLE = {
     "c": "#f4b400",
     "edgecolors": "#5f4330",
     "linewidths": 0.6,
-    "label": "y=-1",
+    "label": "y=0",
 }
 CLASS_POSITIVE_STYLE = {
     "marker": "x",
     "c": "#202124",
     "linewidths": 1.2,
-    "label": "y=+1",
+    "label": "y=1",
 }
 
 
@@ -67,9 +67,17 @@ def scatter_binary_classes(
     *,
     positives: np.ndarray,
     negatives: np.ndarray,
+    negative_label: str | None = None,
+    positive_label: str | None = None,
 ) -> None:
-    ax.scatter(x1[negatives], x2[negatives], **CLASS_NEGATIVE_STYLE)
-    ax.scatter(x1[positives], x2[positives], **CLASS_POSITIVE_STYLE)
+    neg_style = dict(CLASS_NEGATIVE_STYLE)
+    pos_style = dict(CLASS_POSITIVE_STYLE)
+    if negative_label is not None:
+        neg_style["label"] = negative_label
+    if positive_label is not None:
+        pos_style["label"] = positive_label
+    ax.scatter(x1[negatives], x2[negatives], **neg_style)
+    ax.scatter(x1[positives], x2[positives], **pos_style)
 
 
 def build_regression_data_figures(
@@ -290,7 +298,15 @@ def build_linear_svm_result_figure(
     else:
         positives = labels == 1
         negatives = labels == -1
-        scatter_binary_classes(ax, x1, x2, positives=positives, negatives=negatives)
+        scatter_binary_classes(
+            ax,
+            x1,
+            x2,
+            positives=positives,
+            negatives=negatives,
+            negative_label="y=-1",
+            positive_label="y=+1",
+        )
 
     x_lo, x_hi, y_lo, y_hi = linear_svm_data_axis_limits(x1, x2)
     ax.set_xlim(x_lo, x_hi)
