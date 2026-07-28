@@ -12,6 +12,6 @@ if str(PROJECT_ROOT) not in sys.path:
 from dataset_streamlit_shell.ui.data_ui import inject_style
 from dataset_streamlit_shell.ui.tree_ui import render_decision_tree_concepts_page
 
-st.set_page_config(page_title="決策樹概念", page_icon="DT", layout="wide")
+st.set_page_config(page_title="決策樹與集成", page_icon="DT", layout="wide")
 inject_style()
 render_decision_tree_concepts_page()

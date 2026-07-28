@@ -19,6 +19,8 @@ SWEEP_LEARNING_RATE_FIXED = 0.1
 FINAL_N_ESTIMATORS = 500
 FINAL_LEARNING_RATE = 0.1
 EARLY_STOPPING_ROUNDS = 10
+STAGE_FIXED_N_ESTIMATORS = 100
+STAGE_DEFAULT_LEARNING_RATE = 0.1
 
 
 def training_and_validation_accuracy(
@@ -105,6 +107,25 @@ def fit_xgboost_final(
         model.fit(x_fit, y_fit, **fit_kwargs)
     if hasattr(model, "best_iteration") and model.best_iteration is not None:
         return model
+    return model
+
+
+def fit_xgboost_stage(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    *,
+    learning_rate: float,
+    n_estimators: int = STAGE_FIXED_N_ESTIMATORS,
+    random_state: int = RANDOM_STATE,
+) -> XGBClassifier:
+    """教學階段用：固定棵數、可調 learning_rate，不做 early stopping。"""
+    model = XGBClassifier(
+        n_estimators=int(n_estimators),
+        learning_rate=float(learning_rate),
+        random_state=int(random_state),
+        verbosity=0,
+    )
+    model.fit(x_train, y_train)
     return model
 
 

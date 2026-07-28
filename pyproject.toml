@@ -8,7 +8,10 @@ version = "0.10.0"
 description = "Install the workshop dataset Streamlit shell into an agent project."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["typer>=0.12"]
+dependencies = [
+    "typer>=0.12",
+    "xgboost>=3.2.0",
+]
 
 [project.scripts]
 add-dataset-streamlit-shell = "add_dataset_streamlit_shell.cli:main"

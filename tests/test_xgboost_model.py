@@ -20,9 +20,12 @@ pytest.importorskip("xgboost")
 from dataset_streamlit_shell.ml.xgboost_model import (
     LEARNING_RATE_LIST,
     N_ESTIMATORS_LIST,
+    STAGE_FIXED_N_ESTIMATORS,
     fit_xgboost_final,
+    fit_xgboost_stage,
     prepare_encoded_heart,
     sweep_xgboost_hyperparam,
+    training_and_validation_accuracy,
 )
 
 HEART_PATH = (
@@ -64,3 +67,18 @@ def test_fit_xgboost_final_smoke() -> None:
     model = fit_xgboost_final(x_train, y_train, n_estimators=50, learning_rate=0.1)
     predictions = model.predict(x_val)
     assert len(predictions) == len(y_val)
+
+
+def test_fit_xgboost_stage_uses_learning_rate_and_fixed_n_estimators() -> None:
+    frame = pd.read_csv(HEART_PATH)
+    x_train, x_val, y_train, y_val = prepare_encoded_heart(frame)
+    model = fit_xgboost_stage(x_train, y_train, learning_rate=0.05)
+    assert model.n_estimators == STAGE_FIXED_N_ESTIMATORS
+    assert abs(float(model.learning_rate) - 0.05) < 1e-9
+    train_acc, val_acc = training_and_validation_accuracy(
+        model, x_train, y_train, x_val, y_val
+    )
+    assert 0.0 <= train_acc <= 100.0
+    assert 0.0 <= val_acc <= 100.0
+    # 教學階段不做 early stopping：應跑滿固定棵數
+    assert getattr(model, "best_iteration", None) in (None, STAGE_FIXED_N_ESTIMATORS - 1)

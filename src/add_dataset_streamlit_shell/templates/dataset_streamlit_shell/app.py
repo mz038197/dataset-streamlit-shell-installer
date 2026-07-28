@@ -109,8 +109,7 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "17_Regularized_Logistic_Regression.py"), title="正則化邏輯迴歸"),
         st.Page(str(SHELL_ROOT / "pages" / "18_Linear_SVM.py"), title="線性支持向量機"),
         st.Page(str(SHELL_ROOT / "pages" / "19_KNN_Classification.py"), title="K-近鄰分類"),
-        st.Page(str(SHELL_ROOT / "pages" / "19_Decision_Tree_Concepts.py"), title="決策樹概念"),
-        st.Page(str(SHELL_ROOT / "pages" / "20_XGBoost.py"), title="XGBoost"),
+        st.Page(str(SHELL_ROOT / "pages" / "19_Decision_Tree_Concepts.py"), title="決策樹與集成"),
     ],
     "機器學習 · 非監督式": [
         st.Page(str(SHELL_ROOT / "pages" / "11_Wards_Method.py"), title="Ward's Method（階層分群）"),

@@ -157,7 +157,7 @@ def build_decision_tree_agent_context(
     row_count: int,
 ) -> str:
     return (
-        f"決策樹概念頁：{row_count} 筆樣本；features={', '.join(features)}；"
+        f"決策樹與集成頁（單顆決策樹）：{row_count} 筆樣本；features={', '.join(features)}；"
         f"target={target}；max_depth={max_depth}；criterion={criterion_label}；"
         f"訓練集正確率={training_accuracy_pct:.2f}%。"
     )
