@@ -40,6 +40,50 @@ def odd_k_values(*, k_min: int = K_MIN, k_max: int = K_MAX, step: int = K_STEP) 
     return list(range(start, k_max + 1, step))
 
 
+DEMO_QUERY_COUNT = 3
+
+
+def demo_query_points(
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    count: int = DEMO_QUERY_COUNT,
+) -> list[tuple[float, float]]:
+    """依訓練散點範圍產出固定相對位置的示範查詢點（新點，非訓練列）。"""
+    x = np.asarray(x, dtype=float).reshape(-1)
+    y = np.asarray(y, dtype=float).reshape(-1)
+    x_min, x_max = float(np.min(x)), float(np.max(x))
+    y_min, y_max = float(np.min(y)), float(np.max(y))
+    # 相對 bbox 的固定比例：偏邊界／偏一側，課堂可對照
+    fracs = (
+        (0.28, 0.55),
+        (0.52, 0.78),
+        (0.74, 0.32),
+        (0.40, 0.40),
+        (0.62, 0.58),
+    )
+    pts: list[tuple[float, float]] = []
+    for i in range(max(1, int(count))):
+        fx, fy = fracs[i % len(fracs)]
+        pts.append((x_min + fx * (x_max - x_min), y_min + fy * (y_max - y_min)))
+    return pts
+
+
+def vote_tally(labels: list[int] | np.ndarray) -> dict[int, int]:
+    arr = np.asarray(labels, dtype=int).reshape(-1)
+    return {int(lab): int(np.sum(arr == lab)) for lab in sorted(np.unique(arr).tolist())}
+
+
+def majority_label(labels: list[int] | np.ndarray) -> int:
+    """多數決；平票時取標籤數值較小者（與 sklearn uniform + 奇數 k 實務對齊即可）。"""
+    tally = vote_tally(labels)
+    if not tally:
+        raise ValueError("labels 不可為空")
+    best = max(tally.values())
+    winners = [lab for lab, n in tally.items() if n == best]
+    return int(min(winners))
+
+
 def _as_feature_matrix(feature_frame: pd.DataFrame | np.ndarray) -> np.ndarray:
     if isinstance(feature_frame, pd.DataFrame):
         return feature_frame.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
@@ -220,15 +264,19 @@ def build_knn_agent_context(
         parts.append("特徵已做標準化後再算距離。")
     if artifact is None:
         if prompt_train:
-            parts.append("尚未完成本組訓練；引導學生按「開始訓練」觀察決策邊界與查詢點鄰居。")
+            parts.append(
+                "尚未完成本組預測演示；引導學生按「開始預測演示」觀察決策邊界與預測過程演進。"
+            )
         else:
             parts.append(
-                "「開始訓練」尚未解鎖；先協助完成訓練前預測，不要建議按該按鈕，也不要直接講正解。"
+                "「開始預測演示」尚未解鎖；先協助完成訓練前預測，不要建議按該按鈕，也不要直接講正解。"
             )
     else:
-        parts.append(f"已訓練 k={artifact.k}，訓練集正確率 {artifact.training_accuracy:.2f}%。")
         parts.append(
-            f"訓練時標準化：{'有' if artifact.scaler is not None else '無'}。"
+            f"已建立鄰居池 k={artifact.k}，訓練集正確率 {artifact.training_accuracy:.2f}%。"
+        )
+        parts.append(
+            f"鄰居池標準化：{'有' if artifact.scaler is not None else '無'}。"
         )
     if note:
         parts.append(note)

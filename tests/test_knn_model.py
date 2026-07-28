@@ -16,12 +16,17 @@ if str(TEMPLATE_ROOT) not in sys.path:
 
 from dataset_streamlit_shell.ml.knn import (  # noqa: E402
     DEFAULT_K,
+    DEMO_QUERY_COUNT,
     build_knn_artifact,
+    build_knn_agent_context,
+    demo_query_points,
     fit_knn_classifier,
+    majority_label,
     nearest_neighbor_indices,
     odd_k_values,
     predict_class_from_artifact,
     prepare_feature_matrix,
+    vote_tally,
 )
 
 DEMO = (
@@ -88,3 +93,30 @@ def test_scale_trap_without_standardize_still_fits() -> None:
     )
     assert artifact.scaler is None
     assert artifact.k == 5
+
+
+def test_demo_query_points_and_vote() -> None:
+    import numpy as np
+
+    pts = demo_query_points(np.array([0.0, 10.0]), np.array([0.0, 20.0]), count=DEMO_QUERY_COUNT)
+    assert len(pts) == 3
+    assert all(0.0 <= p[0] <= 10.0 and 0.0 <= p[1] <= 20.0 for p in pts)
+    assert vote_tally([0, 0, 1]) == {0: 2, 1: 1}
+    assert majority_label([0, 0, 1]) == 0
+    assert majority_label([1, 1, 0, 0]) == 0  # 平票取較小標籤
+
+
+def test_agent_context_uses_prediction_demo_wording() -> None:
+    locked = build_knn_agent_context(
+        page_name="K-近鄰分類",
+        data_source="test",
+        features=["特徵1", "特徵2"],
+        target="類別",
+        k=5,
+        standardize=True,
+        row_count=80,
+        artifact=None,
+        prompt_train=False,
+    )
+    assert "開始預測演示" in locked
+    assert "開始訓練" not in locked

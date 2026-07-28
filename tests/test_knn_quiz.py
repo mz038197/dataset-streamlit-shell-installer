@@ -89,7 +89,7 @@ def test_hint_cooldown_and_appendix() -> None:
         unlocked=False,
     )
     assert "請勿直接告訴學生" in neighbors
-    assert "訓練是否已解鎖：否" in neighbors
+    assert "預測演示是否已解鎖：否" in neighbors
     k_app = build_k_quiz_agent_appendix(
         k_status="未選",
         scale_status="未選",
@@ -120,10 +120,22 @@ def test_stage1_surface_copy_hides_k() -> None:
     assert "5" not in NEIGHBORS_FORMULA_CAPTION
     assert "k=" not in pred
     assert "k 個" not in chart
-    # 階段2 仍可露 k
+    assert "開始預測演示" in chart
+    # 階段2 caption 同樣不在圖說洩漏具體 k（k 在 slider／metric）
+    assert "開始預測演示" in result_chart_caption(expose_k=True)
     assert "k=" in query_prediction_caption(0.1, 0.2, 1, k=5, expose_k=True)
-    assert "k 個" in result_chart_caption(expose_k=True)
     assert stage1_ui_leaks_k("本階段 k 固定為 5")
+
+
+def test_vote_progress_caption() -> None:
+    from dataset_streamlit_shell.ui.knn_quiz import vote_progress_caption
+
+    assert "等待" in vote_progress_caption({})
+    mid = vote_progress_caption({0: 2, 1: 1})
+    assert "類別 0×2" in mid and "類別 1×1" in mid
+    assert "預測" not in mid
+    done = vote_progress_caption({0: 3, 1: 2}, finalized_pred=0)
+    assert "預測類別 **0**" in done
 
 
 def test_neighbors_stage_wires_expose_k_false() -> None:
@@ -140,7 +152,9 @@ def test_neighbors_stage_wires_expose_k_false() -> None:
     assert "本階段 k 固定為 5" not in src
     assert "expose_k=False" in src
     assert 'key="train_knn_neighbors"' in src
-    # 階段1 結果區不得寫死 k metric 文案為唯一路徑；須走 expose_k 分支
+    assert "開始預測演示" in src
+    assert "開始訓練" not in src
+    assert "預測過程演進" in src
     neighbors_fn = src.split("def _render_neighbors_stage")[1].split("def _render_k_stage")[0]
     assert "expose_k=False" in neighbors_fn
     assert "expose_k=True" not in neighbors_fn

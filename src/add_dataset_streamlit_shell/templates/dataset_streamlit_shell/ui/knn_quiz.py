@@ -14,9 +14,12 @@ NEIGHBORS_FORMULA_CAPTION = (
 
 
 def result_chart_caption(*, expose_k: bool) -> str:
-    if expose_k:
-        return "在圖上**點一下**（點空白處或資料點附近）設定查詢點，會標出 k 個最近鄰居。"
-    return "在圖上**點一下**（點空白處或資料點附近）設定查詢點，會標出最近的鄰居。"
+    # expose_k 保留參數以對齊呼叫端；兩階段說明相同（階段1 仍不可洩漏具體 k 值）
+    _ = expose_k
+    return (
+        "按「開始預測演示」會先自動演 3 筆新查詢點；之後在圖上**點一下**可再加演。"
+        "每一筆會逐個納入鄰居並累加票數。"
+    )
 
 
 def query_prediction_caption(
@@ -26,6 +29,15 @@ def query_prediction_caption(
     if expose_k:
         return f"{base}（k={k}）"
     return base
+
+
+def vote_progress_caption(tally: dict[int, int], *, finalized_pred: int | None = None) -> str:
+    if not tally:
+        return "等待鄰居進入…"
+    parts = "、".join(f"類別 {lab}×{n}" for lab, n in sorted(tally.items()))
+    if finalized_pred is None:
+        return f"累計票數：{parts}"
+    return f"{parts} → 預測類別 **{finalized_pred}**"
 
 
 def stage1_ui_leaks_k(*texts: str) -> bool:
@@ -161,7 +173,7 @@ def build_neighbors_quiz_agent_appendix(
             "【訓練前預測關卡｜K-近鄰分類 階段1 鄰居與投票】",
             f"題1（實例型／有無 w）狀態：{inst_status}；題2（多數決）狀態：{vote_status}。",
             f"目前焦點題：{focus}。features={feature_txt}，target={target}。",
-            f"訓練是否已解鎖：{'是' if unlocked else '否'}。",
+            f"預測演示是否已解鎖：{'是' if unlocked else '否'}。",
             "本階段只談找鄰居與投票；未解鎖前請勿直接告訴學生應選哪一個選項。",
             "可對照邏輯迴歸／SVM 會學 w，K-近鄰則把訓練點留下來查。",
             "只給線索，不要直接講正解選項文字。",
@@ -187,7 +199,7 @@ def build_k_quiz_agent_appendix(
             "【訓練前預測關卡｜K-近鄰分類 階段2 選擇 k】",
             f"題1（k 很大）狀態：{k_status}；題2（未標準化尺度）狀態：{scale_status}。",
             f"目前焦點題：{focus}。features={feature_txt}，target={target}，UI 的 k={k}，標準化={'開' if standardize else '關'}。",
-            f"訓練是否已解鎖：{'是' if unlocked else '否'}。",
+            f"預測演示是否已解鎖：{'是' if unlocked else '否'}。",
             "未解鎖前請勿直接告訴學生應選哪一個選項；只給 k／尺度的線索。",
             "可提醒：距離被數值範圍大的軸主導時，另一軸幾乎沒聲音。",
         ]
