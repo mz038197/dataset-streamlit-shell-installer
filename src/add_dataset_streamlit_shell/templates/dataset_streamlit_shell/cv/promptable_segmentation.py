@@ -78,6 +78,18 @@ def load_sam3_predictor(
     return SAM3SemanticPredictor(overrides=overrides)
 
 
+def ensure_sam3_mask_threshold(predictor) -> None:
+    """補上 Ultralytics SAM3SemanticModel 缺少的 mask_threshold。
+
+    SAM3SemanticPredictor.postprocess 會讀 self.model.mask_threshold（logit 門檻；
+    0.0 等同 sigmoid(logits) > 0.5）。SAM / SAM2 有此屬性，但 SAM3SemanticModel
+    在 ultralytics 8.4.x / main 仍未定義，會在推論時炸 AttributeError。
+    """
+    underlying = getattr(predictor, "model", None)
+    if underlying is not None and not hasattr(underlying, "mask_threshold"):
+        underlying.mask_threshold = 0.0
+
+
 def _image_path_for_predictor(image: np.ndarray, *, source_path: Path | None = None) -> str:
     if source_path is not None and source_path.exists():
         return str(source_path)
@@ -103,6 +115,7 @@ def predict_text_masks(
     model = predictor or load_sam3_predictor(conf_threshold=conf_threshold)
     image_path = _image_path_for_predictor(image, source_path=source_path)
     model.set_image(image_path)
+    ensure_sam3_mask_threshold(model)
     outputs = model(text=list(prompts), return_masks=True, save=False)
     return build_promptable_result(
         outputs,

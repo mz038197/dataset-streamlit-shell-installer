@@ -28,6 +28,7 @@ from dataset_streamlit_shell.cv.promptable_segmentation import (
     DEFAULT_MODEL,
     TextPromptItem,
     draw_promptable_results,
+    ensure_sam3_mask_threshold,
     filter_promptable_items,
     format_promptable_summary,
     parse_text_prompts,
@@ -55,6 +56,32 @@ def _sample_item(*, rank: int = 1, prompt: str = "dog") -> TextPromptItem:
 def test_default_model_is_sam3() -> None:
     assert DEFAULT_MODEL == "sam3.pt"
     assert DEFAULT_CONF == 0.5
+
+
+def test_ensure_sam3_mask_threshold_sets_missing_attr() -> None:
+    class _Model:
+        pass
+
+    class _Predictor:
+        def __init__(self) -> None:
+            self.model = _Model()
+
+    predictor = _Predictor()
+    ensure_sam3_mask_threshold(predictor)
+    assert predictor.model.mask_threshold == 0.0
+
+
+def test_ensure_sam3_mask_threshold_preserves_existing() -> None:
+    class _Model:
+        mask_threshold = 0.25
+
+    class _Predictor:
+        def __init__(self) -> None:
+            self.model = _Model()
+
+    predictor = _Predictor()
+    ensure_sam3_mask_threshold(predictor)
+    assert predictor.model.mask_threshold == 0.25
 
 
 def test_parse_text_prompts_splits_lines() -> None:
