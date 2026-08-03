@@ -75,10 +75,10 @@ def overview() -> None:
         st.markdown("##### 課程流程")
         st.markdown(
             """
-1. 在「資料上傳與預覽」上傳或更換 CSV。
-2. 到「AI 協作資料整理」診斷 `working.csv`，請右側 Agent 一步一步整理資料。
-3. 在「建立 Ready 分析就緒資料」產生 `ready.csv`。
-4. 圖表探索、降維等分析頁讀取 `ready.csv`；監督式與非監督式教學頁（回歸／分類／K-Means／Ward's Method 等）使用各頁內建範例資料。
+1. 課堂線可先開「欄位與資料概覽」看乘客表／航程表，再到「資料整合」合併；或自行上傳 CSV。
+2. 經「資料轉換」與後續清理診斷 `working.csv`，請右側 Agent 一步一步整理。
+3. 在「建立 Ready 分析就緒資料」產生 `ready.csv`，再到圖表探索；需要時用「資料切分」寫出 train／val／test。
+4. 監督式與非監督式教學頁仍使用各頁內建範例資料。
 """
         )
 
@@ -93,6 +93,8 @@ pages = {
     "AI 協作資料整理": [
         st.Page(str(SHELL_ROOT / "pages" / "1_Database.py"), title="資料上傳與預覽"),
         st.Page(str(SHELL_ROOT / "pages" / "3_Field_Quality.py"), title="欄位與資料概覽"),
+        st.Page(str(SHELL_ROOT / "pages" / "15_Data_Integration.py"), title="資料整合"),
+        st.Page(str(SHELL_ROOT / "pages" / "17_Data_Transform.py"), title="資料轉換"),
         st.Page(str(SHELL_ROOT / "pages" / "4_Duplicates.py"), title="刪除重複資料列"),
         st.Page(str(SHELL_ROOT / "pages" / "5_Numeric_Diagnostics.py"), title="缺失值處理"),
         st.Page(str(SHELL_ROOT / "pages" / "6_Outliers.py"), title="離群值檢查"),
@@ -102,6 +104,7 @@ pages = {
         st.Page(str(SHELL_ROOT / "pages" / "13_Feature_Scaling.py"), title="特徵縮放"),
         st.Page(str(SHELL_ROOT / "pages" / "8_Ready.py"), title="建立 Ready 分析就緒資料"),
         st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="圖表探索"),
+        st.Page(str(SHELL_ROOT / "pages" / "20_Data_Split.py"), title="資料切分"),
     ],
     "機器學習 · 監督式": [
         st.Page(str(SHELL_ROOT / "pages" / "14_Simple_Linear_Regression.py"), title="線性回歸"),

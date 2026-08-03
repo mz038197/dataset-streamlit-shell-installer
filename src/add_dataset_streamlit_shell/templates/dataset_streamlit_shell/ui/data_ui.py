@@ -34,7 +34,11 @@ AGENT_ACTIVATION_MARKER_PATH = SHELL_ROOT / ".agent_activated"
 ORIGINAL_DATASET_PATH = WORKSPACE_DIR / "original.csv"
 WORKING_DATASET_PATH = WORKSPACE_DIR / "working.csv"
 READY_DATASET_PATH = WORKSPACE_DIR / "ready.csv"
+TRAIN_DATASET_PATH = WORKSPACE_DIR / "train.csv"
+VAL_DATASET_PATH = WORKSPACE_DIR / "val.csv"
+TEST_DATASET_PATH = WORKSPACE_DIR / "test.csv"
 CLEANING_LOG_PATH = WORKSPACE_DIR / "cleaning_log.jsonl"
+SPLIT_DATASET_PATHS = (TRAIN_DATASET_PATH, VAL_DATASET_PATH, TEST_DATASET_PATH)
 USER_SETTINGS_PATH = WORKSPACE_DIR / "user_settings.json"
 MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024
 TTS_VOICE_OPTIONS = [
@@ -400,10 +404,30 @@ def reset_working_dataset() -> None:
     reset_cleaning_log()
 
 
+def clear_split_datasets() -> None:
+    for path in SPLIT_DATASET_PATHS:
+        if path.exists():
+            path.unlink()
+
+
 def reset_ready_dataset() -> None:
     refresh_ready_dataset_cache()
     if READY_DATASET_PATH.exists():
         READY_DATASET_PATH.unlink()
+    clear_split_datasets()
+
+
+def working_dataset_file_exists() -> bool:
+    return WORKING_DATASET_PATH.exists()
+
+
+def clear_to_dual_start() -> None:
+    """清除 working／ready／切分產物／original，回到雙表起點。"""
+    clear_split_datasets()
+    reset_working_dataset()
+    st.session_state.pop("dataset_df", None)
+    if ORIGINAL_DATASET_PATH.exists():
+        ORIGINAL_DATASET_PATH.unlink()
 
 
 def reset_cleaning_log() -> None:
@@ -435,8 +459,20 @@ def reset_working_dataset_from_source() -> bool:
 
 def create_ready_dataset(df: pd.DataFrame) -> None:
     _ensure_workspace_dir()
+    clear_split_datasets()  # 重建 Ready 作廢既有切分產物
     df.to_csv(READY_DATASET_PATH, index=False)
     st.session_state["ready_dataset_df"] = df
+
+
+def save_split_datasets(
+    train: pd.DataFrame,
+    val: pd.DataFrame,
+    test: pd.DataFrame,
+) -> None:
+    _ensure_workspace_dir()
+    train.to_csv(TRAIN_DATASET_PATH, index=False)
+    val.to_csv(VAL_DATASET_PATH, index=False)
+    test.to_csv(TEST_DATASET_PATH, index=False)
 
 
 def append_cleaning_log(

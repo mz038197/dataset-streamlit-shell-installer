@@ -10,14 +10,43 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from dataset_streamlit_shell.ml.integration import (
+    JOIN_HOW_OPTIONS,
+    KEY_ALIGN_OPTIONS,
+    KEY_ALIGN_CORRECT,
+    LEFT_JOIN_CORRECT,
+    PASSENGER_KEY,
+    PASSENGER_TABLE_LABEL,
+    VOYAGE_KEY_RAW,
+    VOYAGE_TABLE_LABEL,
+    align_voyage_key,
+    is_join_how_correct,
+    is_key_align_correct,
+    key_overlap_count,
+    load_titanic_integration_frames,
+    merge_passenger_voyage,
+)
+from dataset_streamlit_shell.ml.split import (
+    DEFAULT_RANDOM_STATE,
+    DEFAULT_TEST_RATIO,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+    ratios_sum_to_one,
+    split_ready_frame,
+)
 from dataset_streamlit_shell.ui.data_ui import (
     CLEANING_LOG_PATH,
     READY_DATASET_PATH,
     SHELL_ROOT,
+    TEST_DATASET_PATH,
+    TRAIN_DATASET_PATH,
+    VAL_DATASET_PATH,
     WORKING_DATASET_PATH,
     _display_path,
     append_cleaning_log,
+    clear_to_dual_start,
     create_ready_dataset,
+    initialize_working_dataset,
     invoke_data_agent,
     load_cleaning_log,
     load_ready_dataset,
@@ -26,6 +55,9 @@ from dataset_streamlit_shell.ui.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
     reset_working_dataset_from_source,
+    save_dataset,
+    save_split_datasets,
+    working_dataset_file_exists,
 )
 from dataset_streamlit_shell.ui import multiple_regression_quiz as multi_quiz
 from dataset_streamlit_shell.ui.simple_regression_quiz import (
@@ -206,6 +238,8 @@ def _action_label(value: str, note: str = "") -> str:
         "encode_categorical_columns": "類別欄位編碼",
         "feature_scaling": "特徵縮放",
         "add_scaled_columns": "新增縮放欄位",
+        "merge_tables": "資料整合（合併雙表）",
+        "split_dataset": "資料切分",
     }
     normalized = value.strip().lower()
     if normalized in labels:
@@ -225,35 +259,112 @@ def _summarize_columns(value: object, *, max_items: int = 4) -> list[str]:
     return columns[:max_items] + [f"+ {remaining} 個"]
 
 
-def render_quality_page() -> None:
-    def body(df: pd.DataFrame) -> None:
-        render_dataset_metrics(df)
-        st.markdown("##### 診斷：欄位與資料概覽")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("重複列", f"{int(df.duplicated().sum()):,}")
-        c2.metric("缺失儲存格", f"{int(df.isna().sum().sum()):,}")
-        c3.metric("物件/文字欄位", f"{len(df.select_dtypes(include=['object', 'string']).columns):,}")
-        overview = pd.DataFrame(
-            {
-                "資料型態": [str(df[column].dtype) for column in df.columns],
-                "非空值筆數": df.notna().sum(),
-                "空值筆數": df.isna().sum(),
-                "不同值數量": df.nunique(dropna=True),
-            },
-            index=df.columns,
-        )
-        st.dataframe(overview, width="stretch")
-        with st.expander("資料預覽", expanded=False):
-            st.dataframe(df.head(20), width="stretch", hide_index=True)
-        _render_prompts(
-            [
-                "請檢查目前工作資料的欄位名稱，並建議哪些欄位需要重新命名。",
-                "請檢查目前工作資料的欄位型態是否合理，先不要修改資料。",
-                "請把不清楚的欄位名稱改成適合資料分析的名稱，並回報修改前後對照。",
-            ]
-        )
+def _column_overview_frame(df: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "資料型態": [str(df[column].dtype) for column in df.columns],
+            "非空值筆數": df.notna().sum(),
+            "空值筆數": df.isna().sum(),
+            "不同值數量": df.nunique(dropna=True),
+        },
+        index=df.columns,
+    )
 
-    _page_shell("欄位與資料概覽", "先看欄位名稱、型態、列數欄數與基本結構。", body)
+
+def _render_single_table_quality(df: pd.DataFrame) -> None:
+    render_dataset_metrics(df)
+    st.markdown("##### 診斷：欄位與資料概覽")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("重複列", f"{int(df.duplicated().sum()):,}")
+    c2.metric("缺失儲存格", f"{int(df.isna().sum().sum()):,}")
+    c3.metric("物件/文字欄位", f"{len(df.select_dtypes(include=['object', 'string']).columns):,}")
+    st.dataframe(_column_overview_frame(df), width="stretch")
+    with st.expander("資料預覽", expanded=False):
+        st.dataframe(df.head(20), width="stretch", hide_index=True)
+    _render_prompts(
+        [
+            "請檢查目前工作資料的欄位名稱，並建議哪些欄位需要重新命名。",
+            "請檢查目前工作資料的欄位型態是否合理，先不要修改資料。",
+            "請把不清楚的欄位名稱改成適合資料分析的名稱，並回報修改前後對照。",
+        ]
+    )
+
+
+def _render_dual_table_quality() -> str:
+    passengers, voyage = load_titanic_integration_frames()
+    st.info(
+        "目前還沒有工作資料。以下是課堂用的兩份來源表——"
+        f"**{PASSENGER_TABLE_LABEL}**（左）與 **{VOYAGE_TABLE_LABEL}**（右）。"
+        "請先找出能當合併依據的欄位，再到「資料整合」頁合併。"
+    )
+    left_col, right_col = st.columns(2)
+    with left_col:
+        st.markdown(f"##### {PASSENGER_TABLE_LABEL}")
+        st.caption(f"列數 {len(passengers):,} · 欄位數 {passengers.shape[1]}")
+        st.write("欄名：" + "、".join(f"`{c}`" for c in passengers.columns))
+        st.dataframe(_column_overview_frame(passengers), width="stretch")
+        with st.expander("預覽", expanded=True):
+            st.dataframe(passengers.head(10), width="stretch", hide_index=True)
+    with right_col:
+        st.markdown(f"##### {VOYAGE_TABLE_LABEL}")
+        st.caption(f"列數 {len(voyage):,} · 欄位數 {voyage.shape[1]}")
+        st.write("欄名：" + "、".join(f"`{c}`" for c in voyage.columns))
+        st.dataframe(_column_overview_frame(voyage), width="stretch")
+        st.warning(
+            f"注意：航程表的鍵欄是 `{VOYAGE_KEY_RAW}`，"
+            f"與乘客表的 `{PASSENGER_KEY}` 寫法不同。"
+        )
+        with st.expander("預覽", expanded=True):
+            st.dataframe(voyage.head(10), width="stretch", hide_index=True)
+
+    overlap_raw = key_overlap_count(
+        passengers,
+        voyage,
+        left_on=PASSENGER_KEY,
+        right_on=PASSENGER_KEY,
+    )
+    st.caption(
+        f"若直接用兩邊的 `{PASSENGER_KEY}` 對鍵，重疊鍵數量為 {overlap_raw} "
+        f"（航程表實際鍵名是 `{VOYAGE_KEY_RAW}`）。"
+    )
+    _render_prompts(
+        [
+            "請比較乘客表與航程表的欄名，指出哪一欄最可能當合併鍵，並說明兩邊寫法是否一致。",
+            "請說明若鍵名大小寫不同，合併前應該先做什麼。",
+            "請不要修改資料；先討論找到可對齊的鍵之後，再到資料整合頁操作。",
+        ]
+    )
+    return (
+        f"學生在雙表起點查看{PASSENGER_TABLE_LABEL}與{VOYAGE_TABLE_LABEL}。"
+        f"乘客表欄名：{'、'.join(map(str, passengers.columns))}。"
+        f"航程表欄名：{'、'.join(map(str, voyage.columns))}。"
+        f"航程表鍵欄為 {VOYAGE_KEY_RAW}，乘客表鍵欄為 {PASSENGER_KEY}。"
+    )
+
+
+def render_quality_page() -> None:
+    title = "欄位與資料概覽"
+    caption = "先看欄位名稱、型態、列數欄數與基本結構。"
+    main, side = st.columns([5, 3], gap="large")
+    with main:
+        st.title(title)
+        st.caption(caption)
+        if working_dataset_file_exists():
+            df = load_working_dataset()
+            if df is None:
+                st.warning("無法讀取工作資料。")
+                return
+            if st.button("清除工作資料並顯示雙表教材", width="stretch"):
+                clear_to_dual_start()
+                st.rerun()
+            _render_refresh_controls()
+            _render_single_table_quality(df)
+            _render_recent_log()
+            extra_context = ""
+        else:
+            extra_context = _render_dual_table_quality()
+    with side:
+        render_chat_panel(extra_context=extra_context, page_name=title)
 
 
 def render_missing_page() -> None:
@@ -2387,4 +2498,320 @@ def _render_regression_prompts(prompts: list[str]) -> None:
     st.markdown("##### 建議問 Agent")
     for prompt in prompts:
         st.code(prompt, language="text")
+
+
+def render_integration_page() -> None:
+    title = "資料整合"
+    passengers, voyage = load_titanic_integration_frames()
+    main, side = st.columns([5, 3], gap="large")
+    with main:
+        st.title(title)
+        st.caption(
+            f"左表固定為{PASSENGER_TABLE_LABEL}、右表固定為{VOYAGE_TABLE_LABEL}。"
+            "對齊鍵名後選擇 join，通過兩題再寫入工作資料。"
+        )
+        if working_dataset_file_exists():
+            st.warning("目前已有工作資料。套用合併會覆蓋 original 與 working。")
+            if st.button("清除回雙表起點", key="integration_clear_dual"):
+                clear_to_dual_start()
+                st.rerun()
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric(PASSENGER_TABLE_LABEL, f"{len(passengers):,} 列")
+        c2.metric(VOYAGE_TABLE_LABEL, f"{len(voyage):,} 列")
+        aligned_preview = align_voyage_key(voyage)
+        overlap = key_overlap_count(
+            passengers,
+            aligned_preview,
+            left_on=PASSENGER_KEY,
+            right_on=PASSENGER_KEY,
+        )
+        c3.metric("對齊鍵後重疊", f"{overlap:,}")
+
+        align_key = st.checkbox(
+            f"先將航程表 `{VOYAGE_KEY_RAW}` 重新命名為 `{PASSENGER_KEY}`",
+            value=False,
+            key="integration_align_key",
+        )
+        how = st.radio(
+            "合併方式 how",
+            options=["inner", "left"],
+            horizontal=True,
+            key="integration_how",
+        )
+        merge_error = ""
+        merged: pd.DataFrame | None = None
+        try:
+            merged = merge_passenger_voyage(
+                passengers,
+                voyage,
+                how=how,
+                align_key=align_key,
+            )
+        except ValueError as exc:
+            merge_error = str(exc)
+
+        if merge_error:
+            st.error(merge_error)
+        elif merged is not None:
+            st.markdown("##### 合併預覽")
+            st.caption(f"合併後 {len(merged):,} 列、{merged.shape[1]} 欄（how=`{how}`）")
+            if how == "left":
+                st.caption(
+                    f"left：保留全部 {len(passengers):,} 位乘客；"
+                    f"航程缺列時對應欄位為空。"
+                )
+            st.dataframe(merged.head(15), width="stretch", hide_index=True)
+
+        st.markdown("##### 訓練前預測（解鎖套用）")
+        key_choice = st.selectbox(
+            "題1：兩表應對齊的鍵要怎麼處理？",
+            KEY_ALIGN_OPTIONS,
+            key="integration_quiz_key",
+        )
+        how_choice = st.selectbox(
+            "題2：若要保留全部乘客、船票缺的變空值，應選？",
+            JOIN_HOW_OPTIONS,
+            key="integration_quiz_how",
+        )
+        key_ok = is_key_align_correct(key_choice)
+        how_ok = is_join_how_correct(how_choice)
+        unlocked = key_ok and how_ok
+        st.info(f"進度：{int(key_ok) + int(how_ok)}／2 題答對。")
+        if not key_ok and key_choice != "請選擇":
+            st.caption("題1：想想航程表的鍵名是否與乘客表一致。")
+        if not how_ok and how_choice != "請選擇":
+            st.caption("題2：保留左表全部列的是 left。")
+
+        apply = st.button(
+            "套用合併並寫入工作資料",
+            type="primary",
+            width="stretch",
+            disabled=not unlocked or merged is None,
+            key="integration_apply",
+        )
+        if apply and unlocked and merged is not None:
+            if not align_key:
+                st.error("請勾選對齊鍵名後再套用（航程表鍵為 passenger_id）。")
+            elif how != LEFT_JOIN_CORRECT:
+                st.error("本題教學要求使用 left，以保留全部乘客。")
+            else:
+                reset_ready_dataset()
+                save_dataset(merged)
+                initialize_working_dataset(merged)
+                append_cleaning_log(
+                    action="merge_tables",
+                    columns=merged.columns,
+                    rows=len(merged),
+                    note=f"left={PASSENGER_TABLE_LABEL}, right={VOYAGE_TABLE_LABEL}, how={how}",
+                    actor="ui",
+                )
+                st.success("已寫入 original.csv 與 working.csv。可到欄位與資料概覽查看合併後大表。")
+                st.rerun()
+
+        _render_prompts(
+            [
+                "請說明為什麼航程表的 passenger_id 不能直接和乘客表的 PassengerId 對上。",
+                "請比較 inner 與 left：哪一種會保留全部乘客？",
+                KEY_ALIGN_CORRECT,
+            ]
+        )
+
+    with side:
+        extra = (
+            f"資料整合頁。左={PASSENGER_TABLE_LABEL}，右={VOYAGE_TABLE_LABEL}。"
+            f"align_key={align_key}，how={how}，關卡解鎖={'是' if unlocked else '否'}。"
+        )
+        render_chat_panel(extra_context=extra, page_name=title)
+
+
+def render_transform_page() -> None:
+    def body(df: pd.DataFrame) -> None:
+        st.markdown("##### 診斷：資料轉換（同義寫法）")
+        st.caption(
+            "把同一語意的不同寫法收成約定標準值。"
+            "本頁由 Agent 更新 working；請先看分布再討論對照表。"
+        )
+        object_cols = [
+            str(column)
+            for column in df.columns
+            if str(df[column].dtype) in {"object", "string"}
+            or str(df[column].dtype).startswith("string")
+        ]
+        preferred = [column for column in ("Sex", "Embarked") if column in df.columns]
+        default = preferred[0] if preferred else (object_cols[0] if object_cols else None)
+        if not object_cols:
+            st.warning("目前沒有文字／類別欄可檢視。")
+            return
+        selected = st.selectbox(
+            "查看欄位分布",
+            object_cols,
+            index=object_cols.index(default) if default in object_cols else 0,
+            key="transform_column",
+        )
+        counts = df[selected].fillna("Missing").astype(str).value_counts().head(30)
+        st.metric("不同值數量", f"{int(df[selected].nunique(dropna=True)):,}")
+        st.bar_chart(counts)
+        st.dataframe(
+            counts.rename_axis(selected).reset_index(name="筆數"),
+            width="stretch",
+            hide_index=True,
+        )
+        if selected == "Sex":
+            st.info("課堂約定：收成 `male`／`female`（含 man／woman／大小寫／空白）。")
+        if selected == "Embarked":
+            st.info("課堂約定：收成 `S`／`C`／`Q`（Southampton／Cherbourg 等併入）。")
+        _render_prompts(
+            [
+                f"請檢視 working 的 `{selected}` 分布，指出哪些值其實是同一語意。",
+                "請把 Sex 映射成只有 male／female，更新 working.csv，並寫入 cleaning_log。",
+                "請把 Embarked 映射成只有 S／C／Q，更新 working.csv，並寫入 cleaning_log。",
+            ]
+        )
+
+    def extra(df: pd.DataFrame) -> str:
+        column = st.session_state.get("transform_column")
+        if not column or column not in df.columns:
+            return "學生在資料轉換頁，尚未選欄。"
+        top = df[column].fillna("Missing").astype(str).value_counts().head(12)
+        lines = "；".join(f"{index}={int(count)}" for index, count in top.items())
+        return f"資料轉換頁，目前欄位 {column}，前幾名分布：{lines}。"
+
+    _page_shell(
+        "資料轉換",
+        "收斂同義類別寫法；由 Agent 寫回 working。",
+        body,
+        extra_context_builder=extra,
+    )
+
+
+def render_split_page() -> None:
+    title = "資料切分"
+    main, side = st.columns([5, 3], gap="large")
+    with main:
+        st.title(title)
+        st.caption("把 Ready 分析就緒資料拆成訓練／驗證／測試三份並寫出檔案。")
+        ready = load_ready_dataset()
+        if ready is None:
+            st.warning(
+                "尚未建立 Ready 分析就緒資料。"
+                "請先到「建立 Ready 分析就緒資料」頁產生 ready.csv。"
+            )
+            return
+
+        st.metric("Ready 列數", f"{len(ready):,}")
+        c1, c2, c3 = st.columns(3)
+        train_pct = c1.number_input(
+            "訓練 %",
+            min_value=1,
+            max_value=98,
+            value=int(DEFAULT_TRAIN_RATIO * 100),
+            step=1,
+        )
+        val_pct = c2.number_input(
+            "驗證 %",
+            min_value=1,
+            max_value=98,
+            value=int(DEFAULT_VAL_RATIO * 100),
+            step=1,
+        )
+        test_pct = c3.number_input(
+            "測試 %",
+            min_value=1,
+            max_value=98,
+            value=int(DEFAULT_TEST_RATIO * 100),
+            step=1,
+        )
+        train_ratio = float(train_pct) / 100.0
+        val_ratio = float(val_pct) / 100.0
+        test_ratio = float(test_pct) / 100.0
+        random_state = st.number_input(
+            "random_state",
+            min_value=0,
+            max_value=10_000,
+            value=DEFAULT_RANDOM_STATE,
+            step=1,
+        )
+
+        stratify_column: str | None = None
+        can_stratify = "Survived" in ready.columns
+        if can_stratify:
+            use_stratify = st.checkbox("分層切分（依 Survived）", value=True)
+            if use_stratify:
+                stratify_column = "Survived"
+        else:
+            st.caption("目前 Ready 沒有 Survived，改用隨機切分。")
+
+        ratio_ok = ratios_sum_to_one(train_ratio, val_ratio, test_ratio)
+        if not ratio_ok:
+            st.error("三個比例加總必須為 100%。")
+
+        train_df = val_df = test_df = None
+        if ratio_ok:
+            try:
+                train_df, val_df, test_df = split_ready_frame(
+                    ready,
+                    train_ratio=train_ratio,
+                    val_ratio=val_ratio,
+                    test_ratio=test_ratio,
+                    random_state=int(random_state),
+                    stratify_column=stratify_column,
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+                ratio_ok = False
+
+        if ratio_ok and train_df is not None and val_df is not None and test_df is not None:
+            m1, m2, m3 = st.columns(3)
+            m1.metric("訓練集", f"{len(train_df):,}")
+            m2.metric("驗證集", f"{len(val_df):,}")
+            m3.metric("測試集", f"{len(test_df):,}")
+            if stratify_column:
+                dist = pd.DataFrame(
+                    {
+                        "訓練": train_df[stratify_column].value_counts(normalize=True),
+                        "驗證": val_df[stratify_column].value_counts(normalize=True),
+                        "測試": test_df[stratify_column].value_counts(normalize=True),
+                    }
+                ).fillna(0.0)
+                st.markdown("##### 目標類別比例")
+                st.dataframe(dist.round(3), width="stretch")
+
+            if st.button("寫出 train／val／test", type="primary", width="stretch"):
+                save_split_datasets(train_df, val_df, test_df)
+                append_cleaning_log(
+                    action="split_dataset",
+                    columns=ready.columns,
+                    rows=len(ready),
+                    note=(
+                        f"train={len(train_df)}, val={len(val_df)}, test={len(test_df)}, "
+                        f"stratify={stratify_column or 'none'}"
+                    ),
+                    actor="ui",
+                )
+                st.success(
+                    f"已寫入 `{_display_path(TRAIN_DATASET_PATH)}`、"
+                    f"`{_display_path(VAL_DATASET_PATH)}`、"
+                    f"`{_display_path(TEST_DATASET_PATH)}`。"
+                )
+
+        _render_prompts(
+            [
+                "請說明為什麼要留測試集，以及什麼是資料洩漏。",
+                "請解釋分層切分如何讓各份的 Survived 比例接近整體。",
+                "請依目前 Ready 建議一組訓練／驗證／測試比例並說明理由。",
+            ]
+        )
+
+    with side:
+        render_chat_panel(
+            extra_context=(
+                f"資料切分頁。Ready 列數={len(ready) if ready is not None else 0}。"
+                f"預設比例 "
+                f"{int(DEFAULT_TRAIN_RATIO*100)}/"
+                f"{int(DEFAULT_VAL_RATIO*100)}/"
+                f"{int(DEFAULT_TEST_RATIO*100)}。"
+            ),
+            page_name=title,
+        )
 
