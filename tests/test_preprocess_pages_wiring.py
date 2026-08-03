@@ -60,3 +60,12 @@ def test_quality_page_supports_dual_and_clear() -> None:
     assert "render_split_page" in src
     assert "clear_split_datasets" in (UI / "data_ui.py").read_text(encoding="utf-8")
     assert "save_split_datasets" in (UI / "data_ui.py").read_text(encoding="utf-8")
+
+
+def test_charts_page_reads_ready_only() -> None:
+    src = (PAGES / "2_Charts.py").read_text(encoding="utf-8")
+    assert "load_ready_dataset" in src
+    assert "chart_data_source" not in src
+    assert "Working 工作資料" not in src
+    assert "Original 原始資料" not in src
+    assert "本頁只讀 Ready" in src

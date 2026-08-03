@@ -18,12 +18,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataset_streamlit_shell.ui.data_ui import (
-    ORIGINAL_DATASET_PATH,
     READY_DATASET_PATH,
-    WORKING_DATASET_PATH,
     _display_path,
     inject_style,
-    load_dataset,
     load_ready_dataset,
     render_chat_panel,
     render_dataset_metrics,
@@ -108,40 +105,16 @@ def _all_columns(df: pd.DataFrame) -> list[str]:
     return [str(column) for column in df.columns]
 
 
-def _load_chart_dataset(source: str) -> tuple[pd.DataFrame | None, str, Path | None, str | None]:
-    if source == "Ready 分析就緒資料":
-        dataset = load_ready_dataset()
-        return (
-            dataset,
-            "Ready 分析就緒資料",
-            READY_DATASET_PATH if dataset is not None else None,
-            None
-            if dataset is not None
-            else "尚未建立 Ready 分析就緒資料，請先到「建立 Ready 分析就緒資料」頁產生 ready.csv。",
-        )
-
-    if source == "Working 工作資料":
-        if WORKING_DATASET_PATH.exists():
-            return (
-                pd.read_csv(WORKING_DATASET_PATH),
-                "Working 工作資料",
-                WORKING_DATASET_PATH,
-                None,
-            )
-        fallback = load_dataset()
-        return (
-            fallback,
-            "Original 原始資料",
-            ORIGINAL_DATASET_PATH if fallback is not None else None,
-            "尚未找到 Working 工作資料，已改用 Original 原始資料。請回到「資料上傳與預覽」重新上傳或建立工作資料。",
-        )
-
-    dataset = load_dataset()
+def _load_chart_dataset() -> tuple[pd.DataFrame | None, str, Path | None, str | None]:
+    """圖表探索只讀 Ready 分析就緒資料。"""
+    dataset = load_ready_dataset()
     return (
         dataset,
-        "Original 原始資料",
-        ORIGINAL_DATASET_PATH if dataset is not None else None,
-        None,
+        "Ready 分析就緒資料",
+        READY_DATASET_PATH if dataset is not None else None,
+        None
+        if dataset is not None
+        else "尚未建立 Ready 分析就緒資料，請先到「建立 Ready 分析就緒資料」頁產生 ready.csv。",
     )
 
 
@@ -1360,25 +1333,19 @@ def run_page() -> None:
         st.title("圖表探索")
         st.caption(
             "選圖＝先問清楚要比較什麼（類別／比例／時間／關係）。"
-            "本頁六題對應講義 CONCEPT 02；先選對圖種，再用你的資料畫圖。可問右側 Agent。"
+            "本頁六題對應講義 CONCEPT 02；先選對圖種，再用 Ready 資料畫圖。可問右側 Agent。"
         )
 
-        requested_source = st.radio(
-            "資料來源",
-            ["Working 工作資料", "Ready 分析就緒資料", "Original 原始資料"],
-            horizontal=True,
-            key="chart_data_source",
-        )
-        df, source_label, source_path, source_warning = _load_chart_dataset(requested_source)
+        df, source_label, source_path, source_warning = _load_chart_dataset()
         source_label_for_agent = source_label
         if source_warning:
             st.warning(source_warning)
 
         if df is None:
-            st.info("請先到「資料上傳與預覽」頁上傳 CSV，或先建立 Ready 分析就緒資料。")
+            st.info("請先到「建立 Ready 分析就緒資料」頁產生 ready.csv。")
         elif not _warn_if_empty(df):
             render_dataset_metrics(df)
-            st.caption(f"目前使用：{source_label}")
+            st.caption(f"目前使用：{source_label}（本頁只讀 Ready）")
             if source_path:
                 with st.expander("技術資訊", expanded=False):
                     st.caption(f"資料檔：`{_display_path(source_path)}`")
