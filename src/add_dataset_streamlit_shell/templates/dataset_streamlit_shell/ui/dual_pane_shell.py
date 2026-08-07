@@ -16,6 +16,11 @@ def clamp_agent_width(width: float | int) -> int:
     return max(AGENT_WIDTH_MIN, min(AGENT_WIDTH_MAX, int(round(float(width)))))
 
 
+def pane_height_px(*, viewport_height: int, row_top: float, bottom_pad: int = 8) -> int:
+    """Viewport-locked height for the dual-pane row (pure; used by chrome JS contract)."""
+    return max(240, int(viewport_height - row_top - bottom_pad))
+
+
 class _MarkedPane:
     def __init__(self, column: Any, pane: str) -> None:
         self._column = column
@@ -23,10 +28,8 @@ class _MarkedPane:
 
     def __enter__(self) -> Any:
         result = self._column.__enter__()
-        st.markdown(
-            f'<div data-dss-pane="{self._pane}" style="display:none"></div>',
-            unsafe_allow_html=True,
-        )
+        # st.html keeps data-* markers more reliably than markdown sanitization.
+        st.html(f'<div data-dss-pane="{self._pane}" style="display:none"></div>')
         return result
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Any:
@@ -34,11 +37,28 @@ class _MarkedPane:
 
 
 def inject_dual_pane_chrome() -> None:
-    """Inject CSS/JS so panes scroll independently and Agent width is drag-resizable."""
+    """Inject CSS/JS so teaching scrolls alone; Agent stays pinned; width drag-resizable."""
     css = f"""
 <style>
-  section.main:has([data-dss-pane="main"]) {{
+  /* Do not scroll the app shell / sidebar when dual-pane markers exist. */
+  html:has([data-dss-pane="main"]),
+  body:has([data-dss-pane="main"]),
+  .stApp:has([data-dss-pane="main"]),
+  [data-testid="stAppViewContainer"]:has([data-dss-pane="main"]),
+  [data-testid="stMain"]:has([data-dss-pane="main"]),
+  section.main:has([data-dss-pane="main"]),
+  .main:has([data-dss-pane="main"]),
+  [data-testid="stAppScrollToBottomContainer"]:has([data-dss-pane="main"]) {{
     overflow: hidden !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }}
+  [data-testid="stMain"]:has([data-dss-pane="main"]) > div,
+  section.main:has([data-dss-pane="main"]) > div.block-container {{
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    padding-bottom: 0.5rem !important;
   }}
   /* First paint before JS: honour ADR default Agent width. */
   [data-testid="stColumn"]:has([data-dss-pane="agent"]) {{
@@ -53,19 +73,19 @@ def inject_dual_pane_chrome() -> None:
   }}
   .dss-dual-pane-row {{
     align-items: stretch !important;
-    height: calc(100vh - 5.25rem) !important;
-    max-height: calc(100vh - 5.25rem) !important;
     overflow: hidden !important;
     gap: 0.35rem !important;
   }}
-  .dss-main-pane {{
-    height: 100% !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+  .dss-main-pane,
+  .dss-main-pane > div,
+  .dss-main-pane [data-testid="stVerticalBlock"] {{
     min-width: 0 !important;
   }}
+  .dss-main-pane {{
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }}
   .dss-agent-pane {{
-    height: 100% !important;
     overflow: hidden !important;
     min-width: 0 !important;
   }}
@@ -108,6 +128,10 @@ def inject_dual_pane_chrome() -> None:
     return clamp(raw);
   }}
 
+  function paneHeight(rowTop) {{
+    return Math.max(240, Math.floor(window.innerHeight - rowTop - 8));
+  }}
+
   function findPanes() {{
     const mainMark = document.querySelector('[data-dss-pane="main"]');
     const agentMark = document.querySelector('[data-dss-pane="agent"]');
@@ -118,6 +142,50 @@ def inject_dual_pane_chrome() -> None:
     const row = mainCol.parentElement;
     if (!row || row !== agentCol.parentElement) return null;
     return {{ row, mainCol, agentCol }};
+  }}
+
+  function lockAppScroll() {{
+    const nodes = document.querySelectorAll([
+      "html",
+      "body",
+      ".stApp",
+      '[data-testid="stAppViewContainer"]',
+      '[data-testid="stMain"]',
+      "section.main",
+      ".main",
+      '[data-testid="stAppScrollToBottomContainer"]',
+    ].join(","));
+    nodes.forEach(function (el) {{
+      el.style.setProperty("overflow", "hidden", "important");
+      el.style.setProperty("height", "100vh", "important");
+      el.style.setProperty("max-height", "100vh", "important");
+    }});
+    document.querySelectorAll(
+      '[data-testid="stMain"] .block-container, section.main > div.block-container'
+    ).forEach(function (bc) {{
+      bc.style.setProperty("overflow", "hidden", "important");
+      bc.style.setProperty("height", "100%", "important");
+      bc.style.setProperty("max-height", "100%", "important");
+      bc.style.setProperty("padding-bottom", "0.5rem", "important");
+    }});
+  }}
+
+  function rootVerticalBlock(col) {{
+    return col.querySelector(':scope > div [data-testid="stVerticalBlock"], :scope [data-testid="stVerticalBlock"]');
+  }}
+
+  function pinColumn(col, h, scrollable) {{
+    col.style.setProperty("height", h + "px", "important");
+    col.style.setProperty("max-height", h + "px", "important");
+    col.style.setProperty("overflow-x", "hidden", "important");
+    col.style.setProperty("overflow-y", scrollable ? "auto" : "hidden", "important");
+    const vb = rootVerticalBlock(col);
+    if (vb) {{
+      vb.style.setProperty("height", h + "px", "important");
+      vb.style.setProperty("max-height", h + "px", "important");
+      vb.style.setProperty("overflow-x", "hidden", "important");
+      vb.style.setProperty("overflow-y", scrollable ? "auto" : "hidden", "important");
+    }}
   }}
 
   function sizeChat(agentCol) {{
@@ -143,12 +211,11 @@ def inject_dual_pane_chrome() -> None:
       }}
     }}
     if (!target) return;
-    const colRect = agentCol.getBoundingClientRect();
     const top = target.getBoundingClientRect().top;
     const input = agentCol.querySelector('[data-testid="stChatInput"]');
     const bottomLimit = input
       ? input.getBoundingClientRect().top - 12
-      : colRect.bottom - 16;
+      : agentCol.getBoundingClientRect().bottom - 16;
     const avail = Math.floor(bottomLimit - top);
     if (avail >= 120) {{
       target.style.setProperty("height", avail + "px", "important");
@@ -157,13 +224,21 @@ def inject_dual_pane_chrome() -> None:
     }}
   }}
 
-  function applyWidth(w) {{
+  function applyLayout(w) {{
     const panes = findPanes();
     if (!panes) return false;
+    lockAppScroll();
     const {{ row, mainCol, agentCol }} = panes;
     row.classList.add("dss-dual-pane-row");
     mainCol.classList.add("dss-main-pane");
     agentCol.classList.add("dss-agent-pane");
+
+    const h = paneHeight(row.getBoundingClientRect().top);
+    row.style.setProperty("height", h + "px", "important");
+    row.style.setProperty("max-height", h + "px", "important");
+    row.style.setProperty("overflow", "hidden", "important");
+    row.style.setProperty("align-items", "stretch", "important");
+
     agentCol.style.setProperty("flex", "0 0 " + w + "px", "important");
     agentCol.style.setProperty("width", w + "px", "important");
     agentCol.style.setProperty("min-width", w + "px", "important");
@@ -172,6 +247,9 @@ def inject_dual_pane_chrome() -> None:
     mainCol.style.setProperty("min-width", "0", "important");
     mainCol.style.removeProperty("width");
     mainCol.style.removeProperty("max-width");
+
+    pinColumn(mainCol, h, true);
+    pinColumn(agentCol, h, false);
 
     let handle = row.querySelector(":scope > .dss-resizer");
     if (!handle) {{
@@ -186,7 +264,7 @@ def inject_dual_pane_chrome() -> None:
           const rect = row.getBoundingClientRect();
           const next = clamp(rect.right - ev.clientX);
           localStorage.setItem(KEY, String(next));
-          applyWidth(next);
+          applyLayout(next);
         }};
         const onUp = function () {{
           document.body.classList.remove("dss-resizing");
@@ -205,24 +283,23 @@ def inject_dual_pane_chrome() -> None:
   }}
 
   function boot() {{
-    const w = readWidth();
-    if (applyWidth(w)) return;
+    if (applyLayout(readWidth())) return;
     let tries = 0;
     const timer = setInterval(function () {{
       tries += 1;
-      if (applyWidth(readWidth()) || tries > 40) clearInterval(timer);
+      if (applyLayout(readWidth()) || tries > 60) clearInterval(timer);
     }}, 50);
   }}
 
   boot();
   window.addEventListener("resize", function () {{
-    applyWidth(readWidth());
+    applyLayout(readWidth());
   }});
   if (!window.__dssDualPaneObs) {{
     let debounce = null;
     window.__dssDualPaneObs = new MutationObserver(function () {{
       clearTimeout(debounce);
-      debounce = setTimeout(function () {{ applyWidth(readWidth()); }}, 40);
+      debounce = setTimeout(function () {{ applyLayout(readWidth()); }}, 40);
     }});
     window.__dssDualPaneObs.observe(document.body, {{ childList: true, subtree: true }});
   }}

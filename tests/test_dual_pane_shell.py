@@ -19,6 +19,7 @@ from dataset_streamlit_shell.ui.dual_pane_shell import (  # noqa: E402
     AGENT_WIDTH_MIN,
     AGENT_WIDTH_STORAGE_KEY,
     clamp_agent_width,
+    pane_height_px,
 )
 
 
@@ -35,6 +36,11 @@ def test_clamp_agent_width_bounds_and_rounding() -> None:
     assert clamp_agent_width(320) == 320
     assert clamp_agent_width(320.4) == 320
     assert clamp_agent_width(320.6) == 321
+
+
+def test_pane_height_locks_to_viewport_minus_row_top() -> None:
+    assert pane_height_px(viewport_height=1000, row_top=100, bottom_pad=8) == 892
+    assert pane_height_px(viewport_height=300, row_top=200, bottom_pad=8) == 240
 
 
 def test_dual_pane_pages_use_shared_shell_not_hardcoded_ratio() -> None:
