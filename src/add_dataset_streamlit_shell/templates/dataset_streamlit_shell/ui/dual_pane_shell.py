@@ -40,7 +40,7 @@ def inject_dual_pane_chrome() -> None:
     """Inject CSS/JS so teaching scrolls alone; Agent stays pinned; width drag-resizable."""
     css = f"""
 <style>
-  /* Do not scroll the app shell / sidebar when dual-pane markers exist. */
+  /* Lock page scroll; teaching column becomes the scrollport. */
   html:has([data-dss-pane="main"]),
   body:has([data-dss-pane="main"]),
   .stApp:has([data-dss-pane="main"]),
@@ -53,9 +53,8 @@ def inject_dual_pane_chrome() -> None:
     height: 100vh !important;
     max-height: 100vh !important;
   }}
-  [data-testid="stMain"]:has([data-dss-pane="main"]) > div,
-  section.main:has([data-dss-pane="main"]) > div.block-container {{
-    height: 100% !important;
+  [data-testid="stMain"] .block-container:has([data-dss-pane="main"]),
+  section.main > div.block-container:has([data-dss-pane="main"]) {{
     max-height: 100% !important;
     overflow: hidden !important;
     padding-bottom: 0.5rem !important;
@@ -75,19 +74,28 @@ def inject_dual_pane_chrome() -> None:
     align-items: stretch !important;
     overflow: hidden !important;
     gap: 0.35rem !important;
+    min-height: 0 !important;
   }}
+  /*
+   * Flex items default min-height:auto (= content size), which prevents
+   * max-height from creating an internal scrollbar — content gets clipped
+   * by an overflow:hidden ancestor instead. Force min-height:0.
+   */
   .dss-main-pane,
   .dss-main-pane > div,
-  .dss-main-pane [data-testid="stVerticalBlock"] {{
+  .dss-agent-pane,
+  .dss-agent-pane > div {{
     min-width: 0 !important;
+    min-height: 0 !important;
   }}
   .dss-main-pane {{
     overflow-x: hidden !important;
     overflow-y: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }}
   .dss-agent-pane {{
     overflow: hidden !important;
-    min-width: 0 !important;
   }}
   .dss-resizer {{
     flex: 0 0 5px !important;
@@ -164,28 +172,35 @@ def inject_dual_pane_chrome() -> None:
       '[data-testid="stMain"] .block-container, section.main > div.block-container'
     ).forEach(function (bc) {{
       bc.style.setProperty("overflow", "hidden", "important");
-      bc.style.setProperty("height", "100%", "important");
       bc.style.setProperty("max-height", "100%", "important");
       bc.style.setProperty("padding-bottom", "0.5rem", "important");
     }});
   }}
 
-  function rootVerticalBlock(col) {{
-    return col.querySelector(':scope > div [data-testid="stVerticalBlock"], :scope [data-testid="stVerticalBlock"]');
+  function clearInnerHeightLocks(col) {{
+    /* Column is the scrollport; do not lock nested vertical blocks to a fixed
+       height (that clipped siblings / quiz blocks below the fold). */
+    col.querySelectorAll('[data-testid="stVerticalBlock"]').forEach(function (vb) {{
+      vb.style.removeProperty("height");
+      vb.style.removeProperty("max-height");
+      vb.style.setProperty("min-height", "0", "important");
+      vb.style.removeProperty("overflow-y");
+      vb.style.removeProperty("overflow");
+    }});
+    Array.prototype.forEach.call(col.children, function (child) {{
+      child.style.setProperty("min-height", "0", "important");
+      child.style.removeProperty("height");
+      child.style.removeProperty("max-height");
+    }});
   }}
 
   function pinColumn(col, h, scrollable) {{
     col.style.setProperty("height", h + "px", "important");
     col.style.setProperty("max-height", h + "px", "important");
+    col.style.setProperty("min-height", "0", "important");
     col.style.setProperty("overflow-x", "hidden", "important");
     col.style.setProperty("overflow-y", scrollable ? "auto" : "hidden", "important");
-    const vb = rootVerticalBlock(col);
-    if (vb) {{
-      vb.style.setProperty("height", h + "px", "important");
-      vb.style.setProperty("max-height", h + "px", "important");
-      vb.style.setProperty("overflow-x", "hidden", "important");
-      vb.style.setProperty("overflow-y", scrollable ? "auto" : "hidden", "important");
-    }}
+    clearInnerHeightLocks(col);
   }}
 
   function sizeChat(agentCol) {{
@@ -236,6 +251,7 @@ def inject_dual_pane_chrome() -> None:
     const h = paneHeight(row.getBoundingClientRect().top);
     row.style.setProperty("height", h + "px", "important");
     row.style.setProperty("max-height", h + "px", "important");
+    row.style.setProperty("min-height", "0", "important");
     row.style.setProperty("overflow", "hidden", "important");
     row.style.setProperty("align-items", "stretch", "important");
 
