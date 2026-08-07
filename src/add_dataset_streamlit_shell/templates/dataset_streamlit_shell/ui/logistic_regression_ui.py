@@ -47,6 +47,7 @@ from dataset_streamlit_shell.plotting import (
     scatter_binary_classes,
 )
 from dataset_streamlit_shell.ui import logistic_quiz as quiz
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.data_ui import (
     SHELL_ROOT,
     invoke_data_agent,
@@ -71,8 +72,8 @@ MODEL_FORMULA_LATEX = r"f_{w,b}(x)=\frac{1}{1+e^{-(w\cdot x+b)}}"
 
 
 def render_logistic_regression_page() -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(PAGE_TITLE)
         st.caption("先用直線決策邊界建立 sigmoid／Cost，再看多項式映射與 λ 正則化。")
         stage = st.radio(
@@ -85,7 +86,7 @@ def render_logistic_regression_page() -> None:
             _render_boundary_stage()
         else:
             _render_poly_lambda_stage()
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,

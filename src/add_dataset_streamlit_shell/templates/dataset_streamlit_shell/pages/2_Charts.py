@@ -25,6 +25,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
 )
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 
 
@@ -1327,11 +1328,11 @@ def run_page() -> None:
     if "chart_quiz_focus" not in st.session_state:
         st.session_state["chart_quiz_focus"] = QUIZ_ITEMS[0].id
 
-    main, side = st.columns([5, 3], gap="large")
+    teaching, agent = open_content_dual_pane()
     draw_summary_for_agent: dict[str, str | int | None] | None = None
     source_label_for_agent = "尚未載入"
 
-    with main:
+    with teaching:
         st.title("圖表探索")
         st.caption(
             "選圖＝先問清楚要比較什麼（類別／比例／時間／關係）。"
@@ -1422,7 +1423,7 @@ def run_page() -> None:
                 st.caption("不走測驗流程時，可在此自由選圖種與欄位。")
                 _render_advanced_charts(df, source_label)
 
-    with side:
+    with agent:
         focus_id = st.session_state.get("chart_quiz_focus")
         active_draw = st.session_state.get("chart_quiz_active_draw")
         extra_context = _build_agent_context(

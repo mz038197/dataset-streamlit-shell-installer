@@ -32,6 +32,7 @@ from dataset_streamlit_shell.ml.cnn_pytorch import (
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 from dataset_streamlit_shell.ui import cnn_quiz as quiz
 from dataset_streamlit_shell.ui.data_ui import invoke_data_agent, render_chat_panel
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -41,8 +42,8 @@ PAGE_TITLE = "卷積神經網路（CNN）"
 
 
 def render_cnn_introduction_page() -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(PAGE_TITLE)
         st.caption(
             "先搞懂圖片是矩陣，再跟著觀念主軸影片理解為什麼需要 CNN、卷積與 pooling；"
@@ -72,7 +73,7 @@ def render_cnn_introduction_page() -> None:
 
         _compose_agent_context(stage)
 
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,

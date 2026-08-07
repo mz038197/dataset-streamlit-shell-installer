@@ -21,6 +21,7 @@ from dataset_streamlit_shell.ml.clustering import (
 )
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 from dataset_streamlit_shell.ui.data_ui import render_chat_panel, render_dataset_metrics
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -30,8 +31,8 @@ _CLUSTER_COLORS = ("#2563eb", "#dc2626", "#16a34a", "#ca8a04", "#7c3aed", "#0891
 
 
 def render_kmeans_page() -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(KMEANS_TITLE)
         st.caption("用內建範例走通指定 K 的分群；不依賴 ready.csv。")
 
@@ -70,7 +71,7 @@ def render_kmeans_page() -> None:
             language="text",
         )
 
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=(
                 f"目前頁面：{KMEANS_TITLE}。資料來源：{SOURCE_LABEL}。"
@@ -82,8 +83,8 @@ def render_kmeans_page() -> None:
 
 
 def render_wards_page() -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(WARDS_TITLE)
         st.caption("用內建範例看 Ward 合併過程與切群；不依賴 ready.csv。")
 
@@ -127,7 +128,7 @@ def render_wards_page() -> None:
             language="text",
         )
 
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=(
                 f"目前頁面：{WARDS_TITLE}。資料來源：{SOURCE_LABEL}。"

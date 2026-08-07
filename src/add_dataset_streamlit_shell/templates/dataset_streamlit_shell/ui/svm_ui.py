@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.data_ui import (
     SHELL_ROOT,
     _display_path,
@@ -53,8 +54,8 @@ STAGE_SOFT_LABEL = "Soft Margin"
 
 
 def render_linear_svm_page() -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(PAGE_TITLE)
         st.caption("先學可分開時的最大 margin，再學分不開時的 Soft Margin。")
 
@@ -73,7 +74,7 @@ def render_linear_svm_page() -> None:
             _render_soft_margin_tab()
         _compose_agent_context()
 
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,

@@ -59,6 +59,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     save_split_datasets,
     working_dataset_file_exists,
 )
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui import multiple_regression_quiz as multi_quiz
 from dataset_streamlit_shell.ui.teaching_flow import (
     TEACHING_FLOW_CSS,
@@ -156,8 +157,8 @@ def _page_shell(
     render_main: Callable[[pd.DataFrame], None],
     extra_context_builder: Callable[[pd.DataFrame], str] | None = None,
 ) -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(title)
         st.caption(caption)
         df = load_working_dataset()
@@ -169,7 +170,7 @@ def _page_shell(
         _render_refresh_controls()
         render_main(df)
         _render_recent_log()
-    with side:
+    with agent:
         extra_context = extra_context_builder(df) if extra_context_builder else ""
         render_chat_panel(extra_context=extra_context, page_name=title)
 
@@ -355,8 +356,8 @@ def _render_dual_table_quality() -> str:
 def render_quality_page() -> None:
     title = "欄位與資料概覽"
     caption = "先看欄位名稱、型態、列數欄數與基本結構。"
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(title)
         st.caption(caption)
         if working_dataset_file_exists():
@@ -373,7 +374,7 @@ def render_quality_page() -> None:
             extra_context = ""
         else:
             extra_context = _render_dual_table_quality()
-    with side:
+    with agent:
         render_chat_panel(extra_context=extra_context, page_name=title)
 
 
@@ -1439,8 +1440,8 @@ def pca_status(df: pd.DataFrame) -> dict[str, object]:
 
 
 def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.DataFrame], None]) -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(title)
         st.caption(caption)
         df = load_ready_dataset()
@@ -1448,7 +1449,7 @@ def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.Da
             st.warning("尚未建立 Ready 分析就緒資料。請先到「建立 Ready 分析就緒資料」頁完成匯出。")
             return
         render_main(df)
-    with side:
+    with agent:
         render_chat_panel(page_name=title)
 
 
@@ -1465,8 +1466,8 @@ MULTIPLE_SOURCE_LABEL = "內建範例資料：房價預測"
 
 
 def render_linear_regression_page() -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(LR_PAGE_TITLE)
         st.caption(
             "沿著教學流程圖：輸入資料 → 帶公式的回歸模型 → 輸出呈現。"
@@ -1484,7 +1485,7 @@ def render_linear_regression_page() -> None:
             _render_simple_regression_stage()
         else:
             _render_multiple_regression_stage()
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=str(
                 st.session_state.get(LR_CONTEXT_KEY, f"目前頁面：{LR_PAGE_TITLE}。")
@@ -2725,8 +2726,8 @@ def _render_regression_prompts(prompts: list[str]) -> None:
 def render_integration_page() -> None:
     title = "資料整合"
     passengers, voyage = load_titanic_integration_frames()
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(title)
         st.caption(
             f"左表固定為{PASSENGER_TABLE_LABEL}、右表固定為{VOYAGE_TABLE_LABEL}。"
@@ -2839,7 +2840,7 @@ def render_integration_page() -> None:
             ]
         )
 
-    with side:
+    with agent:
         extra = (
             f"資料整合頁。左={PASSENGER_TABLE_LABEL}，右={VOYAGE_TABLE_LABEL}。"
             f"align_key={align_key}，how={how}，關卡解鎖={'是' if unlocked else '否'}。"
@@ -2909,8 +2910,8 @@ def render_transform_page() -> None:
 
 def render_split_page() -> None:
     title = "資料切分"
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(title)
         st.caption("把 Ready 分析就緒資料拆成訓練／驗證／測試三份並寫出檔案。")
         ready = load_ready_dataset()
@@ -3025,7 +3026,7 @@ def render_split_page() -> None:
             ]
         )
 
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=(
                 f"資料切分頁。Ready 列數={len(ready) if ready is not None else 0}。"

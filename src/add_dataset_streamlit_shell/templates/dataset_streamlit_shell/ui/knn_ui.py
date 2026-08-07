@@ -33,6 +33,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
 )
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 CLASSIFICATION_DEMO_DIR = SHELL_ROOT / "built-in-data" / "classification"
 KNN_BLOBS_PATH = CLASSIFICATION_DEMO_DIR / "knn_blobs_80.csv"
@@ -53,8 +54,8 @@ _CLASS_COLORS = {0: "#2563eb", 1: "#dc2626"}
 
 
 def render_knn_page() -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(PAGE_TITLE)
         st.caption("先搞懂鄰居與多數決，再調 k（並看特徵尺度如何影響距離）。")
 
@@ -72,7 +73,7 @@ def render_knn_page() -> None:
             _render_k_stage()
         _compose_agent_context()
 
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,

@@ -39,6 +39,7 @@ from dataset_streamlit_shell.plotting import (
     render_figures_in_streamlit,
 )
 from dataset_streamlit_shell.ui import tree_ensemble_quiz as quiz
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.data_ui import (
     SHELL_ROOT,
     invoke_data_agent,
@@ -62,8 +63,8 @@ def render_decision_tree_concepts_page() -> None:
 
 
 def render_tree_ensemble_page() -> None:
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         st.title(PAGE_TITLE)
         st.caption("從單顆決策樹走到隨機森林與 XGBoost，對照 Bagging 與 Boosting。")
 
@@ -83,7 +84,7 @@ def render_tree_ensemble_page() -> None:
             st.session_state[quiz.SESSION_PAGE_FOCUS] = "boost"
             _render_xgboost_stage()
 
-    with side:
+    with agent:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,

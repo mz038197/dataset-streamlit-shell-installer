@@ -978,7 +978,9 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         st.chat_input("詢問 Agent...", disabled=True, key="data_chat_connect_failed")
         return
 
-    chat = st.container(height=460, border=False)
+    st.markdown('<div data-dss-chat style="display:none"></div>', unsafe_allow_html=True)
+    # Placeholder height; dual-pane chrome JS resizes to fill remaining Agent column.
+    chat = st.container(height=720, border=False)
     with chat:
         for role, text in st.session_state["data_chat_history"]:
             with st.chat_message(role):

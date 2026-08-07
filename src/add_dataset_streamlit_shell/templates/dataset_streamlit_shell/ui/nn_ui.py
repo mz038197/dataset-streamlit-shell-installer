@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.data_ui import (
     SHELL_ROOT,
     WORKSPACE_DIR,
@@ -114,15 +115,15 @@ def render_neural_network_page() -> None:
     frame = load_builtin_frame(BUILTIN_PATH)
     _sync_form_from_disk_if_newer()
 
-    main, side = st.columns([5, 3], gap="large")
-    with main:
+    teaching, agent = open_content_dual_pane()
+    with teaching:
         tab_activation, tab_train = st.tabs(["活化函數", "神經網路訓練"])
         with tab_activation:
             _render_activation_tab()
         with tab_train:
             _render_training_tab(frame)
 
-    with side:
+    with agent:
         form_state = session_to_state(st.session_state)
         extra_context = _nn_extra_context(form_state, len(frame))
         st.session_state[CONTEXT_KEY] = extra_context

@@ -23,6 +23,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     render_column_pills,
     render_dataset_metrics,
 )
+from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 
 st.set_page_config(page_title="資料學習實驗室", page_icon="CSV", layout="wide")
@@ -30,9 +31,9 @@ inject_style()
 
 
 def overview() -> None:
-    main, side = st.columns([5, 3], gap="large")
+    teaching, agent = open_content_dual_pane()
 
-    with main:
+    with teaching:
         st.title("資料學習實驗室")
         st.caption(
             "從雙表起點經資料整合建立 Working，再透過 Agent 協作整理，建立 Ready 分析就緒資料。"
@@ -87,7 +88,7 @@ def overview() -> None:
 """
         )
 
-    with side:
+    with agent:
         render_chat_panel(page_name="總覽")
 
 
