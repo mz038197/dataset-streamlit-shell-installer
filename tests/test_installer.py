@@ -19,7 +19,11 @@ def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> Non
 
     assert (result.target / "app.py").exists()
     assert (result.target / "ui" / "data_ui.py").exists()
-    assert (result.target / "pages" / "1_Database.py").exists()
+    assert not (result.target / "pages" / "1_Database.py").exists()
+    assert (result.target / "pages" / "3_Field_Quality.py").exists()
+    app_src = (result.target / "app.py").read_text(encoding="utf-8")
+    assert "資料上傳與預覽" not in app_src
+    assert "3_Field_Quality.py" in app_src
     assert (result.target / "workspace" / ".gitkeep").exists()
     assert (result.target / "assets" / "encoding_onehot_vs_label.png").is_file()
     assert (tmp_path / "sessions" / ".gitkeep").exists()

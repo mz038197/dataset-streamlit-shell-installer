@@ -529,7 +529,9 @@ def _show_summary(items: dict[str, str | int | None]) -> None:
 
 def _warn_if_empty(df: pd.DataFrame) -> bool:
     if df.empty:
-        st.warning("目前資料來源沒有可繪圖資料。請回到「資料上傳與預覽」檢查資料。")
+        st.warning(
+            "目前資料來源沒有可繪圖資料。請到「建立 Ready 分析就緒資料」確認已產生可用的 ready.csv。"
+        )
         return True
     return False
 

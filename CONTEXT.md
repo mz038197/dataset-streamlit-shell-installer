@@ -1,6 +1,6 @@
 # Dataset Streamlit Shell
 
-教學用 Streamlit 資料實驗室殼層：上傳／整理 CSV，並以內建範例走通監督式與非監督式演算法頁。
+教學用 Streamlit 資料實驗室殼層：自雙表起點經整合與整理建立 Ready，並以內建範例走通監督式與非監督式演算法頁。
 
 ## Language
 
@@ -145,16 +145,20 @@ _Avoid_: 訓練／驗證切分（指決策樹頁內靜默 holdout）、資料集
 _Avoid_: 分層抽樣（可作口語）、stratify（作頁標題主文）；無目標欄時仍強制分層
 
 **雙表起點**:
-課堂整合線的起始狀態：無 working／ready／切分產物，欄位與資料概覽並排顯示兩份內建來源表。「清除回雙表起點」回到此狀態。
-_Avoid_: 僅刪 working 卻留下 ready 或 train／val／test 仍稱為回到起點
+課堂整合線的起始狀態與協作區入口狀態：無 working／ready／切分產物，欄位與資料概覽並排顯示兩份內建來源表。「清除回雙表起點」回到此狀態。不提供單表 CSV 上傳進 Original／Working。
+_Avoid_: 僅刪 working 卻留下 ready 或 train／val／test 仍稱為回到起點；以「資料上傳與預覽」或上傳 CSV 作為協作線起點
 
 **欄位與資料概覽（雙模態）**:
-無 working.csv 時並排乘客表與航程表以便找合併鍵；有 working.csv 時呈現單表欄位診斷（與舊行為相同）。
-_Avoid_: 在概覽頁執行 merge；用 phase 檔判斷整合前後（以有無 working 為準）
+「AI 協作資料整理」側欄第一項；無 working.csv 時並排乘客表與航程表以便找合併鍵；有 working.csv 時呈現單表欄位診斷（與舊行為相同）。無 Working 時的空狀態導引一律指本頁。
+_Avoid_: 在概覽頁執行 merge；用 phase 檔判斷整合前後（以有無 working 為準）；側欄第一項「資料上傳與預覽」
 
 **資料整合**:
-前處理側欄頁的正式名稱；將兩份來源表依鍵合併後寫入工作資料。雙表探索找鍵在「欄位與資料概覽」；本頁負責對鍵、join 方式與套用合併。左表固定為乘客表、右表固定為航程表（不可對調），以便 left join 語意穩定。
-_Avoid_: 合併（作唯一頁標題）、join 頁；在概覽頁執行 merge；UI 對調左右表
+前處理側欄頁的正式名稱；將兩份來源表依鍵合併後寫入 Original 原始資料與 Working 工作資料。雙表探索找鍵在「欄位與資料概覽」；本頁負責對鍵、join 方式與套用合併。左表固定為乘客表、右表固定為航程表（不可對調），以便 left join 語意穩定。
+_Avoid_: 合併（作唯一頁標題）、join 頁；在概覽頁執行 merge；UI 對調左右表；以上傳 CSV 建立 Original／Working
+
+**Original 原始資料**:
+資料整合套用合併時與 Working 同批寫入的重置來源；不直接修改。
+_Avoid_: 上傳後保留（舊說法）；暗示仍有單表上傳頁建立 Original
 
 **乘客表**:
 鐵達尼整合教材的左表（畫面名稱）；對應內建乘客側欄位，含身分與 Survived 等。

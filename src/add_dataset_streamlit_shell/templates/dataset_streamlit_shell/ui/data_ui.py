@@ -516,10 +516,6 @@ def load_cleaning_log(limit: int = 8) -> list[dict[str, object]]:
     return entries[-limit:][::-1]
 
 
-def read_uploaded_csv(uploaded_file) -> pd.DataFrame:
-    return pd.read_csv(uploaded_file)
-
-
 def dataset_base_context() -> str:
     """穩定環境說明 → create_agent(host_context=...) → 學生 system（對齊 Studio）。"""
     source = _display_path(ORIGINAL_DATASET_PATH)
@@ -535,7 +531,8 @@ def dataset_base_context() -> str:
     return (
         "目前為 Dataset Streamlit Shell。"
         f"Original 原始資料路徑：{source}，只作為重置來源，請勿覆蓋。"
-        f"Working 工作資料路徑：{working}。上傳資料時系統會先建立一份和原始資料相同的工作副本。"
+        f"Working 工作資料路徑：{working}。"
+        "Original 與 Working 在「資料整合」套用合併時一併建立；Working 為整理用副本。"
         f"Ready 分析就緒資料路徑：{ready}，由工作資料凍結後供圖表探索、降維等分析頁使用；"
         "監督式與非監督式教學頁使用各頁內建範例資料。"
         "回答資料問題時，請使用你的 read_file 或 exec 工具實際讀取 CSV 後再回答。"
@@ -563,8 +560,9 @@ def dataset_page_snapshot(df: pd.DataFrame | None, extra_context: str = "") -> s
     parts: list[str] = []
     if df is None:
         parts.append(
-            "尚未載入 CSV。"
-            "若詢問資料內容、清理、補值或欄位計算，請先提醒到「資料上傳與預覽」上傳。"
+            "尚未建立工作資料。"
+            "若詢問資料內容、清理、補值或欄位計算，請先提醒到「欄位與資料概覽」查看雙表，"
+            "再到「資料整合」合併後再整理。"
             "一般概念問題可直接回答。"
         )
     else:
@@ -853,7 +851,10 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
 
     df = load_working_dataset()
     if df is None:
-        st.info("尚未上傳 CSV。你仍可啟用 Agent 詢問一般問題；要分析資料請先到「資料上傳與預覽」上傳。")
+        st.info(
+            "尚未建立工作資料。你仍可啟用 Agent 詢問一般問題；"
+            "要整理資料請先到「欄位與資料概覽」查看雙表，再到「資料整合」合併。"
+        )
 
     sessions = _list_sessions()
     if "session_path" not in st.session_state and sessions:
@@ -864,7 +865,8 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         st.session_state["data_chat_history"] = [
             (
                 "assistant",
-                "請先按「啟用資料 Agent」。啟用後，我可以協助你理解資料整理流程；上傳 CSV 後也能一起分析工作資料。",
+                "請先按「啟用資料 Agent」。啟用後，我可以協助你理解資料整理流程；"
+                "雙表合併建立工作資料後，也能一起分析 Working。",
             )
         ]
 

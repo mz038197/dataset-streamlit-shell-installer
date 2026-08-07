@@ -35,7 +35,7 @@ def overview() -> None:
     with main:
         st.title("資料學習實驗室")
         st.caption(
-            "上傳 CSV，透過 Agent 協作整理 Working 工作資料，建立 Ready 分析就緒資料。"
+            "從雙表起點經資料整合建立 Working，再透過 Agent 協作整理，建立 Ready 分析就緒資料。"
         )
 
         source_df = load_dataset()
@@ -43,7 +43,10 @@ def overview() -> None:
         ready_df = load_ready_dataset()
         df = working_df if working_df is not None else source_df
         if df is None:
-            st.info("請到「資料上傳與預覽」頁上傳 CSV。上傳後會建立 Original 原始資料與 Working 工作資料。")
+            st.info(
+                "尚未建立工作資料。請到「欄位與資料概覽」查看乘客表／航程表，"
+                "再到「資料整合」合併後會建立 Original 原始資料與 Working 工作資料。"
+            )
             return
 
         st.markdown('<div class="data-card">', unsafe_allow_html=True)
@@ -52,7 +55,9 @@ def overview() -> None:
 
         st.divider()
         st.markdown("##### 資料生命週期")
-        st.write("Original 原始資料：上傳後保留，不直接修改。")
+        st.write(
+            "Original 原始資料：資料整合套用合併時寫入，只作為重置來源，不直接修改。"
+        )
         st.write("Working 工作資料：Agent 協作整理與診斷的主要工作區。")
         st.write(
             "Ready 分析就緒資料：整理完成後凍結，供圖表探索、降維等分析頁使用；"
@@ -75,7 +80,7 @@ def overview() -> None:
         st.markdown("##### 課程流程")
         st.markdown(
             """
-1. 課堂線可先開「欄位與資料概覽」看乘客表／航程表，再到「資料整合」合併；或自行上傳 CSV。
+1. 先開「欄位與資料概覽」看乘客表／航程表，再到「資料整合」合併，寫入 Original／Working。
 2. 經「資料轉換」與後續清理診斷 `working.csv`，請右側 Agent 一步一步整理。
 3. 在「建立 Ready 分析就緒資料」產生 `ready.csv`，再到圖表探索；需要時用「資料切分」寫出 train／val／test。
 4. 監督式與非監督式教學頁仍使用各頁內建範例資料。
@@ -91,7 +96,6 @@ pages = {
         st.Page(overview, title="總覽", default=True),
     ],
     "AI 協作資料整理": [
-        st.Page(str(SHELL_ROOT / "pages" / "1_Database.py"), title="資料上傳與預覽"),
         st.Page(str(SHELL_ROOT / "pages" / "3_Field_Quality.py"), title="欄位與資料概覽"),
         st.Page(str(SHELL_ROOT / "pages" / "15_Data_Integration.py"), title="資料整合"),
         st.Page(str(SHELL_ROOT / "pages" / "17_Data_Transform.py"), title="資料轉換"),

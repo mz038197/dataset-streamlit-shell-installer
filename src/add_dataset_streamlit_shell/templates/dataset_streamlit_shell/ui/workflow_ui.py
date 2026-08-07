@@ -154,7 +154,9 @@ def _page_shell(
         st.caption(caption)
         df = load_working_dataset()
         if df is None:
-            st.warning("尚未建立工作資料。請先到「資料上傳與預覽」上傳 CSV。")
+            st.warning(
+                "尚未建立工作資料。請先到「欄位與資料概覽」查看雙表，再到「資料整合」合併。"
+            )
             return
         _render_refresh_controls()
         render_main(df)
