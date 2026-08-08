@@ -96,6 +96,18 @@ def inject_dual_pane_chrome() -> None:
   }}
   .dss-agent-pane {{
     overflow: hidden !important;
+    position: relative !important;
+  }}
+  /* Pin chat_input to Agent column bottom (waku dock chatbar). */
+  .dss-agent-pane [data-testid="stChatInput"] {{
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 6 !important;
+    margin: 0 !important;
+    padding-top: 0.35rem !important;
+    background: var(--background-color, var(--secondary-background-color, #0e1117));
   }}
   .dss-resizer {{
     flex: 0 0 5px !important;
@@ -203,9 +215,9 @@ def inject_dual_pane_chrome() -> None:
     clearInnerHeightLocks(col);
   }}
 
-  function sizeChat(agentCol) {{
+  function findChatScrollTarget(agentCol) {{
     const host = agentCol.querySelector("[data-dss-chat]");
-    if (!host) return;
+    if (!host) return null;
     let node = host.nextElementSibling;
     while (node && !node.matches('[data-testid="stVerticalBlockBorderWrapper"], [data-testid="stVerticalBlock"]')) {{
       node = node.nextElementSibling;
@@ -225,17 +237,29 @@ def inject_dual_pane_chrome() -> None:
         }}
       }}
     }}
+    return target;
+  }}
+
+  function layoutAgentChat(agentCol) {{
+    /* Message list fills space above pinned chat_input; column itself does not scroll. */
+    const colRect = agentCol.getBoundingClientRect();
+    const input = agentCol.querySelector('[data-testid="stChatInput"]');
+    const inputH = input ? Math.ceil(input.getBoundingClientRect().height) : 0;
+    const pad = 8;
+    const target = findChatScrollTarget(agentCol);
     if (!target) return;
     const top = target.getBoundingClientRect().top;
-    const input = agentCol.querySelector('[data-testid="stChatInput"]');
-    const bottomLimit = input
-      ? input.getBoundingClientRect().top - 12
-      : agentCol.getBoundingClientRect().bottom - 16;
-    const avail = Math.floor(bottomLimit - top);
-    if (avail >= 120) {{
-      target.style.setProperty("height", avail + "px", "important");
-      target.style.setProperty("max-height", avail + "px", "important");
-      target.style.overflowY = "auto";
+    const avail = Math.floor(colRect.bottom - top - inputH - pad);
+    /* Exact remaining space above pinned input (never exceed avail). */
+    const height = Math.max(0, avail);
+    target.style.setProperty("height", height + "px", "important");
+    target.style.setProperty("max-height", height + "px", "important");
+    target.style.removeProperty("min-height");
+    target.style.overflowY = "auto";
+    const gap = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (!target.dataset.dssStick || gap < 80) {{
+      target.scrollTop = target.scrollHeight;
+      target.dataset.dssStick = "1";
     }}
   }}
 
@@ -294,7 +318,7 @@ def inject_dual_pane_chrome() -> None:
       row.insertBefore(handle, agentCol);
     }}
 
-    sizeChat(agentCol);
+    layoutAgentChat(agentCol);
     return true;
   }}
 

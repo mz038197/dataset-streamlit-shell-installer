@@ -29,7 +29,6 @@ from dataset_streamlit_shell.agent_loader import (  # noqa: E402
 
 WORKSPACE_DIR = SHELL_ROOT / "workspace"
 SESSION_DIR = PROJECT_ROOT / "sessions"
-CHAT_IMAGE_DIR = SHELL_ROOT / "uploads" / "chat_images"
 AGENT_ACTIVATION_MARKER_PATH = SHELL_ROOT / ".agent_activated"
 ORIGINAL_DATASET_PATH = WORKSPACE_DIR / "original.csv"
 WORKING_DATASET_PATH = WORKSPACE_DIR / "working.csv"
@@ -40,7 +39,6 @@ TEST_DATASET_PATH = WORKSPACE_DIR / "test.csv"
 CLEANING_LOG_PATH = WORKSPACE_DIR / "cleaning_log.jsonl"
 SPLIT_DATASET_PATHS = (TRAIN_DATASET_PATH, VAL_DATASET_PATH, TEST_DATASET_PATH)
 USER_SETTINGS_PATH = WORKSPACE_DIR / "user_settings.json"
-MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024
 TTS_VOICE_OPTIONS = [
     "alloy",
     "ash",
@@ -308,10 +306,6 @@ def _ensure_session_dir() -> None:
     SESSION_DIR.mkdir(exist_ok=True)
 
 
-def _ensure_chat_image_dir() -> None:
-    CHAT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-
-
 def _clear_agent_cache() -> None:
     st.session_state.pop("data_agent", None)
     st.session_state.pop("data_agent_session_path", None)
@@ -329,25 +323,6 @@ def _write_activation_marker() -> None:
 def _remove_activation_marker() -> None:
     if AGENT_ACTIVATION_MARKER_PATH.exists():
         AGENT_ACTIVATION_MARKER_PATH.unlink()
-
-
-def _save_uploaded_chat_image(uploaded_file) -> tuple[str | None, str | None]:
-    if uploaded_file is None:
-        return None, None
-
-    data = uploaded_file.getvalue()
-    if len(data) > MAX_CHAT_IMAGE_BYTES:
-        return None, "圖片超過 5 MB，請先壓縮後再上傳。"
-
-    suffix = Path(uploaded_file.name).suffix.lower()
-    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
-        return None, "只支援 PNG、JPG、JPEG、WEBP 圖片。"
-
-    _ensure_chat_image_dir()
-    filename = f"chat_image_{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:8]}{suffix}"
-    target = CHAT_IMAGE_DIR / filename
-    target.write_bytes(data)
-    return target.relative_to(PROJECT_ROOT).as_posix(), None
 
 
 def save_dataset(df: pd.DataFrame, *, working: bool = False) -> None:
@@ -954,15 +929,6 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
 
     _render_tts_settings_ui(settings_error=settings_error)
 
-    uploaded_image = st.file_uploader(
-        "附加圖片（選填）",
-        type=["png", "jpg", "jpeg", "webp"],
-        key=f"data_chat_image_{current_session}",
-        help="圖片只會送給下一則訊息；支援 PNG/JPG/WEBP，大小上限 5 MB。",
-    )
-    if uploaded_image is not None:
-        st.image(uploaded_image, caption="下一則訊息會附上這張圖片", width="stretch")
-
     try:
         agent = _get_agent_for_session(current_session)
     except RuntimeError as exc:
@@ -979,7 +945,7 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         return
 
     st.markdown('<div data-dss-chat style="display:none"></div>', unsafe_allow_html=True)
-    # Placeholder height; dual-pane chrome JS resizes to fill remaining Agent column.
+    # Placeholder height; dual-pane chrome JS sizes to fill space above pinned input.
     chat = st.container(height=720, border=False)
     with chat:
         for role, text in st.session_state["data_chat_history"]:
@@ -987,14 +953,7 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
                 st.markdown(text)
 
     if user_text := st.chat_input("詢問資料 Agent...", key="data_chat"):
-        image_path, image_error = _save_uploaded_chat_image(uploaded_image)
-        display_user_text = user_text
-        if image_error:
-            st.warning(image_error)
-        elif image_path:
-            display_user_text = f"{user_text}\n\n（已附圖：{image_path}）"
-
-        st.session_state["data_chat_history"].append(("user", display_user_text))
+        st.session_state["data_chat_history"].append(("user", user_text))
         # host_context 已在建立 Agent 時注入 system；此處只組 user 層
         snapshot = dataset_page_snapshot(df, extra_context)
         prompt = format_user_turn(user_text, extra_context=snapshot)
@@ -1002,8 +961,6 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         with chat:
             with st.chat_message("user"):
                 st.markdown(user_text)
-                if uploaded_image is not None and image_path:
-                    st.image(uploaded_image, caption="已附圖", width="stretch")
             with st.chat_message("assistant"):
                 placeholder = st.empty()
                 answer_parts: list[str] = []
@@ -1028,7 +985,7 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
                     ):
                         final_text = agent.chat(
                             prompt,
-                            image_path=image_path,
+                            image_path=None,
                             on_token=on_token,
                         )
                 except Exception as exc:  # keep classroom UI alive during agent debugging

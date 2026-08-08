@@ -66,3 +66,35 @@ def test_dual_pane_pages_use_shared_shell_not_hardcoded_ratio() -> None:
 def test_chat_panel_marks_fill_height_host() -> None:
     src = (UI / "data_ui.py").read_text(encoding="utf-8")
     assert 'data-dss-chat' in src
+
+
+def test_agent_chat_pins_input_and_scrolls_messages() -> None:
+    """資料 Agent 欄：訊息自捲、chat_input 釘欄底（對齊 waku dock）。"""
+    chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")
+    assert "layoutAgentChat" in chrome
+    assert 'stChatInput' in chrome
+    assert "position" in chrome and "absolute" in chrome
+    assert "scrollTop" in chrome
+    assert "Math.max(0, avail)" in chrome
+
+
+def test_chat_panel_has_no_image_attachment_path() -> None:
+    src = (UI / "data_ui.py").read_text(encoding="utf-8")
+    assert "附加圖片" not in src
+    assert "_save_uploaded_chat_image" not in src
+    assert "CHAT_IMAGE_DIR" not in src
+    assert "file_uploader" not in src
+    assert "image_path=" not in src or "image_path=None" in src
+
+
+def test_chat_panel_tts_stays_collapsed_expander() -> None:
+    src = (UI / "data_ui.py").read_text(encoding="utf-8")
+    assert 'st.expander("語音播放", expanded=False)' in src
+
+
+def test_content_dual_pane_glossary_pins_agent_input() -> None:
+    context = (ROOT / "CONTEXT.md").read_text(encoding="utf-8")
+    block = context.split("**內容區雙欄殼**:", 1)[1].split("**", 1)[0]
+    assert "釘" in block
+    assert "訊息" in block or "聊天" in block
+    assert "附圖" in block or "附加圖片" in block
