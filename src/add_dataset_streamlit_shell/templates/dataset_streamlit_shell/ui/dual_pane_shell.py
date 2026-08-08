@@ -98,16 +98,9 @@ def inject_dual_pane_chrome() -> None:
     overflow: hidden !important;
     position: relative !important;
   }}
-  /* Pin chat_input to Agent column bottom (waku dock chatbar). */
-  .dss-agent-pane [data-testid="stChatInput"] {{
-    position: absolute !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    z-index: 6 !important;
-    margin: 0 !important;
-    padding-top: 0.35rem !important;
-    background: var(--background-color, var(--secondary-background-color, #0e1117));
+  /* Keep Streamlit page-bottom chat host visible if input lands there. */
+  [data-testid="stBottom"] {{
+    z-index: 40 !important;
   }}
   .dss-resizer {{
     flex: 0 0 5px !important;
@@ -240,21 +233,76 @@ def inject_dual_pane_chrome() -> None:
     return target;
   }}
 
-  function layoutAgentChat(agentCol) {{
-    /* Message list fills space above pinned chat_input; column itself does not scroll. */
+  function findChatInput(agentCol) {{
+    return (
+      agentCol.querySelector('[data-testid="stChatInput"]')
+      || document.querySelector('[data-testid="stBottom"] [data-testid="stChatInput"]')
+    );
+  }}
+
+  function pinBottomChatToAgent(agentCol, input) {{
+    /* st.chat_input sometimes lands in page-bottom host; dock it to Agent column. */
+    const bottom = input.closest('[data-testid="stBottom"]');
+    if (!bottom) return false;
     const colRect = agentCol.getBoundingClientRect();
-    const input = agentCol.querySelector('[data-testid="stChatInput"]');
-    const inputH = input ? Math.ceil(input.getBoundingClientRect().height) : 0;
+    const bottomGap = Math.max(0, window.innerHeight - colRect.bottom);
+    bottom.style.setProperty("position", "fixed", "important");
+    bottom.style.setProperty("left", colRect.left + "px", "important");
+    bottom.style.setProperty("width", colRect.width + "px", "important");
+    bottom.style.setProperty("right", "auto", "important");
+    bottom.style.setProperty("bottom", bottomGap + "px", "important");
+    bottom.style.setProperty("z-index", "40", "important");
+    bottom.style.setProperty("display", "block", "important");
+    bottom.style.setProperty("visibility", "visible", "important");
+    bottom.style.setProperty("opacity", "1", "important");
+    return true;
+  }}
+
+  function layoutAgentChat(agentCol) {{
+    /*
+     * Keep chat_input in normal flow (absolute + nested position:relative parents
+     * was clipping it under overflow:hidden). Size the message list to the space
+     * above the input; push the input to the column bottom with margin-top:auto.
+     */
+    const colRect = agentCol.getBoundingClientRect();
+    const input = findChatInput(agentCol);
+    const pinnedBottom = input ? pinBottomChatToAgent(agentCol, input) : false;
+    const inputH = input
+      ? Math.max(56, Math.ceil(input.getBoundingClientRect().height))
+      : 72;
     const pad = 8;
     const target = findChatScrollTarget(agentCol);
+
+    if (input && !pinnedBottom) {{
+      input.style.removeProperty("position");
+      input.style.removeProperty("left");
+      input.style.removeProperty("right");
+      input.style.removeProperty("bottom");
+      const wrap =
+        input.closest('[data-testid="stElementContainer"]') || input.parentElement;
+      if (wrap) {{
+        wrap.style.setProperty("margin-top", "auto", "important");
+        wrap.style.setProperty("flex-shrink", "0", "important");
+        wrap.style.setProperty("position", "relative", "important");
+        wrap.style.setProperty("z-index", "6", "important");
+      }}
+      const rootVb = agentCol.querySelector('[data-testid="stVerticalBlock"]');
+      if (rootVb) {{
+        rootVb.style.setProperty("display", "flex", "important");
+        rootVb.style.setProperty("flex-direction", "column", "important");
+        rootVb.style.setProperty("height", "100%", "important");
+        rootVb.style.setProperty("min-height", "0", "important");
+      }}
+    }}
+
     if (!target) return;
     const top = target.getBoundingClientRect().top;
     const avail = Math.floor(colRect.bottom - top - inputH - pad);
-    /* Exact remaining space above pinned input (never exceed avail). */
     const height = Math.max(0, avail);
     target.style.setProperty("height", height + "px", "important");
     target.style.setProperty("max-height", height + "px", "important");
-    target.style.removeProperty("min-height");
+    target.style.setProperty("flex", "1 1 auto", "important");
+    target.style.setProperty("min-height", "0", "important");
     target.style.overflowY = "auto";
     const gap = target.scrollHeight - target.scrollTop - target.clientHeight;
     if (!target.dataset.dssStick || gap < 80) {{

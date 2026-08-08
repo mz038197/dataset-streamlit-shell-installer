@@ -71,11 +71,16 @@ def test_chat_panel_marks_fill_height_host() -> None:
 def test_agent_chat_pins_input_and_scrolls_messages() -> None:
     """資料 Agent 欄：訊息自捲、chat_input 釘欄底（對齊 waku dock）。"""
     chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")
+    panel = (UI / "data_ui.py").read_text(encoding="utf-8")
     assert "layoutAgentChat" in chrome
-    assert 'stChatInput' in chrome
-    assert "position" in chrome and "absolute" in chrome
-    assert "scrollTop" in chrome
+    assert "findChatInput" in chrome
+    assert "pinBottomChatToAgent" in chrome
+    assert "margin-top" in chrome and "auto" in chrome
     assert "Math.max(0, avail)" in chrome
+    assert "scrollTop" in chrome
+    # Must not use absolute pin on stChatInput (nested containing blocks clip it).
+    assert ".dss-agent-pane [data-testid=\"stChatInput\"]" not in chrome
+    assert "st.container(height=240" in panel
 
 
 def test_chat_panel_has_no_image_attachment_path() -> None:

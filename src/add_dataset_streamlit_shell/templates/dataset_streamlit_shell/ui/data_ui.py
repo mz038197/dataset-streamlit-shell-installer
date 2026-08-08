@@ -945,8 +945,9 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         return
 
     st.markdown('<div data-dss-chat style="display:none"></div>', unsafe_allow_html=True)
-    # Placeholder height; dual-pane chrome JS sizes to fill space above pinned input.
-    chat = st.container(height=720, border=False)
+    # Short placeholder; dual-pane chrome JS grows this to fill space above input.
+    # A tall default (e.g. 720) clips in-flow chat_input under Agent overflow:hidden.
+    chat = st.container(height=240, border=False)
     with chat:
         for role, text in st.session_state["data_chat_history"]:
             with st.chat_message(role):
