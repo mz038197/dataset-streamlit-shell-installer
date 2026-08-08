@@ -81,6 +81,10 @@ def test_agent_chat_pins_input_and_scrolls_messages() -> None:
     # Must not use absolute pin on stChatInput (nested containing blocks clip it).
     assert ".dss-agent-pane [data-testid=\"stChatInput\"]" not in chrome
     assert "st.container(height=240" in panel
+    # border=False container has no BorderWrapper; grow the height=240 scrollport itself.
+    assert "data-test-scroll-behavior" in chrome
+    assert "DOCUMENT_POSITION_FOLLOWING" in chrome
+    assert "dss-chat-scroll" in chrome
 
 
 def test_chat_panel_has_no_image_attachment_path() -> None:

@@ -182,10 +182,22 @@ def inject_dual_pane_chrome() -> None:
     }});
   }}
 
+  function isAgentChatScrollport(vb) {{
+    /* st.container(height=...) scrollport; layoutAgentChat owns its height. */
+    return (
+      vb
+      && vb.getAttribute("data-testid") === "stVerticalBlock"
+      && (vb.hasAttribute("data-test-scroll-behavior") || vb.classList.contains("dss-chat-scroll"))
+    );
+  }}
+
   function clearInnerHeightLocks(col) {{
     /* Column is the scrollport; do not lock nested vertical blocks to a fixed
-       height (that clipped siblings / quiz blocks below the fold). */
+       height (that clipped siblings / quiz blocks below the fold).
+       Keep the Agent chat list scrollport — clearing it left height stuck at
+       Streamlit's placeholder 240px with no working grow target. */
     col.querySelectorAll('[data-testid="stVerticalBlock"]').forEach(function (vb) {{
+      if (col.classList.contains("dss-agent-pane") && isAgentChatScrollport(vb)) return;
       vb.style.removeProperty("height");
       vb.style.removeProperty("max-height");
       vb.style.setProperty("min-height", "0", "important");
@@ -211,26 +223,37 @@ def inject_dual_pane_chrome() -> None:
   function findChatScrollTarget(agentCol) {{
     const host = agentCol.querySelector("[data-dss-chat]");
     if (!host) return null;
-    let node = host.nextElementSibling;
-    while (node && !node.matches('[data-testid="stVerticalBlockBorderWrapper"], [data-testid="stVerticalBlock"]')) {{
-      node = node.nextElementSibling;
-    }}
-    let target = null;
-    if (node && node.matches('[data-testid="stVerticalBlockBorderWrapper"]')) {{
-      target = node;
-    }} else if (node) {{
-      target = node.querySelector('[data-testid="stVerticalBlockBorderWrapper"]');
-    }}
-    if (!target) {{
-      const wrappers = agentCol.querySelectorAll('[data-testid="stVerticalBlockBorderWrapper"]');
-      for (const el of wrappers) {{
-        if (el.querySelector('[data-testid="stChatMessage"]') || (el.style && el.style.height)) {{
-          target = el;
-          break;
-        }}
+
+    /* border=False: height lives on stVerticalBlock, not BorderWrapper.
+       data-dss-chat is nested, so host.nextElementSibling is usually null. */
+    const scrollBlocks = agentCol.querySelectorAll(
+      '[data-testid="stVerticalBlock"][data-test-scroll-behavior]'
+    );
+    for (const el of scrollBlocks) {{
+      if (host.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) {{
+        return el;
       }}
     }}
-    return target;
+
+    let probe = host.closest('[data-testid="stElementContainer"]') || host;
+    let node = probe.nextElementSibling;
+    while (node) {{
+      if (node.matches('[data-testid="stVerticalBlockBorderWrapper"]')) return node;
+      const wrap = node.querySelector('[data-testid="stVerticalBlockBorderWrapper"]');
+      if (wrap) return wrap;
+      if (isAgentChatScrollport(node)) return node;
+      const nested = node.querySelector('[data-testid="stVerticalBlock"][data-test-scroll-behavior]');
+      if (nested) return nested;
+      node = node.nextElementSibling;
+    }}
+
+    const wrappers = agentCol.querySelectorAll('[data-testid="stVerticalBlockBorderWrapper"]');
+    for (const el of wrappers) {{
+      if (el.querySelector('[data-testid="stChatMessage"]') || (el.style && el.style.height)) {{
+        return el;
+      }}
+    }}
+    return null;
   }}
 
   function findChatInput(agentCol) {{
@@ -296,6 +319,7 @@ def inject_dual_pane_chrome() -> None:
     }}
 
     if (!target) return;
+    target.classList.add("dss-chat-scroll");
     const top = target.getBoundingClientRect().top;
     const avail = Math.floor(colRect.bottom - top - inputH - pad);
     const height = Math.max(0, avail);
@@ -303,7 +327,7 @@ def inject_dual_pane_chrome() -> None:
     target.style.setProperty("max-height", height + "px", "important");
     target.style.setProperty("flex", "1 1 auto", "important");
     target.style.setProperty("min-height", "0", "important");
-    target.style.overflowY = "auto";
+    target.style.setProperty("overflow-y", "auto", "important");
     const gap = target.scrollHeight - target.scrollTop - target.clientHeight;
     if (!target.dataset.dssStick || gap < 80) {{
       target.scrollTop = target.scrollHeight;
