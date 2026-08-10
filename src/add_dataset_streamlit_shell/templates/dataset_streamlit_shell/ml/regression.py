@@ -48,6 +48,13 @@ class GradientDescentStep:
     weights: list[float]
     intercept: float
     cost: float
+    prev_weights: list[float] | None = None
+    prev_intercept: float | None = None
+    prev_cost: float | None = None
+    dj_dw: list[float] | None = None
+    dj_db: float | None = None
+    delta_w: list[float] | None = None
+    delta_b: float | None = None
 
 
 def compute_cost_j(actual: pd.Series | np.ndarray, prediction: pd.Series | np.ndarray) -> float:
@@ -106,13 +113,33 @@ def gradient_descent_steps(
     steps = [_gradient_step_snapshot(0, x, y, weights, intercept)]
     m = float(x.shape[0])
     for iteration in range(1, epochs + 1):
+        prev_weights = weights.copy()
+        prev_intercept = float(intercept)
         prediction = x @ weights + intercept
+        prev_cost = compute_cost_j(y, prediction)
         error = prediction - y
         dj_dw = (x.T @ error) / m
         dj_db = float(np.sum(error) / m)
-        weights = weights - learning_rate * dj_dw
-        intercept = intercept - learning_rate * dj_db
-        steps.append(_gradient_step_snapshot(iteration, x, y, weights, intercept))
+        delta_w = -learning_rate * dj_dw
+        delta_b = -learning_rate * dj_db
+        weights = weights + delta_w
+        intercept = intercept + delta_b
+        steps.append(
+            _gradient_step_snapshot(
+                iteration,
+                x,
+                y,
+                weights,
+                intercept,
+                prev_weights=[float(weight) for weight in prev_weights],
+                prev_intercept=prev_intercept,
+                prev_cost=prev_cost,
+                dj_dw=[float(value) for value in dj_dw],
+                dj_db=dj_db,
+                delta_w=[float(value) for value in delta_w],
+                delta_b=float(delta_b),
+            )
+        )
     return steps
 
 
@@ -122,6 +149,14 @@ def _gradient_step_snapshot(
     y: np.ndarray,
     weights: np.ndarray,
     intercept: float,
+    *,
+    prev_weights: list[float] | None = None,
+    prev_intercept: float | None = None,
+    prev_cost: float | None = None,
+    dj_dw: list[float] | None = None,
+    dj_db: float | None = None,
+    delta_w: list[float] | None = None,
+    delta_b: float | None = None,
 ) -> GradientDescentStep:
     prediction = x @ weights + intercept
     return GradientDescentStep(
@@ -129,6 +164,13 @@ def _gradient_step_snapshot(
         weights=[float(weight) for weight in weights],
         intercept=float(intercept),
         cost=compute_cost_j(y, prediction),
+        prev_weights=prev_weights,
+        prev_intercept=prev_intercept,
+        prev_cost=prev_cost,
+        dj_dw=dj_dw,
+        dj_db=dj_db,
+        delta_w=delta_w,
+        delta_b=delta_b,
     )
 
 

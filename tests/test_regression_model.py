@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 TEMPLATE_ROOT = (
     Path(__file__).resolve().parents[1]
@@ -103,6 +104,35 @@ def test_gradient_descent_steps_reduce_cost_for_simple_regression() -> None:
     assert steps[-1].cost < steps[0].cost
     np.testing.assert_allclose(steps[-1].weights, [2.0], atol=0.2)
     assert abs(steps[-1].intercept - 1.0) < 0.4
+
+
+def test_gradient_descent_steps_record_gradient_and_delta_for_updates() -> None:
+    frame = pd.DataFrame({"x": [1.0, 2.0], "y": [3.0, 5.0]})
+    learning_rate = 0.1
+
+    steps = gradient_descent_steps(
+        frame[["x"]],
+        frame["y"],
+        learning_rate=learning_rate,
+        epochs=1,
+        initial_weights=[0.0],
+        initial_intercept=0.0,
+    )
+
+    assert steps[0].dj_dw is None
+    assert steps[0].delta_w is None
+    first = steps[1]
+    assert first.prev_weights == [0.0]
+    assert first.prev_intercept == 0.0
+    # pred=[0,0], error=[-3,-5], dj_dw = (1*-3 + 2*-5)/2 = -6.5, dj_db = -4
+    np.testing.assert_allclose(first.dj_dw, [-6.5])
+    assert first.dj_db == pytest.approx(-4.0)
+    np.testing.assert_allclose(first.delta_w, [0.65])
+    assert first.delta_b == pytest.approx(0.4)
+    np.testing.assert_allclose(first.weights, [0.65])
+    assert first.intercept == pytest.approx(0.4)
+    assert first.prev_cost == pytest.approx(compute_cost_j(frame["y"], [0.0, 0.0]))
+    assert first.cost < first.prev_cost
 
 
 def test_predict_with_parameters_uses_weight_order() -> None:

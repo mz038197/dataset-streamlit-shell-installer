@@ -62,10 +62,23 @@ from dataset_streamlit_shell.ui.data_ui import (
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui import multiple_regression_quiz as multi_quiz
 from dataset_streamlit_shell.ui.teaching_flow import (
+    FLOW_VIEW_INPUT,
+    FLOW_VIEW_LABELS,
+    FLOW_VIEW_MODEL,
+    FLOW_VIEW_OUTPUT,
+    MICRO_COST,
+    MICRO_PREDICT,
+    MICRO_STEP_LABELS,
+    MICRO_UPDATE,
     TEACHING_FLOW_CSS,
+    TrainingMicroFrame,
+    build_training_micro_frames,
+    gradient_board_rows,
     live_fit_caption,
+    micro_stepper_html,
     numeric_prediction_latex,
     regression_flow_svg,
+    simple_gradient_board_lines,
     symbolic_prediction_latex,
     training_flow_state,
 )
@@ -1470,8 +1483,8 @@ def render_linear_regression_page() -> None:
     with teaching:
         st.title(LR_PAGE_TITLE)
         st.caption(
-            "沿著教學流程圖：輸入資料 → 帶公式的回歸模型 → 輸出呈現。"
-            "先單特徵直線，再多特徵（含 Z-score 縮放）。"
+            "沿著教學流程圖：輸入資料 → 回歸模型 → 輸出呈現；用「目前查看」一次看一節。"
+            "訓練時會展開微步驟，演示梯度如何更新 w。"
         )
         st.markdown(TEACHING_FLOW_CSS, unsafe_allow_html=True)
         # st.tabs 在 streamlit>=1.50 無法可靠回報作用中分頁；用 radio 追蹤焦點給 Agent。
@@ -1513,6 +1526,62 @@ def _paint_teaching_flow(
     placeholder.markdown(html, unsafe_allow_html=True)
 
 
+def _paint_micro_stepper(placeholder, *, hot: str | None) -> None:
+    placeholder.markdown(micro_stepper_html(hot=hot), unsafe_allow_html=True)
+
+
+def _render_lr_view_radio(key: str) -> str:
+    if key not in st.session_state:
+        st.session_state[key] = FLOW_VIEW_MODEL
+    return str(
+        st.radio(
+            "目前查看",
+            FLOW_VIEW_LABELS,
+            horizontal=True,
+            key=key,
+        )
+    )
+
+
+def _render_gradient_board(frame: TrainingMicroFrame, *, simple: bool) -> None:
+    st.markdown("##### 梯度演算板")
+    if simple:
+        for line in simple_gradient_board_lines(frame):
+            st.markdown(f"- {line}")
+        return
+    st.caption(
+        f"目前步驟：{MICRO_STEP_LABELS[frame.micro_step]}｜"
+        f"Iteration {frame.iteration:,} / {frame.total_iterations:,}｜"
+        f"α = {frame.learning_rate:g}｜"
+        f"Cost J（更新前）= {frame.cost_before:.6g}"
+    )
+    if frame.micro_step == MICRO_PREDICT:
+        st.caption("用當前各 wᵢ、b 計算預測 ŷ。")
+    elif frame.micro_step == MICRO_COST:
+        st.caption("看整體平方誤差有多大。")
+    st.dataframe(pd.DataFrame(gradient_board_rows(frame)), width="stretch", hide_index=True)
+
+
+def _micro_live_caption(frame: TrainingMicroFrame) -> str:
+    return live_fit_caption(
+        iteration=frame.iteration,
+        total_iterations=frame.total_iterations,
+        weights=frame.chart_weights,
+        intercept=frame.chart_intercept,
+        cost=frame.chart_cost,
+    )
+
+
+def _cost_history_for_frame(
+    steps: list[GradientDescentStep],
+    frame: TrainingMicroFrame,
+) -> list[GradientDescentStep]:
+    """微步驟「更新參數」前不把本輪更新後的 Cost 畫進曲線。"""
+    if frame.micro_step == MICRO_UPDATE:
+        return steps[: frame.iteration + 1]
+    return steps[: frame.iteration]
+
+
 def _render_model_prediction_formula(
     features: list[str],
     artifact: LinearModelArtifact | None,
@@ -1547,152 +1616,170 @@ def _render_simple_regression_stage() -> None:
         st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
         return
 
+    view_key = "simple_regression_view"
+    anim_key = "simple_regression_anim"
+    result_key = "simple_regression_last_artifact"
+    lr_key = "simple_regression_learning_rate"
+    epochs_key = "simple_regression_epochs"
+    step_mode_key = "simple_regression_step_mode"
+
+    expected_slope = expected_slope_direction(working, feature, target)
+    learning_rate = float(st.session_state.get(lr_key, 0.01))
+    epochs = int(st.session_state.get(epochs_key, 1500))
+    signature = (
+        source_label,
+        feature,
+        target,
+        learning_rate,
+        epochs,
+        len(working),
+    )
+    stored = st.session_state.get(result_key)
+    cached_artifact: LinearModelArtifact | None = None
+    if isinstance(stored, dict) and stored.get("signature") == signature:
+        cached_artifact = stored["artifact"]
+
+    slope_choice = str(st.session_state.get(SESSION_SLOPE, PLEASE_SELECT))
+    alpha_choice = str(st.session_state.get(SESSION_ALPHA, PLEASE_SELECT))
+    quiz_unlocked = both_quiz_correct(
+        slope_choice,
+        alpha_choice,
+        expected_slope=expected_slope,
+    )
+
+    anim = st.session_state.get(anim_key)
+    training_active = isinstance(anim, dict) and not anim.get("finished", True)
+
     flow_placeholder = st.empty()
-    _paint_teaching_flow(flow_placeholder)
-
-    col_in, col_model, col_out = st.columns(3, gap="medium")
-    with col_in:
-        st.markdown("###### 輸入資料")
-        _render_regression_data_intro(
-            working,
-            features=[feature],
-            target=target,
-            dataset_note=(
-                "每一列是一個城市市場：x 是城市人口，y 是餐廳獲利。"
-                "目標是找出一條直線來描述兩者關係。"
-            ),
-        )
-
-    with col_model:
-        st.markdown("###### 回歸模型")
-        st.markdown("##### 訓練設定")
-        c1, c2 = st.columns(2)
-        learning_rate = c1.number_input(
-            "學習率 α",
-            min_value=0.0001,
-            max_value=1.0,
-            value=0.01,
-            step=0.001,
-            format="%.4f",
-            key="simple_regression_learning_rate",
-        )
-        epochs = c2.number_input(
-            "Epoch / 迭代次數",
-            min_value=1,
-            max_value=5000,
-            value=1500,
-            step=100,
-            key="simple_regression_epochs",
-        )
-
-        result_key = "simple_regression_last_artifact"
-        signature = (
-            source_label,
-            feature,
-            target,
-            float(learning_rate),
-            int(epochs),
-            len(working),
-        )
-        stored = st.session_state.get(result_key)
-        cached_artifact: LinearModelArtifact | None = None
-        if isinstance(stored, dict) and stored.get("signature") == signature:
-            cached_artifact = stored["artifact"]
-
-        formula_placeholder = st.empty()
-        with formula_placeholder.container():
-            _render_model_prediction_formula([feature], cached_artifact)
-        _render_cost_formula()
-
-        expected_slope = expected_slope_direction(working, feature, target)
-        quiz_unlocked = _render_simple_regression_pretrain_quiz(
-            working,
-            feature=feature,
-            target=target,
-            learning_rate=float(learning_rate),
-            expected_slope=expected_slope,
-            source_label=source_label,
-            epochs=int(epochs),
-        )
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            width="stretch",
-            key="train_simple_regression",
-            disabled=not quiz_unlocked,
-        )
-        if not quiz_unlocked:
-            st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
-
-    artifact: LinearModelArtifact | None = None
+    micro_placeholder = st.empty()
+    artifact: LinearModelArtifact | None = cached_artifact
     prediction: pd.Series | None = None
     slope_guess = st.session_state.get(SESSION_SLOPE, PLEASE_SELECT)
 
-    with col_out:
-        st.markdown("###### 輸出呈現")
-        chart_left, chart_right = st.columns(2)
-        line_placeholder = chart_left.empty()
-        cost_placeholder = chart_right.empty()
-        status_placeholder = st.empty()
-        results_placeholder = st.empty()
+    if training_active:
+        _run_simple_training_session(
+            working,
+            feature=feature,
+            target=target,
+            source_label=source_label,
+            signature=signature,
+            result_key=result_key,
+            anim_key=anim_key,
+            view_key=view_key,
+            flow_placeholder=flow_placeholder,
+            micro_placeholder=micro_placeholder,
+        )
+        stored_after = st.session_state.get(result_key)
+        if isinstance(stored_after, dict) and stored_after.get("signature") == signature:
+            artifact = stored_after["artifact"]
+        anim = st.session_state.get(anim_key)
+        training_active = isinstance(anim, dict) and not anim.get("finished", True)
 
-        if train_clicked and quiz_unlocked:
-            with formula_placeholder.container():
-                _render_model_prediction_formula([feature], None)
-                model_live_placeholder = st.empty()
-            steps = gradient_descent_steps(
-                working[[feature]],
-                working[target],
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-            )
-            _animate_simple_gradient_descent(
+    if not training_active:
+        _paint_teaching_flow(flow_placeholder, finished=artifact is not None)
+        micro_placeholder.empty()
+        view = _render_lr_view_radio(view_key)
+
+        if view == FLOW_VIEW_INPUT:
+            st.markdown("###### 輸入資料")
+            _render_regression_data_intro(
                 working,
-                feature,
-                target,
-                steps,
-                line_placeholder,
-                cost_placeholder,
-                status_placeholder,
-                flow_placeholder=flow_placeholder,
-                model_live_placeholder=model_live_placeholder,
-            )
-            final_step = steps[-1]
-            prediction = predict_with_parameters(
-                working[[feature]],
-                final_step.weights,
-                final_step.intercept,
-            )
-            artifact = LinearModelArtifact(
-                model_kind="simple_linear_regression",
                 features=[feature],
                 target=target,
-                weights=[float(final_step.weights[0])],
-                intercept=float(final_step.intercept),
-                scaler=None,
-                training_cost=float(final_step.cost),
-                data_source=source_label,
+                dataset_note=(
+                    "每一列是一個城市市場：x 是城市人口，y 是餐廳獲利。"
+                    "目標是找出一條直線來描述兩者關係。"
+                ),
             )
-            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
-            _paint_teaching_flow(flow_placeholder, finished=True)
-            with formula_placeholder.container():
-                _render_model_prediction_formula([feature], artifact)
-            actual_dir = slope_label_from_weight(
-                float(final_step.weights[0]),
-                x_std=float(working[feature].astype(float).std(ddof=0)),
-                y_std=float(working[target].astype(float).std(ddof=0)),
+        elif view == FLOW_VIEW_MODEL:
+            st.markdown("###### 回歸模型")
+            st.markdown("##### 訓練設定")
+            c1, c2 = st.columns(2)
+            learning_rate = float(
+                c1.number_input(
+                    "學習率 α",
+                    min_value=0.0001,
+                    max_value=1.0,
+                    value=learning_rate,
+                    step=0.001,
+                    format="%.4f",
+                    key=lr_key,
+                )
             )
-            status_placeholder.caption(
-                f"你猜的斜率方向：{slope_guess}；"
-                f"實際 w≈{float(final_step.weights[0]):.4g}（{actual_dir}）。"
+            epochs = int(
+                c2.number_input(
+                    "Epoch / 迭代次數",
+                    min_value=1,
+                    max_value=5000,
+                    value=epochs,
+                    step=100,
+                    key=epochs_key,
+                )
             )
-            with results_placeholder.container():
-                _render_training_results(artifact, working, target, prediction)
-        else:
-            if cached_artifact is not None:
+            signature = (
+                source_label,
+                feature,
+                target,
+                learning_rate,
+                epochs,
+                len(working),
+            )
+            stored = st.session_state.get(result_key)
+            cached_artifact = None
+            if isinstance(stored, dict) and stored.get("signature") == signature:
+                cached_artifact = stored["artifact"]
                 artifact = cached_artifact
+
+            _render_model_prediction_formula([feature], artifact)
+            _render_cost_formula()
+            quiz_unlocked = _render_simple_regression_pretrain_quiz(
+                working,
+                feature=feature,
+                target=target,
+                learning_rate=learning_rate,
+                expected_slope=expected_slope,
+                source_label=source_label,
+                epochs=epochs,
+            )
+            step_mode = st.toggle("逐步模式", value=False, key=step_mode_key)
+            train_clicked = st.button(
+                "開始訓練",
+                type="primary",
+                width="stretch",
+                key="train_simple_regression",
+                disabled=not quiz_unlocked,
+            )
+            if not quiz_unlocked:
+                st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+            if train_clicked and quiz_unlocked:
+                steps = gradient_descent_steps(
+                    working[[feature]],
+                    working[target],
+                    learning_rate=learning_rate,
+                    epochs=epochs,
+                )
+                frames = build_training_micro_frames(
+                    _animation_steps(steps),
+                    learning_rate=learning_rate,
+                    feature_names=[feature],
+                )
+                st.session_state[anim_key] = {
+                    "frames": frames,
+                    "steps": steps,
+                    "index": 0,
+                    "finished": False,
+                    "step_mode": bool(step_mode),
+                    "signature": signature,
+                }
+                st.rerun()
+        else:
+            st.markdown("###### 輸出呈現")
+            chart_left, chart_right = st.columns(2)
+            line_placeholder = chart_left.empty()
+            cost_placeholder = chart_right.empty()
+            status_placeholder = st.empty()
+            if artifact is not None:
                 prediction = predict_from_artifact(artifact, working[artifact.features])
-                _paint_teaching_flow(flow_placeholder, finished=True)
                 status_placeholder.caption(
                     "顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。"
                 )
@@ -1718,12 +1805,15 @@ def _render_simple_regression_stage() -> None:
                     ),
                     line_placeholder,
                 )
-                with results_placeholder.container():
-                    _render_training_results(artifact, working, target, prediction)
-            else:
-                st.caption(
-                    "訓練後這裡會出現回歸線、Cost 曲線與預測誤差表。"
+                result_bundle = st.session_state.get(result_key)
+                cached_steps = (
+                    result_bundle.get("steps") if isinstance(result_bundle, dict) else None
                 )
+                if isinstance(cached_steps, list) and cached_steps:
+                    _render_cost_history_plot(cached_steps, cost_placeholder)
+                _render_training_results(artifact, working, target, prediction)
+            else:
+                st.caption("訓練後這裡會出現回歸線、Cost 曲線與預測誤差表。")
                 _render_empty_regression_output(
                     line_placeholder,
                     cost_placeholder,
@@ -1733,13 +1823,20 @@ def _render_simple_regression_stage() -> None:
                 )
                 if quiz_unlocked:
                     status_placeholder.info(
-                        "兩題已過關。按下「開始訓練」觀察回歸線與 Cost 的演進。"
+                        "兩題已過關。到「回歸模型」按下「開始訓練」，觀察梯度如何更新 w。"
                     )
                 else:
-                    status_placeholder.info("先完成模型欄兩題訓練前預測，再開始訓練。")
+                    status_placeholder.info("先到「回歸模型」完成兩題訓練前預測，再開始訓練。")
 
     slope_choice = str(st.session_state.get(SESSION_SLOPE, PLEASE_SELECT))
     alpha_choice = str(st.session_state.get(SESSION_ALPHA, PLEASE_SELECT))
+    quiz_unlocked = both_quiz_correct(
+        slope_choice,
+        alpha_choice,
+        expected_slope=expected_slope,
+    )
+    learning_rate = float(st.session_state.get(lr_key, learning_rate))
+    epochs = int(st.session_state.get(epochs_key, epochs))
     quiz_note = build_quiz_agent_appendix(
         slope_status=quiz_choice_status(
             slope_choice,
@@ -1752,7 +1849,7 @@ def _render_simple_regression_stage() -> None:
         focus_qid=st.session_state.get(SESSION_FOCUS),
         feature=feature,
         target=target,
-        learning_rate=float(learning_rate),
+        learning_rate=learning_rate,
         unlocked=quiz_unlocked,
     )
     st.session_state[LR_CONTEXT_KEY] = (
@@ -1761,8 +1858,8 @@ def _render_simple_regression_stage() -> None:
             data_source=source_label,
             features=[feature],
             target=target,
-            learning_rate=float(learning_rate),
-            epochs=int(epochs),
+            learning_rate=learning_rate,
+            epochs=epochs,
             row_count=len(working),
             artifact=artifact,
             prompt_train=quiz_unlocked,
@@ -1772,6 +1869,101 @@ def _render_simple_regression_stage() -> None:
     )
     focus = st.session_state.get(SESSION_FOCUS)
     _render_regression_prompts(focus_prompt_lines(focus, unlocked=quiz_unlocked))
+
+
+def _run_simple_training_session(
+    working: pd.DataFrame,
+    *,
+    feature: str,
+    target: str,
+    source_label: str,
+    signature: tuple,
+    result_key: str,
+    anim_key: str,
+    view_key: str,
+    flow_placeholder,
+    micro_placeholder,
+) -> None:
+    anim = st.session_state.get(anim_key)
+    if not isinstance(anim, dict) or anim.get("finished"):
+        return
+    frames: list[TrainingMicroFrame] = list(anim["frames"])
+    steps: list[GradientDescentStep] = list(anim["steps"])
+    if not frames:
+        anim["finished"] = True
+        return
+
+    board_col, chart_col = st.columns(2, gap="medium")
+    with board_col:
+        board_placeholder = st.empty()
+        next_placeholder = st.empty()
+    with chart_col:
+        line_placeholder = st.empty()
+        cost_placeholder = st.empty()
+        status_placeholder = st.empty()
+
+    def _show_frame(frame: TrainingMicroFrame) -> None:
+        caption = _micro_live_caption(frame)
+        _paint_teaching_flow(flow_placeholder, training=True, live_caption=caption)
+        _paint_micro_stepper(micro_placeholder, hot=frame.micro_step)
+        with board_placeholder.container():
+            _render_gradient_board(frame, simple=True)
+        chart_step = GradientDescentStep(
+            iteration=frame.iteration,
+            weights=list(frame.chart_weights),
+            intercept=float(frame.chart_intercept),
+            cost=float(frame.chart_cost),
+        )
+        _render_simple_step_plot(working, feature, target, chart_step, line_placeholder)
+        _render_cost_history_plot(_cost_history_for_frame(steps, frame), cost_placeholder)
+        status_placeholder.caption(caption)
+
+    def _finalize() -> None:
+        final_step = steps[-1]
+        prediction = predict_with_parameters(
+            working[[feature]],
+            final_step.weights,
+            final_step.intercept,
+        )
+        artifact = LinearModelArtifact(
+            model_kind="simple_linear_regression",
+            features=[feature],
+            target=target,
+            weights=[float(final_step.weights[0])],
+            intercept=float(final_step.intercept),
+            scaler=None,
+            training_cost=float(final_step.cost),
+            data_source=source_label,
+        )
+        st.session_state[result_key] = {
+            "signature": signature,
+            "artifact": artifact,
+            "steps": steps,
+        }
+        anim["finished"] = True
+        st.session_state[view_key] = FLOW_VIEW_OUTPUT
+        _paint_teaching_flow(flow_placeholder, finished=True)
+        micro_placeholder.empty()
+        _ = prediction
+
+    if anim.get("step_mode"):
+        index = int(anim.get("index", 0))
+        index = min(max(index, 0), len(frames) - 1)
+        _show_frame(frames[index])
+        with next_placeholder.container():
+            if st.button("下一步", type="primary", key="simple_regression_next_micro"):
+                if index + 1 >= len(frames):
+                    _finalize()
+                else:
+                    anim["index"] = index + 1
+                st.rerun()
+        return
+
+    for frame in frames:
+        _show_frame(frame)
+        time.sleep(0.015)
+    _finalize()
+    st.rerun()
 
 
 def _render_multiple_regression_stage() -> None:
@@ -1798,142 +1990,164 @@ def _render_multiple_regression_stage() -> None:
         return
     scaled_features = apply_standard_scaler(working, scaler)
 
+    view_key = "multiple_regression_view"
+    anim_key = "multiple_regression_anim"
+    result_key = "multiple_regression_last_artifact"
+    lr_key = "multiple_regression_learning_rate"
+    epochs_key = "multiple_regression_epochs"
+    step_mode_key = "multiple_regression_step_mode"
+
+    learning_rate = float(st.session_state.get(lr_key, 0.1))
+    epochs = int(st.session_state.get(epochs_key, 1000))
+    signature = (
+        source_label,
+        tuple(selected_features),
+        target,
+        learning_rate,
+        epochs,
+        len(working),
+    )
+    stored = st.session_state.get(result_key)
+    cached_artifact: LinearModelArtifact | None = None
+    if isinstance(stored, dict) and stored.get("signature") == signature:
+        cached_artifact = stored["artifact"]
+
+    purpose_choice = str(st.session_state.get(multi_quiz.SESSION_PURPOSE, multi_quiz.PLEASE_SELECT))
+    weights_choice = str(st.session_state.get(multi_quiz.SESSION_WEIGHTS, multi_quiz.PLEASE_SELECT))
+    quiz_unlocked = multi_quiz.both_quiz_correct(purpose_choice, weights_choice)
+
+    anim = st.session_state.get(anim_key)
+    training_active = isinstance(anim, dict) and not anim.get("finished", True)
+
     flow_placeholder = st.empty()
-    _paint_teaching_flow(flow_placeholder)
-
-    col_in, col_model, col_out = st.columns(3, gap="medium")
-    with col_in:
-        st.markdown("###### 輸入資料")
-        _render_regression_data_intro(
-            working,
-            features=selected_features,
-            target=target,
-            dataset_note=(
-                "每一列是一間房屋：多個 x features 共同預測房價 y。"
-                "features 會先做 Z-score 縮放，再進行梯度下降。"
-            ),
-        )
-
-    with col_model:
-        st.markdown("###### 回歸模型")
-        st.markdown("##### 訓練設定")
-        c1, c2 = st.columns(2)
-        learning_rate = c1.number_input(
-            "學習率 α",
-            min_value=0.0001,
-            max_value=1.0,
-            value=0.1,
-            step=0.001,
-            format="%.4f",
-            key="multiple_regression_learning_rate",
-        )
-        epochs = c2.number_input(
-            "Epoch / 迭代次數",
-            min_value=1,
-            max_value=5000,
-            value=1000,
-            step=100,
-            key="multiple_regression_epochs",
-        )
-
-        result_key = "multiple_regression_last_artifact"
-        signature = (
-            source_label,
-            tuple(selected_features),
-            target,
-            float(learning_rate),
-            int(epochs),
-            len(working),
-        )
-        stored = st.session_state.get(result_key)
-        cached_artifact: LinearModelArtifact | None = None
-        if isinstance(stored, dict) and stored.get("signature") == signature:
-            cached_artifact = stored["artifact"]
-
-        formula_placeholder = st.empty()
-        with formula_placeholder.container():
-            _render_model_prediction_formula(selected_features, cached_artifact)
-        _render_cost_formula()
-        st.caption("此處的 w 對應 Z-score 縮放後的 features。")
-
-        quiz_unlocked = _render_multiple_regression_pretrain_quiz(
-            features=selected_features,
-            target=target,
-            learning_rate=float(learning_rate),
-            source_label=source_label,
-            epochs=int(epochs),
-            row_count=len(working),
-        )
-        train_clicked = st.button(
-            "開始訓練",
-            type="primary",
-            width="stretch",
-            key="train_multiple_regression",
-            disabled=not quiz_unlocked,
-        )
-        if not quiz_unlocked:
-            st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
-
-    artifact: LinearModelArtifact | None = None
+    micro_placeholder = st.empty()
+    artifact: LinearModelArtifact | None = cached_artifact
     prediction: pd.Series | None = None
 
-    with col_out:
-        st.markdown("###### 輸出呈現")
-        chart_left, chart_right = st.columns(2)
-        prediction_placeholder = chart_left.empty()
-        cost_placeholder = chart_right.empty()
-        status_placeholder = st.empty()
-        results_placeholder = st.empty()
+    if training_active:
+        _run_multiple_training_session(
+            working,
+            scaled_features=scaled_features,
+            selected_features=selected_features,
+            target=target,
+            scaler=scaler,
+            source_label=source_label,
+            signature=signature,
+            result_key=result_key,
+            anim_key=anim_key,
+            view_key=view_key,
+            flow_placeholder=flow_placeholder,
+            micro_placeholder=micro_placeholder,
+        )
+        stored_after = st.session_state.get(result_key)
+        if isinstance(stored_after, dict) and stored_after.get("signature") == signature:
+            artifact = stored_after["artifact"]
+        anim = st.session_state.get(anim_key)
+        training_active = isinstance(anim, dict) and not anim.get("finished", True)
 
-        if train_clicked and quiz_unlocked:
-            with formula_placeholder.container():
-                _render_model_prediction_formula(selected_features, None)
-                model_live_placeholder = st.empty()
-            steps = gradient_descent_steps(
-                scaled_features,
-                working[target],
-                learning_rate=float(learning_rate),
-                epochs=int(epochs),
-            )
-            _animate_multiple_gradient_descent(
-                scaled_features,
-                working[target],
-                target,
-                steps,
-                prediction_placeholder,
-                cost_placeholder,
-                status_placeholder,
-                flow_placeholder=flow_placeholder,
-                model_live_placeholder=model_live_placeholder,
-            )
-            final_step = steps[-1]
-            prediction = predict_with_parameters(
-                scaled_features,
-                final_step.weights,
-                final_step.intercept,
-            )
-            artifact = LinearModelArtifact(
-                model_kind="multiple_linear_regression",
+    if not training_active:
+        _paint_teaching_flow(flow_placeholder, finished=artifact is not None)
+        micro_placeholder.empty()
+        view = _render_lr_view_radio(view_key)
+
+        if view == FLOW_VIEW_INPUT:
+            st.markdown("###### 輸入資料")
+            _render_regression_data_intro(
+                working,
                 features=selected_features,
                 target=target,
-                weights=[float(value) for value in final_step.weights],
-                intercept=float(final_step.intercept),
-                scaler=scaler,
-                training_cost=float(final_step.cost),
-                data_source=source_label,
+                dataset_note=(
+                    "每一列是一間房屋：多個 x features 共同預測房價 y。"
+                    "features 會先做 Z-score 縮放，再進行梯度下降。"
+                ),
             )
-            st.session_state[result_key] = {"signature": signature, "artifact": artifact}
-            _paint_teaching_flow(flow_placeholder, finished=True)
-            with formula_placeholder.container():
-                _render_model_prediction_formula(selected_features, artifact)
-            with results_placeholder.container():
-                _render_training_results(artifact, working, target, prediction)
-                _render_feature_target_overview(working, selected_features, target)
+        elif view == FLOW_VIEW_MODEL:
+            st.markdown("###### 回歸模型")
+            st.markdown("##### 訓練設定")
+            c1, c2 = st.columns(2)
+            learning_rate = float(
+                c1.number_input(
+                    "學習率 α",
+                    min_value=0.0001,
+                    max_value=1.0,
+                    value=learning_rate,
+                    step=0.001,
+                    format="%.4f",
+                    key=lr_key,
+                )
+            )
+            epochs = int(
+                c2.number_input(
+                    "Epoch / 迭代次數",
+                    min_value=1,
+                    max_value=5000,
+                    value=epochs,
+                    step=100,
+                    key=epochs_key,
+                )
+            )
+            signature = (
+                source_label,
+                tuple(selected_features),
+                target,
+                learning_rate,
+                epochs,
+                len(working),
+            )
+            stored = st.session_state.get(result_key)
+            if isinstance(stored, dict) and stored.get("signature") == signature:
+                artifact = stored["artifact"]
+
+            _render_model_prediction_formula(selected_features, artifact)
+            _render_cost_formula()
+            st.caption("此處的 w 對應 Z-score 縮放後的 features。")
+            quiz_unlocked = _render_multiple_regression_pretrain_quiz(
+                features=selected_features,
+                target=target,
+                learning_rate=learning_rate,
+                source_label=source_label,
+                epochs=epochs,
+                row_count=len(working),
+            )
+            step_mode = st.toggle("逐步模式", value=False, key=step_mode_key)
+            train_clicked = st.button(
+                "開始訓練",
+                type="primary",
+                width="stretch",
+                key="train_multiple_regression",
+                disabled=not quiz_unlocked,
+            )
+            if not quiz_unlocked:
+                st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+            if train_clicked and quiz_unlocked:
+                steps = gradient_descent_steps(
+                    scaled_features,
+                    working[target],
+                    learning_rate=learning_rate,
+                    epochs=epochs,
+                )
+                frames = build_training_micro_frames(
+                    _animation_steps(steps),
+                    learning_rate=learning_rate,
+                    feature_names=selected_features,
+                )
+                st.session_state[anim_key] = {
+                    "frames": frames,
+                    "steps": steps,
+                    "index": 0,
+                    "finished": False,
+                    "step_mode": bool(step_mode),
+                    "signature": signature,
+                }
+                st.rerun()
         else:
-            if cached_artifact is not None:
-                artifact = cached_artifact
+            st.markdown("###### 輸出呈現")
+            chart_left, chart_right = st.columns(2)
+            prediction_placeholder = chart_left.empty()
+            cost_placeholder = chart_right.empty()
+            status_placeholder = st.empty()
+            if artifact is not None:
                 prediction = predict_from_artifact(artifact, working[artifact.features])
-                _paint_teaching_flow(flow_placeholder, finished=True)
                 status_placeholder.caption(
                     "顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。"
                 )
@@ -1943,13 +2157,16 @@ def _render_multiple_regression_stage() -> None:
                     target,
                     prediction_placeholder,
                 )
-                with results_placeholder.container():
-                    _render_training_results(artifact, working, target, prediction)
-                    _render_feature_target_overview(working, selected_features, target)
-            else:
-                st.caption(
-                    "訓練後這裡會出現實際值 vs 預測值、Cost 曲線與預測誤差表。"
+                result_bundle = st.session_state.get(result_key)
+                cached_steps = (
+                    result_bundle.get("steps") if isinstance(result_bundle, dict) else None
                 )
+                if isinstance(cached_steps, list) and cached_steps:
+                    _render_cost_history_plot(cached_steps, cost_placeholder)
+                _render_training_results(artifact, working, target, prediction)
+                _render_feature_target_overview(working, selected_features, target)
+            else:
+                st.caption("訓練後這裡會出現實際值 vs 預測值、Cost 曲線與預測誤差表。")
                 _render_empty_regression_output(
                     prediction_placeholder,
                     cost_placeholder,
@@ -1959,13 +2176,16 @@ def _render_multiple_regression_stage() -> None:
                 )
                 if quiz_unlocked:
                     status_placeholder.info(
-                        "兩題已過關。按下「開始訓練」觀察預測值與 Cost 的演進。"
+                        "兩題已過關。到「回歸模型」按下「開始訓練」，觀察各 w 的梯度更新。"
                     )
                 else:
-                    status_placeholder.info("先完成模型欄兩題訓練前預測，再開始訓練。")
+                    status_placeholder.info("先到「回歸模型」完成兩題訓練前預測，再開始訓練。")
 
     purpose_choice = str(st.session_state.get(multi_quiz.SESSION_PURPOSE, multi_quiz.PLEASE_SELECT))
     weights_choice = str(st.session_state.get(multi_quiz.SESSION_WEIGHTS, multi_quiz.PLEASE_SELECT))
+    quiz_unlocked = multi_quiz.both_quiz_correct(purpose_choice, weights_choice)
+    learning_rate = float(st.session_state.get(lr_key, learning_rate))
+    epochs = int(st.session_state.get(epochs_key, epochs))
     quiz_note = multi_quiz.build_quiz_agent_appendix(
         purpose_status=multi_quiz.quiz_choice_status(
             purpose_choice,
@@ -1978,7 +2198,7 @@ def _render_multiple_regression_stage() -> None:
         focus_qid=st.session_state.get(multi_quiz.SESSION_FOCUS),
         features=selected_features,
         target=target,
-        learning_rate=float(learning_rate),
+        learning_rate=learning_rate,
         unlocked=quiz_unlocked,
         use_housing_example="ready.csv" not in source_label,
     )
@@ -1988,8 +2208,8 @@ def _render_multiple_regression_stage() -> None:
             data_source=source_label,
             features=selected_features,
             target=target,
-            learning_rate=float(learning_rate),
-            epochs=int(epochs),
+            learning_rate=learning_rate,
+            epochs=epochs,
             row_count=len(working),
             artifact=artifact,
             note="多變量階段會先對 features 做 Z-score 特徵縮放。",
@@ -2000,6 +2220,107 @@ def _render_multiple_regression_stage() -> None:
     )
     focus = st.session_state.get(multi_quiz.SESSION_FOCUS)
     _render_regression_prompts(multi_quiz.focus_prompt_lines(focus, unlocked=quiz_unlocked))
+
+
+def _run_multiple_training_session(
+    working: pd.DataFrame,
+    *,
+    scaled_features: pd.DataFrame,
+    selected_features: list[str],
+    target: str,
+    scaler: dict,
+    source_label: str,
+    signature: tuple,
+    result_key: str,
+    anim_key: str,
+    view_key: str,
+    flow_placeholder,
+    micro_placeholder,
+) -> None:
+    anim = st.session_state.get(anim_key)
+    if not isinstance(anim, dict) or anim.get("finished"):
+        return
+    frames: list[TrainingMicroFrame] = list(anim["frames"])
+    steps: list[GradientDescentStep] = list(anim["steps"])
+    if not frames:
+        anim["finished"] = True
+        return
+
+    board_col, chart_col = st.columns(2, gap="medium")
+    with board_col:
+        board_placeholder = st.empty()
+        next_placeholder = st.empty()
+    with chart_col:
+        prediction_placeholder = st.empty()
+        cost_placeholder = st.empty()
+        status_placeholder = st.empty()
+
+    def _show_frame(frame: TrainingMicroFrame) -> None:
+        caption = _micro_live_caption(frame)
+        _paint_teaching_flow(flow_placeholder, training=True, live_caption=caption)
+        _paint_micro_stepper(micro_placeholder, hot=frame.micro_step)
+        with board_placeholder.container():
+            _render_gradient_board(frame, simple=False)
+        prediction = predict_with_parameters(
+            scaled_features,
+            frame.chart_weights,
+            frame.chart_intercept,
+        )
+        _render_actual_prediction_plot(
+            working[target],
+            prediction,
+            target,
+            prediction_placeholder,
+        )
+        _render_cost_history_plot(_cost_history_for_frame(steps, frame), cost_placeholder)
+        status_placeholder.caption(caption)
+
+    def _finalize() -> None:
+        final_step = steps[-1]
+        prediction = predict_with_parameters(
+            scaled_features,
+            final_step.weights,
+            final_step.intercept,
+        )
+        artifact = LinearModelArtifact(
+            model_kind="multiple_linear_regression",
+            features=selected_features,
+            target=target,
+            weights=[float(value) for value in final_step.weights],
+            intercept=float(final_step.intercept),
+            scaler=scaler,
+            training_cost=float(final_step.cost),
+            data_source=source_label,
+        )
+        st.session_state[result_key] = {
+            "signature": signature,
+            "artifact": artifact,
+            "steps": steps,
+        }
+        anim["finished"] = True
+        st.session_state[view_key] = FLOW_VIEW_OUTPUT
+        _paint_teaching_flow(flow_placeholder, finished=True)
+        micro_placeholder.empty()
+        _ = prediction
+
+    if anim.get("step_mode"):
+        index = int(anim.get("index", 0))
+        index = min(max(index, 0), len(frames) - 1)
+        _show_frame(frames[index])
+        with next_placeholder.container():
+            if st.button("下一步", type="primary", key="multiple_regression_next_micro"):
+                if index + 1 >= len(frames):
+                    _finalize()
+                else:
+                    anim["index"] = index + 1
+                st.rerun()
+        return
+
+    for frame in frames:
+        _show_frame(frame)
+        time.sleep(0.015)
+    _finalize()
+    st.rerun()
 
 
 def _reset_simple_regression_quiz_answers() -> None:
@@ -2500,79 +2821,6 @@ def _render_regression_data_intro(
     with st.expander("資料預覽", expanded=True):
         st.dataframe(frame[features + [target]].head(10), width="stretch", hide_index=True)
     render_figures_in_streamlit(build_regression_data_figures(frame, features, target))
-
-
-def _animate_simple_gradient_descent(
-    frame: pd.DataFrame,
-    feature: str,
-    target: str,
-    steps: list[GradientDescentStep],
-    line_placeholder,
-    cost_placeholder,
-    status_placeholder,
-    *,
-    flow_placeholder=None,
-    model_live_placeholder=None,
-) -> None:
-    rendered_steps = _animation_steps(steps)
-    total = steps[-1].iteration
-    for step in rendered_steps:
-        caption = live_fit_caption(
-            iteration=step.iteration,
-            total_iterations=total,
-            weights=step.weights,
-            intercept=step.intercept,
-            cost=step.cost,
-        )
-        if flow_placeholder is not None:
-            _paint_teaching_flow(
-                flow_placeholder,
-                training=True,
-                live_caption=caption,
-            )
-        if model_live_placeholder is not None:
-            model_live_placeholder.caption(caption)
-        _render_simple_step_plot(frame, feature, target, step, line_placeholder)
-        _render_cost_history_plot(steps[: step.iteration + 1], cost_placeholder)
-        status_placeholder.caption(caption)
-        time.sleep(0.02)
-
-
-def _animate_multiple_gradient_descent(
-    scaled_features: pd.DataFrame,
-    actual: pd.Series,
-    target: str,
-    steps: list[GradientDescentStep],
-    prediction_placeholder,
-    cost_placeholder,
-    status_placeholder,
-    *,
-    flow_placeholder=None,
-    model_live_placeholder=None,
-) -> None:
-    rendered_steps = _animation_steps(steps)
-    total = steps[-1].iteration
-    for step in rendered_steps:
-        caption = live_fit_caption(
-            iteration=step.iteration,
-            total_iterations=total,
-            weights=step.weights,
-            intercept=step.intercept,
-            cost=step.cost,
-        )
-        if flow_placeholder is not None:
-            _paint_teaching_flow(
-                flow_placeholder,
-                training=True,
-                live_caption=caption,
-            )
-        if model_live_placeholder is not None:
-            model_live_placeholder.caption(caption)
-        prediction = predict_with_parameters(scaled_features, step.weights, step.intercept)
-        _render_actual_prediction_plot(actual, prediction, target, prediction_placeholder)
-        _render_cost_history_plot(steps[: step.iteration + 1], cost_placeholder)
-        status_placeholder.caption(caption)
-        time.sleep(0.02)
 
 
 def _render_empty_regression_output(

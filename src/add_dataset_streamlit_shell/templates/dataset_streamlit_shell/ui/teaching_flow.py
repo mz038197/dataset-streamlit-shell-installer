@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from html import escape
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
+
+if TYPE_CHECKING:
+    from dataset_streamlit_shell.ml.regression import GradientDescentStep
 
 FLOW_INPUT = "input"
 FLOW_MODEL = "model"
@@ -17,6 +20,56 @@ FLOW_NODE_LABELS = {
 }
 
 FLOW_NODE_ORDER = (FLOW_INPUT, FLOW_MODEL, FLOW_OUTPUT)
+
+FLOW_VIEW_INPUT = FLOW_NODE_LABELS[FLOW_INPUT]
+FLOW_VIEW_MODEL = FLOW_NODE_LABELS[FLOW_MODEL]
+FLOW_VIEW_OUTPUT = FLOW_NODE_LABELS[FLOW_OUTPUT]
+FLOW_VIEW_LABELS = (FLOW_VIEW_INPUT, FLOW_VIEW_MODEL, FLOW_VIEW_OUTPUT)
+
+MICRO_PREDICT = "predict"
+MICRO_COST = "cost"
+MICRO_GRAD = "grad"
+MICRO_UPDATE = "update"
+
+MICRO_STEP_LABELS = {
+    MICRO_PREDICT: "預測 ŷ",
+    MICRO_COST: "算 Cost J",
+    MICRO_GRAD: "算梯度",
+    MICRO_UPDATE: "更新參數",
+}
+
+MICRO_STEP_ORDER = (MICRO_PREDICT, MICRO_COST, MICRO_GRAD, MICRO_UPDATE)
+
+
+@dataclass(frozen=True)
+class TrainingMicroFrame:
+    iteration: int
+    total_iterations: int
+    micro_step: str
+    learning_rate: float
+    feature_names: list[str]
+    weights_before: list[float]
+    intercept_before: float
+    weights_after: list[float]
+    intercept_after: float
+    cost_before: float
+    cost_after: float
+    dj_dw: list[float]
+    dj_db: float
+    delta_w: list[float]
+    delta_b: float
+
+    @property
+    def chart_weights(self) -> list[float]:
+        return self.weights_after if self.micro_step == MICRO_UPDATE else self.weights_before
+
+    @property
+    def chart_intercept(self) -> float:
+        return self.intercept_after if self.micro_step == MICRO_UPDATE else self.intercept_before
+
+    @property
+    def chart_cost(self) -> float:
+        return self.cost_after if self.micro_step == MICRO_UPDATE else self.cost_before
 
 
 @dataclass(frozen=True)
@@ -74,6 +127,136 @@ def training_flow_state(*, finished: bool) -> FlowRenderState:
         hot=FLOW_MODEL,
         done=frozenset({FLOW_INPUT}),
     )
+
+
+def build_training_micro_frames(
+    steps: Iterable[GradientDescentStep],
+    *,
+    learning_rate: float,
+    feature_names: list[str] | None = None,
+) -> list[TrainingMicroFrame]:
+    step_list = list(steps)
+    if not step_list:
+        return []
+    total = step_list[-1].iteration
+    frames: list[TrainingMicroFrame] = []
+    for step in step_list:
+        if (
+            step.iteration < 1
+            or step.prev_weights is None
+            or step.prev_intercept is None
+            or step.prev_cost is None
+            or step.dj_dw is None
+            or step.dj_db is None
+            or step.delta_w is None
+            or step.delta_b is None
+        ):
+            continue
+        names = feature_names
+        if names is None:
+            names = [f"x{i}" for i in range(1, len(step.weights) + 1)]
+            if len(names) == 1:
+                names = ["x"]
+        for micro in MICRO_STEP_ORDER:
+            frames.append(
+                TrainingMicroFrame(
+                    iteration=step.iteration,
+                    total_iterations=total,
+                    micro_step=micro,
+                    learning_rate=float(learning_rate),
+                    feature_names=list(names),
+                    weights_before=list(step.prev_weights),
+                    intercept_before=float(step.prev_intercept),
+                    weights_after=list(step.weights),
+                    intercept_after=float(step.intercept),
+                    cost_before=float(step.prev_cost),
+                    cost_after=float(step.cost),
+                    dj_dw=list(step.dj_dw),
+                    dj_db=float(step.dj_db),
+                    delta_w=list(step.delta_w),
+                    delta_b=float(step.delta_b),
+                )
+            )
+    return frames
+
+
+def micro_stepper_html(*, hot: str | None) -> str:
+    cells = []
+    for index, name in enumerate(MICRO_STEP_ORDER):
+        classes = ["micro-step"]
+        if name == hot:
+            classes.append("hot")
+        label = escape(MICRO_STEP_LABELS[name])
+        cells.append(
+            f'<div class="{" ".join(classes)}" data-micro="{name}">'
+            f'<span class="micro-idx">{index + 1}</span>'
+            f'<span class="micro-label">{label}</span></div>'
+        )
+        if index < len(MICRO_STEP_ORDER) - 1:
+            cells.append('<div class="micro-arrow" aria-hidden="true">→</div>')
+    return (
+        '<div class="training-micro-wrap" role="list" aria-label="訓練微步驟">'
+        f'{"".join(cells)}</div>'
+    )
+
+
+def simple_gradient_board_lines(frame: TrainingMicroFrame) -> list[str]:
+    w0 = frame.weights_before[0]
+    lines = [
+        f"目前步驟：{MICRO_STEP_LABELS[frame.micro_step]}",
+        f"Iteration {frame.iteration:,} / {frame.total_iterations:,}",
+        f"α = {frame.learning_rate:g}",
+        f"w = {w0:.6g}",
+        f"b = {frame.intercept_before:.6g}",
+    ]
+    if frame.micro_step == MICRO_PREDICT:
+        lines.append("用當前 w、b 計算預測 ŷ = w·x + b")
+        return lines
+    if frame.micro_step in {MICRO_COST, MICRO_GRAD, MICRO_UPDATE}:
+        lines.append(f"Cost J = {frame.cost_before:.6g}")
+    if frame.micro_step in {MICRO_GRAD, MICRO_UPDATE}:
+        lines.append(f"∂J/∂w = {frame.dj_dw[0]:.6g}")
+        lines.append(f"∂J/∂b = {frame.dj_db:.6g}")
+    if frame.micro_step == MICRO_UPDATE:
+        lines.append(f"Δw = −α·∂J/∂w = {frame.delta_w[0]:.6g}")
+        lines.append(f"Δb = −α·∂J/∂b = {frame.delta_b:.6g}")
+        lines.append(f"w' = w + Δw = {frame.weights_after[0]:.6g}")
+        lines.append(f"b' = b + Δb = {frame.intercept_after:.6g}")
+        lines.append(f"更新後 Cost J = {frame.cost_after:.6g}")
+    return lines
+
+
+def gradient_board_rows(frame: TrainingMicroFrame) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    show_grad = frame.micro_step in {MICRO_GRAD, MICRO_UPDATE}
+    show_update = frame.micro_step == MICRO_UPDATE
+    for name, w, dj, dw, w_after in zip(
+        frame.feature_names,
+        frame.weights_before,
+        frame.dj_dw,
+        frame.delta_w,
+        frame.weights_after,
+        strict=True,
+    ):
+        rows.append(
+            {
+                "參數": name,
+                "當前": f"{w:.6g}",
+                "梯度": f"{dj:.6g}" if show_grad else "—",
+                "Δ": f"{dw:.6g}" if show_update else "—",
+                "更新後": f"{w_after:.6g}" if show_update else "—",
+            }
+        )
+    rows.append(
+        {
+            "參數": "b（截距）",
+            "當前": f"{frame.intercept_before:.6g}",
+            "梯度": f"{frame.dj_db:.6g}" if show_grad else "—",
+            "Δ": f"{frame.delta_b:.6g}" if show_update else "—",
+            "更新後": f"{frame.intercept_after:.6g}" if show_update else "—",
+        }
+    )
+    return rows
 
 
 def regression_flow_svg(
@@ -196,6 +379,39 @@ TEACHING_FLOW_CSS = """
 }
 @media (prefers-reduced-motion: reduce) {
     .teaching-flow .bx { transition: none; }
+}
+.training-micro-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    margin: 0.2rem 0 0.9rem;
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.training-micro-wrap .micro-step {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(250, 250, 250, 0.28);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.85rem;
+}
+.training-micro-wrap .micro-step.hot {
+    border-color: rgba(90, 160, 255, 0.95);
+    background: rgba(90, 160, 255, 0.16);
+    font-weight: 600;
+}
+.training-micro-wrap .micro-idx {
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+}
+.training-micro-wrap .micro-arrow {
+    opacity: 0.45;
 }
 </style>
 """
