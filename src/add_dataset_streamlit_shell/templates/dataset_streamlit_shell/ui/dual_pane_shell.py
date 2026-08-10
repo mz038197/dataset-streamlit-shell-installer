@@ -191,6 +191,14 @@ def inject_dual_pane_chrome() -> None:
     );
   }}
 
+  function chatScrollHost(el) {{
+    /* st.container(height=N) wraps the scrollport in stLayoutWrapper with
+       emotion flex: 0 0 Npx — that host must grow too or height sticks at N.
+       Return only that wrapper (or null); never a random parentElement. */
+    if (!el) return null;
+    return el.closest('[data-testid="stLayoutWrapper"]');
+  }}
+
   function clearInnerHeightLocks(col) {{
     /* Column is the scrollport; do not lock nested vertical blocks to a fixed
        height (that clipped siblings / quiz blocks below the fold).
@@ -205,6 +213,7 @@ def inject_dual_pane_chrome() -> None:
       vb.style.removeProperty("overflow");
     }});
     Array.prototype.forEach.call(col.children, function (child) {{
+      if (child.classList && child.classList.contains("dss-chat-scroll-host")) return;
       child.style.setProperty("min-height", "0", "important");
       child.style.removeProperty("height");
       child.style.removeProperty("max-height");
@@ -320,9 +329,21 @@ def inject_dual_pane_chrome() -> None:
 
     if (!target) return;
     target.classList.add("dss-chat-scroll");
+    const host = chatScrollHost(target);
+    /* Always measure from the scrollport itself — host may be absent. */
     const top = target.getBoundingClientRect().top;
     const avail = Math.floor(colRect.bottom - top - inputH - pad);
     const height = Math.max(0, avail);
+    if (host && host !== target) {{
+      host.classList.add("dss-chat-scroll-host");
+      host.style.setProperty("height", height + "px", "important");
+      host.style.setProperty("max-height", height + "px", "important");
+      host.style.setProperty("flex", "1 1 auto", "important");
+      host.style.setProperty("flex-basis", "auto", "important");
+      host.style.setProperty("min-height", "0", "important");
+      host.style.setProperty("min-width", "0", "important");
+      host.style.setProperty("overflow", "hidden", "important");
+    }}
     target.style.setProperty("height", height + "px", "important");
     target.style.setProperty("max-height", height + "px", "important");
     target.style.setProperty("flex", "1 1 auto", "important");

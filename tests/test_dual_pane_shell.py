@@ -85,6 +85,19 @@ def test_agent_chat_pins_input_and_scrolls_messages() -> None:
     assert "data-test-scroll-behavior" in chrome
     assert "DOCUMENT_POSITION_FOLLOWING" in chrome
     assert "dss-chat-scroll" in chrome
+    # st.container(height=N) also locks parent stLayoutWrapper to flex: 0 0 Npx.
+    assert "chatScrollHost" in chrome
+    assert "dss-chat-scroll-host" in chrome
+    assert "flex-basis" in chrome
+    # Host is LayoutWrapper only; top/height must be measured from the scroll target.
+    host_fn = chrome.split("function chatScrollHost", 1)[1].split(
+        "function clearInnerHeightLocks", 1
+    )[0]
+    assert "|| el.parentElement" not in host_fn
+    assert "target.getBoundingClientRect().top" in chrome
+    assert "topEl" not in chrome.split("function layoutAgentChat", 1)[1].split(
+        "function applyLayout", 1
+    )[0]
 
 
 def test_chat_panel_has_no_image_attachment_path() -> None:
