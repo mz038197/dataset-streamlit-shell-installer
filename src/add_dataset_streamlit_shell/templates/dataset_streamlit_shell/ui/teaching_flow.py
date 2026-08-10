@@ -40,6 +40,9 @@ MICRO_STEP_LABELS = {
 
 MICRO_STEP_ORDER = (MICRO_PREDICT, MICRO_COST, MICRO_GRAD, MICRO_UPDATE)
 
+SAMPLE_OPS_HEAD = 5
+SAMPLE_OPS_SCALE_NOTE = "表上 x 為 Z-score 後、與當前 w 相乘的同一組輸入。"
+
 
 @dataclass(frozen=True)
 class TrainingMicroFrame:
@@ -256,6 +259,55 @@ def gradient_board_rows(frame: TrainingMicroFrame) -> list[dict[str, str]]:
             "更新後": f"{frame.intercept_after:.6g}" if show_update else "—",
         }
     )
+    return rows
+
+
+def sample_ops_table_visible(micro_step: str) -> bool:
+    return micro_step in {MICRO_PREDICT, MICRO_COST}
+
+
+def sample_ops_x_labels(feature_names: list[str]) -> list[str]:
+    if len(feature_names) == 1:
+        return ["x（Z-score）"]
+    return [f"{name}（Z-score）" for name in feature_names]
+
+
+def sample_ops_cost_caption(frame: TrainingMicroFrame) -> str | None:
+    if frame.micro_step != MICRO_COST:
+        return None
+    return f"Cost J（整批）= {frame.cost_before:.6g}"
+
+
+def sample_ops_table_rows(
+    frame: TrainingMicroFrame,
+    *,
+    scaled_x_rows: list[list[float]],
+    y_rows: list[float],
+) -> list[dict[str, str]] | None:
+    if not sample_ops_table_visible(frame.micro_step):
+        return None
+    if len(scaled_x_rows) != len(y_rows):
+        raise ValueError("scaled_x_rows and y_rows length mismatch")
+    x_labels = sample_ops_x_labels(frame.feature_names)
+    n_features = len(frame.feature_names)
+    show_error = frame.micro_step == MICRO_COST
+    rows: list[dict[str, str]] = []
+    for x_row, y in zip(scaled_x_rows, y_rows, strict=True):
+        if len(x_row) != n_features:
+            raise ValueError("scaled_x_rows feature width mismatch")
+        y_hat = sum(
+            float(w) * float(x) for w, x in zip(frame.weights_before, x_row, strict=True)
+        ) + float(frame.intercept_before)
+        row: dict[str, str] = {
+            label: f"{float(x):.6g}" for label, x in zip(x_labels, x_row, strict=True)
+        }
+        row["ŷ"] = f"{y_hat:.6g}"
+        row["y"] = f"{float(y):.6g}"
+        if show_error:
+            err = y_hat - float(y)
+            row["error"] = f"{err:.6g}"
+            row["error²"] = f"{(err * err):.6g}"
+        rows.append(row)
     return rows
 
 

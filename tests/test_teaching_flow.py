@@ -24,12 +24,18 @@ from dataset_streamlit_shell.ui.teaching_flow import (
     MICRO_PREDICT,
     MICRO_STEP_ORDER,
     MICRO_UPDATE,
+    SAMPLE_OPS_HEAD,
+    SAMPLE_OPS_SCALE_NOTE,
     build_training_micro_frames,
     gradient_board_rows,
     live_fit_caption,
     micro_stepper_html,
     numeric_prediction_latex,
     regression_flow_svg,
+    sample_ops_cost_caption,
+    sample_ops_table_rows,
+    sample_ops_table_visible,
+    sample_ops_x_labels,
     simple_gradient_board_lines,
     symbolic_prediction_latex,
     training_flow_state,
@@ -169,23 +175,101 @@ def test_gradient_board_rows_table_for_multiple_features() -> None:
     assert len(rows) == 3
 
 
-def _sample_micro_frame(*, micro: str):
+def _sample_micro_frame(*, micro: str, feature_names: list[str] | None = None):
     from dataset_streamlit_shell.ui.teaching_flow import TrainingMicroFrame
 
+    names = feature_names or ["x"]
+    n = len(names)
     return TrainingMicroFrame(
         iteration=1,
         total_iterations=5,
         micro_step=micro,
         learning_rate=0.01,
-        feature_names=["x"],
-        weights_before=[0.0],
-        intercept_before=0.0,
-        weights_after=[0.65],
+        feature_names=names,
+        weights_before=[0.5] * n,
+        intercept_before=0.1,
+        weights_after=[0.65] * n,
         intercept_after=0.4,
         cost_before=8.5,
         cost_after=7.0,
-        dj_dw=[-6.5],
+        dj_dw=[-6.5] * n,
         dj_db=-4.0,
-        delta_w=[0.65],
+        delta_w=[0.65] * n,
         delta_b=0.4,
+    )
+
+
+def test_sample_ops_table_visible_only_predict_and_cost() -> None:
+    assert sample_ops_table_visible(MICRO_PREDICT)
+    assert sample_ops_table_visible(MICRO_COST)
+    assert not sample_ops_table_visible(MICRO_GRAD)
+    assert not sample_ops_table_visible(MICRO_UPDATE)
+
+
+def test_sample_ops_x_labels_mark_zscore() -> None:
+    assert sample_ops_x_labels(["城市人口_萬人"]) == ["x（Z-score）"]
+    assert sample_ops_x_labels(["面積", "房間數"]) == ["面積（Z-score）", "房間數（Z-score）"]
+    assert "Z-score" in SAMPLE_OPS_SCALE_NOTE
+    assert SAMPLE_OPS_HEAD == 5
+
+
+def test_sample_ops_table_predict_columns_use_scaled_x() -> None:
+    frame = _sample_micro_frame(micro=MICRO_PREDICT)
+    # ŷ = 0.5 * (-1) + 0.1 = -0.4 ; ŷ = 0.5 * 1 + 0.1 = 0.6
+    rows = sample_ops_table_rows(
+        frame,
+        scaled_x_rows=[[-1.0], [1.0]],
+        y_rows=[0.0, 1.0],
+    )
+    assert rows is not None
+    assert list(rows[0].keys()) == ["x（Z-score）", "ŷ", "y"]
+    assert rows[0]["x（Z-score）"] == "-1"
+    assert rows[0]["ŷ"] == "-0.4"
+    assert rows[0]["y"] == "0"
+    assert "error" not in rows[0]
+    assert sample_ops_cost_caption(frame) is None
+
+
+def test_sample_ops_table_cost_adds_error_and_batch_j() -> None:
+    frame = _sample_micro_frame(micro=MICRO_COST)
+    rows = sample_ops_table_rows(
+        frame,
+        scaled_x_rows=[[-1.0], [1.0]],
+        y_rows=[0.0, 1.0],
+    )
+    assert rows is not None
+    assert list(rows[0].keys()) == ["x（Z-score）", "ŷ", "y", "error", "error²"]
+    # error = -0.4 - 0 = -0.4 ; error² = 0.16
+    assert rows[0]["error"] == "-0.4"
+    assert rows[0]["error²"] == "0.16"
+    assert "J" not in rows[0]
+    caption = sample_ops_cost_caption(frame)
+    assert caption is not None
+    assert "Cost J（整批）" in caption
+    assert "8.5" in caption
+
+
+def test_sample_ops_table_multiple_feature_columns() -> None:
+    frame = _sample_micro_frame(micro=MICRO_PREDICT, feature_names=["面積", "房間數"])
+    rows = sample_ops_table_rows(
+        frame,
+        scaled_x_rows=[[0.0, 1.0]],
+        y_rows=[2.0],
+    )
+    assert rows is not None
+    assert "面積（Z-score）" in rows[0]
+    assert "房間數（Z-score）" in rows[0]
+    # ŷ = 0.5*0 + 0.5*1 + 0.1 = 0.6
+    assert rows[0]["ŷ"] == "0.6"
+
+
+def test_sample_ops_table_hidden_returns_none() -> None:
+    frame = _sample_micro_frame(micro=MICRO_GRAD)
+    assert (
+        sample_ops_table_rows(
+            frame,
+            scaled_x_rows=[[1.0]],
+            y_rows=[1.0],
+        )
+        is None
     )

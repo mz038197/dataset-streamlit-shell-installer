@@ -70,6 +70,8 @@ from dataset_streamlit_shell.ui.teaching_flow import (
     MICRO_PREDICT,
     MICRO_STEP_LABELS,
     MICRO_UPDATE,
+    SAMPLE_OPS_HEAD,
+    SAMPLE_OPS_SCALE_NOTE,
     TEACHING_FLOW_CSS,
     TrainingMicroFrame,
     build_training_micro_frames,
@@ -78,6 +80,9 @@ from dataset_streamlit_shell.ui.teaching_flow import (
     micro_stepper_html,
     numeric_prediction_latex,
     regression_flow_svg,
+    sample_ops_cost_caption,
+    sample_ops_table_rows,
+    sample_ops_table_visible,
     simple_gradient_board_lines,
     symbolic_prediction_latex,
     training_flow_state,
@@ -124,6 +129,7 @@ from dataset_streamlit_shell.ml.regression import (
     create_standard_scaler,
     gradient_descent_steps,
     predict_from_artifact,
+    predict_line_on_original_x,
     predict_with_parameters,
 )
 from dataset_streamlit_shell.plotting import (
@@ -1562,6 +1568,30 @@ def _render_gradient_board(frame: TrainingMicroFrame, *, simple: bool) -> None:
     st.dataframe(pd.DataFrame(gradient_board_rows(frame)), width="stretch", hide_index=True)
 
 
+def _render_sample_ops_table(
+    frame: TrainingMicroFrame,
+    *,
+    scaled_features: pd.DataFrame,
+    target: pd.Series,
+) -> None:
+    if not sample_ops_table_visible(frame.micro_step):
+        return
+    st.markdown("##### 樣本運算表")
+    st.caption(SAMPLE_OPS_SCALE_NOTE)
+    head_x = scaled_features[list(frame.feature_names)].head(SAMPLE_OPS_HEAD)
+    head_y = target.reindex(head_x.index)
+    rows = sample_ops_table_rows(
+        frame,
+        scaled_x_rows=head_x.to_numpy(dtype=float).tolist(),
+        y_rows=[float(v) for v in head_y.to_numpy(dtype=float)],
+    )
+    if rows:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    cost_caption = sample_ops_cost_caption(frame)
+    if cost_caption is not None:
+        st.caption(cost_caption)
+
+
 def _micro_live_caption(frame: TrainingMicroFrame) -> str:
     return live_fit_caption(
         iteration=frame.iteration,
@@ -1616,6 +1646,13 @@ def _render_simple_regression_stage() -> None:
         st.warning("可用樣本少於 2 筆，無法訓練線性回歸。")
         return
 
+    try:
+        scaler = create_standard_scaler(working, [feature])
+    except ValueError as exc:
+        st.warning(f"無法自動縮放：{exc}")
+        return
+    scaled_features = apply_standard_scaler(working, scaler)
+
     view_key = "simple_regression_view"
     anim_key = "simple_regression_anim"
     result_key = "simple_regression_last_artifact"
@@ -1659,8 +1696,10 @@ def _render_simple_regression_stage() -> None:
     if training_active:
         _run_simple_training_session(
             working,
+            scaled_features=scaled_features,
             feature=feature,
             target=target,
+            scaler=scaler,
             source_label=source_label,
             signature=signature,
             result_key=result_key,
@@ -1688,7 +1727,7 @@ def _render_simple_regression_stage() -> None:
                 target=target,
                 dataset_note=(
                     "每一列是一個城市市場：x 是城市人口，y 是餐廳獲利。"
-                    "目標是找出一條直線來描述兩者關係。"
+                    "訓練前會先對 x 做 Z-score 縮放，再進行梯度下降；圖上散點仍用原始尺度。"
                 ),
             )
         elif view == FLOW_VIEW_MODEL:
@@ -1731,6 +1770,7 @@ def _render_simple_regression_stage() -> None:
                 artifact = cached_artifact
 
             _render_model_prediction_formula([feature], artifact)
+            st.caption("此處的 w 對應 Z-score 縮放後的 x。")
             _render_cost_formula()
             quiz_unlocked = _render_simple_regression_pretrain_quiz(
                 working,
@@ -1753,7 +1793,7 @@ def _render_simple_regression_stage() -> None:
                 st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
             if train_clicked and quiz_unlocked:
                 steps = gradient_descent_steps(
-                    working[[feature]],
+                    scaled_features,
                     working[target],
                     learning_rate=learning_rate,
                     epochs=epochs,
@@ -1784,27 +1824,32 @@ def _render_simple_regression_stage() -> None:
                     "顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。"
                 )
                 if slope_guess in SLOPE_OPTIONS:
+                    # w 在 Z-score x 上訓練；sx=1 時 w/sy ≈ Pearson r
                     actual_dir = slope_label_from_weight(
                         float(artifact.weights[0]),
-                        x_std=float(working[feature].astype(float).std(ddof=0)),
+                        x_std=1.0,
                         y_std=float(working[target].astype(float).std(ddof=0)),
                     )
                     status_placeholder.caption(
                         f"你猜的斜率方向：{slope_guess}；"
                         f"實際 w≈{float(artifact.weights[0]):.4g}（{actual_dir}）。"
                     )
-                _render_simple_step_plot(
-                    working,
-                    feature,
-                    target,
-                    GradientDescentStep(
-                        iteration=0,
-                        weights=[float(w) for w in artifact.weights],
-                        intercept=float(artifact.intercept),
-                        cost=float(artifact.training_cost),
-                    ),
-                    line_placeholder,
-                )
+                if artifact.scaler is None:
+                    st.warning("舊訓練結果缺少 scaler，請重新按「開始訓練」。")
+                else:
+                    _render_simple_step_plot(
+                        working,
+                        feature,
+                        target,
+                        GradientDescentStep(
+                            iteration=0,
+                            weights=[float(w) for w in artifact.weights],
+                            intercept=float(artifact.intercept),
+                            cost=float(artifact.training_cost),
+                        ),
+                        line_placeholder,
+                        scaler=artifact.scaler,
+                    )
                 result_bundle = st.session_state.get(result_key)
                 cached_steps = (
                     result_bundle.get("steps") if isinstance(result_bundle, dict) else None
@@ -1874,8 +1919,10 @@ def _render_simple_regression_stage() -> None:
 def _run_simple_training_session(
     working: pd.DataFrame,
     *,
+    scaled_features: pd.DataFrame,
     feature: str,
     target: str,
+    scaler: dict,
     source_label: str,
     signature: tuple,
     result_key: str,
@@ -1908,20 +1955,32 @@ def _run_simple_training_session(
         _paint_micro_stepper(micro_placeholder, hot=frame.micro_step)
         with board_placeholder.container():
             _render_gradient_board(frame, simple=True)
+            _render_sample_ops_table(
+                frame,
+                scaled_features=scaled_features,
+                target=working[target],
+            )
         chart_step = GradientDescentStep(
             iteration=frame.iteration,
             weights=list(frame.chart_weights),
             intercept=float(frame.chart_intercept),
             cost=float(frame.chart_cost),
         )
-        _render_simple_step_plot(working, feature, target, chart_step, line_placeholder)
+        _render_simple_step_plot(
+            working,
+            feature,
+            target,
+            chart_step,
+            line_placeholder,
+            scaler=scaler,
+        )
         _render_cost_history_plot(_cost_history_for_frame(steps, frame), cost_placeholder)
         status_placeholder.caption(caption)
 
     def _finalize() -> None:
         final_step = steps[-1]
         prediction = predict_with_parameters(
-            working[[feature]],
+            scaled_features,
             final_step.weights,
             final_step.intercept,
         )
@@ -1931,7 +1990,7 @@ def _run_simple_training_session(
             target=target,
             weights=[float(final_step.weights[0])],
             intercept=float(final_step.intercept),
-            scaler=None,
+            scaler=scaler,
             training_cost=float(final_step.cost),
             data_source=source_label,
         )
@@ -2261,6 +2320,11 @@ def _run_multiple_training_session(
         _paint_micro_stepper(micro_placeholder, hot=frame.micro_step)
         with board_placeholder.container():
             _render_gradient_board(frame, simple=False)
+            _render_sample_ops_table(
+                frame,
+                scaled_features=scaled_features,
+                target=working[target],
+            )
         prediction = predict_with_parameters(
             scaled_features,
             frame.chart_weights,
@@ -2867,10 +2931,18 @@ def _render_simple_step_plot(
     target: str,
     step: GradientDescentStep,
     placeholder,
+    *,
+    scaler: dict,
 ) -> None:
     x_values = frame[feature]
     line_x = np.linspace(float(x_values.min()), float(x_values.max()), 100)
-    line_y = line_x * step.weights[0] + step.intercept
+    line_y = predict_line_on_original_x(
+        line_x,
+        weight=float(step.weights[0]),
+        intercept=float(step.intercept),
+        feature=feature,
+        scaler=scaler,
+    )
     fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
     ax.scatter(frame[feature], frame[target], alpha=0.75, label="資料點")
     ax.plot(line_x, line_y, color="red", label="回歸線")

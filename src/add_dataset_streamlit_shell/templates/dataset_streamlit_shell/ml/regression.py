@@ -202,6 +202,24 @@ def apply_standard_scaler(frame: pd.DataFrame, scaler: dict[str, Any]) -> pd.Dat
     return result
 
 
+def predict_line_on_original_x(
+    raw_x: np.ndarray | pd.Series,
+    *,
+    weight: float,
+    intercept: float,
+    feature: str,
+    scaler: dict[str, Any],
+) -> np.ndarray:
+    """將 Z-score 空間的 w／b 映射回原始特徵橫軸上的回歸線 ŷ。"""
+    values = np.asarray(raw_x, dtype=float)
+    mean = float(scaler["mean"][str(feature)])
+    scale = float(scaler["scale"][str(feature)])
+    if scale == 0:
+        raise ValueError(f"scaler scale for {feature!r} must be non-zero")
+    z = (values - mean) / scale
+    return z * float(weight) + float(intercept)
+
+
 def save_model_artifact(artifact: LinearModelArtifact, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(

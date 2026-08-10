@@ -26,6 +26,7 @@ from dataset_streamlit_shell.ml.regression import (
     format_prediction_formula,
     gradient_descent_steps,
     load_model_artifact,
+    predict_line_on_original_x,
     predict_with_parameters,
     predict_from_artifact,
     save_model_artifact,
@@ -37,6 +38,25 @@ def test_compute_cost_j_uses_course_formula() -> None:
     prediction = np.array([12.0, 17.0, 36.0])
 
     assert compute_cost_j(actual, prediction) == 49 / 6
+
+
+def test_predict_line_on_original_x_applies_zscore_then_weights() -> None:
+    # z = (x - 10) / 2 ; ŷ = 3 * z + 1
+    raw_x = np.array([10.0, 12.0, 8.0])
+    scaler = {
+        "method": "zscore",
+        "features": ["x"],
+        "mean": {"x": 10.0},
+        "scale": {"x": 2.0},
+    }
+    line = predict_line_on_original_x(
+        raw_x,
+        weight=3.0,
+        intercept=1.0,
+        feature="x",
+        scaler=scaler,
+    )
+    np.testing.assert_allclose(line, [1.0, 4.0, -2.0])
 
 
 def test_standard_scaler_round_trip_uses_training_statistics() -> None:
