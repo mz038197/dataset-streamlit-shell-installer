@@ -825,11 +825,6 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
     )
 
     df = load_working_dataset()
-    if df is None:
-        st.info(
-            "尚未建立工作資料。你仍可啟用 Agent 詢問一般問題；"
-            "要整理資料請先到「欄位與資料概覽」查看雙表，再到「資料整合」合併。"
-        )
 
     sessions = _list_sessions()
     if "session_path" not in st.session_state and sessions:
