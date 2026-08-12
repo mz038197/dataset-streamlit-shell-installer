@@ -1,8 +1,52 @@
 # Dataset Streamlit Shell
 
-教學用 Streamlit 資料實驗室殼層：自雙表起點經整合與整理建立 Ready，並以內建範例走通監督式與非監督式演算法頁。
+教學用 Streamlit 資料實驗室殼層：自雙表起點經整合與整理建立 Ready，並以內建範例走通監督式與非監督式演算法頁；另含 AI 新創工作坊的專案展示軌道。
 
 ## Language
+
+**AI新創工作坊**:
+側欄導覽分段名稱；與「降維分析」同層。底下目前僅「專案展示」一頁。
+_Avoid_: Startup Challenge（作側欄分段名）、挑戰區、展示區
+
+**專案展示**:
+AI新創工作坊下的側欄頁正式名稱；極簡上台白板（白板三塊），不是重做整條 ML 教學實驗室。發佈給學生時可為空殼（② 留待學生／Agent 補齊）。頁內主標為「專案展示」，副標為「AI Startup Challenge｜成果展示」。
+_Avoid_: Startup Challenge 展示頁（舊草案頁名）、展示空頁（備課狀態口語）、以「成果展示」作側欄名、上台白板（口語）
+
+**白板三塊**:
+專案展示頁主教學欄的三個固定區塊：①我們在解決什麼？②我們做出來的結果？③我們不能亂承諾什麼？第一版以 Agent 改允許範圍內的 UI／腳本把空殼補成可展示內容（AI coding），不以表單暫存當成果真相。
+_Avoid_: 三欄、三步驟教學、ML 流水線階段；以 text_input／session_state 當上台成果的唯一載體
+
+**挑戰公司**:
+專案展示的五選一委託情境識別：`edupulse`／`vitalrisk`／`airsense`／`churnlab`／`flowcast`；決定 Challenge 起點資料、資料說明書與倫理加碼。
+_Avoid_: 把公司 id 與側欄頁名混稱；混用其他公司的 CSV
+
+**Challenge 起點資料**:
+各挑戰公司內建的只讀起點 CSV（`workspace/challenge/{company}.csv`）。可髒、供診斷與複製清理；不得覆寫此檔。與雙表線的 Original 原始資料不是同一概念。
+_Avoid_: Original 原始資料（未加 Challenge 前綴）、起點檔（未鎖定挑戰語境時）
+
+**Challenge 工作資料**:
+學生清理後的工作副本（`workspace/challenge/working.csv`）。訓練／預測優先使用；與雙表線根目錄的 Working 工作資料不是同一份。第一版不強制走 Ready／資料切分產物，亦不強制 cleaning_log。更換挑戰公司時清除或封存此工作副本，但不還原已改過的專案展示 UI 程式。
+_Avoid_: Working、working.csv（未指明 challenge 軌道）；暗示挑戰線要先建立 Ready；假設換公司會自動還原白板程式內容
+
+**Challenge 資料說明書**:
+各挑戰公司給學生的欄位與委託說明（`workspace/challenge/{company}_資料說明書.md`）。解釋欄位與目標前應先讀；教師用缺陷說明不進學生專案。
+_Avoid_: 教師用缺陷說明、劇透缺陷清單
+
+**Challenge host context**:
+專案展示頁專用的 Agent `host_context`：定角色、挑戰軌道檔案邊界、白板三塊完成樣貌，並串上當前挑戰公司的倫理／資料加碼片段；不叠加雙表線的 `dataset_base_context`（含 NN fragment）。加碼只強化必講紅線與檢查方向，不剧透教師缺陷清單。
+_Avoid_: 挑戰頁直接叠 Titanic／Ready／NN 的 dataset_base_context；靠「衝突以挑戰為準」口頭覆寫卻仍灌入根目錄 working 規則；在 host 列出老師埋的缺陷清單
+
+**Challenge Agent session**:
+專案展示頁專用的對話 session；與雙表整理線的 Agent session 分開。進頁或更換挑戰公司時，以 Challenge host context 重建 Agent。
+_Avoid_: 與全站整理頁共用同一條 session 卻不換 host；只靠每輪 snapshot 提醒卻不重建
+
+**Challenge 允許改動範圍**:
+專案展示軌道上 Agent／學生預設可改：`ui/startup_challenge_ui.py`、`workspace/challenge/*`（含 Challenge 工作資料）、必要時 `scripts/`。不改其他 ML 教學頁；頁入口薄包裝與側欄導覽由老師預放。
+_Avoid_: 為挑戰去改邏輯回歸等教學頁；把挑戰成果寫進根目錄 working／ready
+
+**Challenge 上台 Gate**:
+人審／自評的最小可上台規準（白板三塊可講、有處理過資料並用 Challenge 工作資料訓練或能說明等價流程、含該公司必講紅線、分得清 Agent 與人類決策）。第一版不做機器硬檢查；每組自選獨特畫面為軟規則。頁上可放簡短 checklist 文案，僅提示用。
+_Avoid_: 第一版就做 Gate 自動驗收；把獨特畫面做成硬檢查
 
 **主教學欄**:
 內容區左側的教學主體區；承載頁標題、學習階段與演算法互動。與 Streamlit 左側導覽側欄不同。

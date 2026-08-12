@@ -287,9 +287,14 @@ def test_data_ui_assistant_reply_is_saved_before_tts_playback() -> None:
         / "ui"
         / "data_ui.py"
     ).read_text(encoding="utf-8")
-    user_message_flow = source.split('if user_text := st.chat_input("詢問資料 Agent...", key="data_chat"):', 1)[1]
+    user_message_flow = source.split(
+        'if user_text := st.chat_input("詢問資料 Agent...", key=f"{agent_scope}_chat"):',
+        1,
+    )[1]
 
-    save_index = user_message_flow.index('st.session_state["data_chat_history"].append(("assistant", answer))')
+    save_index = user_message_flow.index(
+        'st.session_state[keys["chat_history"]].append(("assistant", answer))'
+    )
     tts_index = user_message_flow.index("stream_tts_play(answer, tts_settings)")
 
     assert save_index < tts_index

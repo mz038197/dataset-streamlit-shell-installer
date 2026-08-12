@@ -154,6 +154,12 @@ pages = {
     "降維分析": [
         st.Page(str(SHELL_ROOT / "pages" / "10_PCA.py"), title="PCA 主成分分析"),
     ],
+    "AI新創工作坊": [
+        st.Page(
+            str(SHELL_ROOT / "pages" / "30_Startup_Challenge.py"),
+            title="專案展示",
+        ),
+    ],
 }
 
 st.navigation(pages).run()

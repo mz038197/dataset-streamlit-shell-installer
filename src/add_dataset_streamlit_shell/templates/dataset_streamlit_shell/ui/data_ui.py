@@ -39,6 +39,35 @@ TEST_DATASET_PATH = WORKSPACE_DIR / "test.csv"
 CLEANING_LOG_PATH = WORKSPACE_DIR / "cleaning_log.jsonl"
 SPLIT_DATASET_PATHS = (TRAIN_DATASET_PATH, VAL_DATASET_PATH, TEST_DATASET_PATH)
 USER_SETTINGS_PATH = WORKSPACE_DIR / "user_settings.json"
+_AGENT_SCOPE_KEYS: dict[str, dict[str, str]] = {
+    "data": {
+        "session_path": "session_path",
+        "chat_history": "data_chat_history",
+        "agent": "data_agent",
+        "agent_session_path": "data_agent_session_path",
+        "agent_factory_ref": "data_agent_factory_ref",
+        "agent_connected": "data_agent_connected",
+        "picker_version": "session_picker_version",
+        "chat_just_replied": "data_chat_just_replied",
+    },
+    "challenge": {
+        "session_path": "challenge_session_path",
+        "chat_history": "challenge_chat_history",
+        "agent": "challenge_agent",
+        "agent_session_path": "challenge_agent_session_path",
+        "agent_factory_ref": "challenge_agent_factory_ref",
+        "agent_connected": "challenge_agent_connected",
+        "picker_version": "challenge_session_picker_version",
+        "chat_just_replied": "challenge_chat_just_replied",
+    },
+}
+
+
+def _agent_keys(scope: str) -> dict[str, str]:
+    try:
+        return _AGENT_SCOPE_KEYS[scope]
+    except KeyError as exc:
+        raise ValueError(f"未知 Agent scope：{scope!r}") from exc
 TTS_VOICE_OPTIONS = [
     "alloy",
     "ash",
@@ -306,11 +335,20 @@ def _ensure_session_dir() -> None:
     SESSION_DIR.mkdir(exist_ok=True)
 
 
-def _clear_agent_cache() -> None:
-    st.session_state.pop("data_agent", None)
-    st.session_state.pop("data_agent_session_path", None)
-    st.session_state.pop("data_agent_factory_ref", None)
-    st.session_state["data_agent_connected"] = False
+def _clear_agent_cache(*, scope: str = "data") -> None:
+    keys = _agent_keys(scope)
+    st.session_state.pop(keys["agent"], None)
+    st.session_state.pop(keys["agent_session_path"], None)
+    st.session_state.pop(keys["agent_factory_ref"], None)
+    st.session_state[keys["agent_connected"]] = False
+
+
+def reset_agent_scope_session(*, scope: str) -> None:
+    """清除指定 scope 的 Agent 快取與目前對話指標（不刪實體 session 檔）。"""
+    keys = _agent_keys(scope)
+    _clear_agent_cache(scope=scope)
+    st.session_state.pop(keys["session_path"], None)
+    st.session_state.pop(keys["chat_history"], None)
 
 
 def _write_activation_marker() -> None:
@@ -703,61 +741,91 @@ def _load_session_history(path: Path) -> list[tuple[str, str]]:
     return history
 
 
-def _set_current_session(path: Path) -> None:
+def _set_current_session(path: Path, *, scope: str = "data") -> None:
+    keys = _agent_keys(scope)
     session_path = _session_relpath(path)
-    st.session_state["session_path"] = session_path
-    st.session_state["data_chat_history"] = _load_session_history(path)
-    st.session_state.pop("data_agent", None)
-    st.session_state.pop("data_agent_session_path", None)
+    st.session_state[keys["session_path"]] = session_path
+    st.session_state[keys["chat_history"]] = _load_session_history(path)
+    st.session_state.pop(keys["agent"], None)
+    st.session_state.pop(keys["agent_session_path"], None)
 
 
-def _ensure_valid_current_session(sessions: list[Path]) -> str | None:
-    current_session = st.session_state.get("session_path")
+def _ensure_valid_current_session(
+    sessions: list[Path],
+    *,
+    scope: str = "data",
+) -> str | None:
+    keys = _agent_keys(scope)
+    current_session = st.session_state.get(keys["session_path"])
     if current_session and _is_valid_session_relpath(current_session):
         return current_session
 
-    st.session_state.pop("session_path", None)
-    st.session_state.pop("data_agent", None)
-    st.session_state.pop("data_agent_session_path", None)
+    st.session_state.pop(keys["session_path"], None)
+    st.session_state.pop(keys["agent"], None)
+    st.session_state.pop(keys["agent_session_path"], None)
     if sessions:
-        _set_current_session(sessions[0])
-        return st.session_state["session_path"]
+        _set_current_session(sessions[0], scope=scope)
+        return st.session_state[keys["session_path"]]
     return None
 
 
-def _reset_session_picker_widget() -> None:
-    st.session_state["session_picker_version"] = (
-        st.session_state.get("session_picker_version", 0) + 1
+def _reset_session_picker_widget(*, scope: str = "data") -> None:
+    keys = _agent_keys(scope)
+    st.session_state[keys["picker_version"]] = (
+        st.session_state.get(keys["picker_version"], 0) + 1
     )
 
 
-def _create_agent_for_session(session_path: str) -> tuple[Any, str]:
+def _create_agent_for_session(
+    session_path: str,
+    *,
+    host_context: str | None = None,
+) -> tuple[Any, str]:
     if not _is_valid_session_relpath(session_path):
         raise RuntimeError(f"對話紀錄路徑無效：{session_path!r}")
+    context = dataset_base_context() if host_context is None else host_context
     return create_agent_for_session(
         PROJECT_ROOT,
         session_path,
-        dataset_base_context(),
+        context,
     )
 
 
-def _get_agent_for_session(session_path: str) -> Any:
+def _get_agent_for_session(
+    session_path: str,
+    *,
+    scope: str = "data",
+    host_context: str | None = None,
+) -> Any:
+    keys = _agent_keys(scope)
     if (
-        "data_agent" not in st.session_state
-        or st.session_state.get("data_agent_session_path") != session_path
+        keys["agent"] not in st.session_state
+        or st.session_state.get(keys["agent_session_path"]) != session_path
     ):
-        agent, factory_ref = _create_agent_for_session(session_path)
-        st.session_state["data_agent"] = agent
-        st.session_state["data_agent_session_path"] = session_path
-        st.session_state["data_agent_factory_ref"] = factory_ref
-        st.session_state["data_agent_connected"] = True
-    return st.session_state["data_agent"]
+        agent, factory_ref = _create_agent_for_session(
+            session_path,
+            host_context=host_context,
+        )
+        st.session_state[keys["agent"]] = agent
+        st.session_state[keys["agent_session_path"]] = session_path
+        st.session_state[keys["agent_factory_ref"]] = factory_ref
+        st.session_state[keys["agent_connected"]] = True
+    return st.session_state[keys["agent"]]
 
 
-def _activate_agent(session_path: str) -> tuple[bool, str]:
-    _clear_agent_cache()
+def _activate_agent(
+    session_path: str,
+    *,
+    scope: str = "data",
+    host_context: str | None = None,
+) -> tuple[bool, str]:
+    keys = _agent_keys(scope)
+    _clear_agent_cache(scope=scope)
     try:
-        agent, factory_ref = _create_agent_for_session(session_path)
+        agent, factory_ref = _create_agent_for_session(
+            session_path,
+            host_context=host_context,
+        )
     except RuntimeError as exc:
         _remove_activation_marker()
         return False, str(exc)
@@ -765,20 +833,30 @@ def _activate_agent(session_path: str) -> tuple[bool, str]:
         _remove_activation_marker()
         return False, f"Agent 啟用失敗：{exc}"
 
-    st.session_state["data_agent"] = agent
-    st.session_state["data_agent_session_path"] = session_path
-    st.session_state["data_agent_factory_ref"] = factory_ref
-    st.session_state["data_agent_connected"] = True
+    st.session_state[keys["agent"]] = agent
+    st.session_state[keys["agent_session_path"]] = session_path
+    st.session_state[keys["agent_factory_ref"]] = factory_ref
+    st.session_state[keys["agent_connected"]] = True
     _write_activation_marker()
     return True, "Agent 已連接。"
 
 
-def _restore_agent_if_possible(session_path: str) -> tuple[bool, str | None]:
-    if st.session_state.get("data_agent_connected"):
+def _restore_agent_if_possible(
+    session_path: str,
+    *,
+    scope: str = "data",
+    host_context: str | None = None,
+) -> tuple[bool, str | None]:
+    keys = _agent_keys(scope)
+    if st.session_state.get(keys["agent_connected"]):
         return True, None
     if not AGENT_ACTIVATION_MARKER_PATH.exists():
         return False, None
-    ok, message = _activate_agent(session_path)
+    ok, message = _activate_agent(
+        session_path,
+        scope=scope,
+        host_context=host_context,
+    )
     if ok:
         return True, None
     return False, message
@@ -817,35 +895,55 @@ def invoke_data_agent(
     return answer
 
 
-def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
+def render_chat_panel(
+    extra_context: str = "",
+    page_name: str = "",
+    *,
+    host_context: str | None = None,
+    agent_scope: str = "data",
+    skip_working_snapshot: bool = False,
+) -> None:
+    keys = _agent_keys(agent_scope)
+    # 從其他頁回到本 scope 時丟掉 Agent 實例（保留對話），以當前 host_context 重建
+    last_page = st.session_state.get("last_chat_page")
+    if page_name and last_page != page_name:
+        st.session_state.pop(keys["agent"], None)
+        st.session_state.pop(keys["agent_session_path"], None)
+    if page_name:
+        st.session_state["last_chat_page"] = page_name
     st.markdown('<div class="data-agent-title-spacer"></div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="data-agent-title-text">資料 Agent</div>',
         unsafe_allow_html=True,
     )
 
-    df = load_working_dataset()
+    df = None if skip_working_snapshot else load_working_dataset()
 
     sessions = _list_sessions()
-    if "session_path" not in st.session_state and sessions:
-        _set_current_session(sessions[0])
-    current_session = _ensure_valid_current_session(sessions)
+    if keys["session_path"] not in st.session_state and sessions:
+        _set_current_session(sessions[0], scope=agent_scope)
+    current_session = _ensure_valid_current_session(sessions, scope=agent_scope)
 
-    if "data_chat_history" not in st.session_state:
-        st.session_state["data_chat_history"] = [
-            (
-                "assistant",
+    if keys["chat_history"] not in st.session_state:
+        greeting = (
+            "請先按「啟用資料 Agent」。啟用後，我會以專案展示（Challenge）規則協助你："
+            "先讀說明書、檢查 Challenge 起點資料，再用 AI coding 補齊白板三塊。"
+            if agent_scope == "challenge"
+            else (
                 "請先按「啟用資料 Agent」。啟用後，我可以協助你理解資料整理流程；"
-                "雙表合併建立工作資料後，也能一起分析 Working。",
+                "雙表合併建立工作資料後，也能一起分析 Working。"
             )
-        ]
+        )
+        st.session_state[keys["chat_history"]] = [("assistant", greeting)]
 
     ids, labels = _build_session_picker_options(sessions)
     if current_session and current_session not in labels and _is_valid_session_relpath(current_session):
         ids.insert(0, current_session)
         labels[current_session] = "剛剛 · 目前對話"
 
-    picker_key = f"session_picker_{st.session_state.get('session_picker_version', 0)}"
+    picker_key = (
+        f"{agent_scope}_session_picker_{st.session_state.get(keys['picker_version'], 0)}"
+    )
 
     selected_index = ids.index(current_session) if current_session in ids else 0
 
@@ -861,11 +959,17 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
     )
     resolved_pick = _resolve_session_relpath(picked_id, labels)
     if resolved_pick and resolved_pick != current_session:
-        _set_current_session(PROJECT_ROOT / resolved_pick)
+        _set_current_session(PROJECT_ROOT / resolved_pick, scope=agent_scope)
         st.rerun()
-    if new_col.button("", icon=":material/add:", help="新增對話", width="stretch"):
-        _set_current_session(_new_session_path())
-        _reset_session_picker_widget()
+    if new_col.button(
+        "",
+        icon=":material/add:",
+        help="新增對話",
+        width="stretch",
+        key=f"{agent_scope}_session_new",
+    ):
+        _set_current_session(_new_session_path(), scope=agent_scope)
+        _reset_session_picker_widget(scope=agent_scope)
         st.rerun()
     if del_col.button(
         "",
@@ -873,32 +977,37 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
         help="刪除對話",
         width="stretch",
         disabled=not current_session,
+        key=f"{agent_scope}_session_del",
     ):
         if current_session:
             target = PROJECT_ROOT / current_session
             if target.exists():
                 target.unlink()
-            st.session_state.pop("session_path", None)
-            st.session_state.pop("data_chat_history", None)
-            st.session_state.pop("data_agent", None)
-            st.session_state.pop("data_agent_session_path", None)
+            st.session_state.pop(keys["session_path"], None)
+            st.session_state.pop(keys["chat_history"], None)
+            st.session_state.pop(keys["agent"], None)
+            st.session_state.pop(keys["agent_session_path"], None)
             remaining = _list_sessions()
             if remaining:
-                _set_current_session(remaining[0])
-            _reset_session_picker_widget()
+                _set_current_session(remaining[0], scope=agent_scope)
+            _reset_session_picker_widget(scope=agent_scope)
             st.rerun()
 
     settings_error = _prepare_tts_preferences(page_name)
 
-    current_session = st.session_state.get("session_path")
+    current_session = st.session_state.get(keys["session_path"])
     if not current_session:
         st.caption("尚無對話紀錄，請按 **+** 新增對話。")
         _render_tts_settings_ui(settings_error=settings_error)
-        st.chat_input("詢問...", disabled=True, key="data_chat_no_session")
+        st.chat_input("詢問...", disabled=True, key=f"{agent_scope}_chat_no_session")
         return
 
-    restored, restore_error = _restore_agent_if_possible(current_session)
-    connected = bool(st.session_state.get("data_agent_connected")) or restored
+    restored, restore_error = _restore_agent_if_possible(
+        current_session,
+        scope=agent_scope,
+        host_context=host_context,
+    )
+    connected = bool(st.session_state.get(keys["agent_connected"])) or restored
     status_text = (
         ":green[●] Agent：已連接"
         if connected
@@ -911,32 +1020,53 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
             st.warning(probe.error)
         if restore_error:
             st.warning(restore_error)
-        if st.button("啟用資料 Agent", type="primary", width="stretch"):
-            ok, message = _activate_agent(current_session)
+        if st.button(
+            "啟用資料 Agent",
+            type="primary",
+            width="stretch",
+            key=f"{agent_scope}_activate_agent",
+        ):
+            ok, message = _activate_agent(
+                current_session,
+                scope=agent_scope,
+                host_context=host_context,
+            )
             if ok:
                 st.success(f"{message} 你可以開始詢問資料 Agent。")
                 st.rerun()
             else:
                 st.error(message)
         _render_tts_settings_ui(settings_error=settings_error)
-        st.chat_input("請先啟用資料 Agent...", disabled=True, key="data_chat_not_activated")
+        st.chat_input(
+            "請先啟用資料 Agent...",
+            disabled=True,
+            key=f"{agent_scope}_chat_not_activated",
+        )
         return
 
     _render_tts_settings_ui(settings_error=settings_error)
 
     try:
-        agent = _get_agent_for_session(current_session)
+        agent = _get_agent_for_session(
+            current_session,
+            scope=agent_scope,
+            host_context=host_context,
+        )
     except RuntimeError as exc:
         st.error(str(exc))
-        _clear_agent_cache()
+        _clear_agent_cache(scope=agent_scope)
         _remove_activation_marker()
-        st.chat_input("詢問 Agent...", disabled=True, key="data_chat_no_key")
+        st.chat_input("詢問 Agent...", disabled=True, key=f"{agent_scope}_chat_no_key")
         return
     except Exception as exc:
         st.error(f"Agent 連線失敗：`{exc}`")
-        _clear_agent_cache()
+        _clear_agent_cache(scope=agent_scope)
         _remove_activation_marker()
-        st.chat_input("詢問 Agent...", disabled=True, key="data_chat_connect_failed")
+        st.chat_input(
+            "詢問 Agent...",
+            disabled=True,
+            key=f"{agent_scope}_chat_connect_failed",
+        )
         return
 
     st.markdown('<div data-dss-chat style="display:none"></div>', unsafe_allow_html=True)
@@ -944,14 +1074,17 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
     # A tall default (e.g. 720) clips in-flow chat_input under Agent overflow:hidden.
     chat = st.container(height=240, border=False)
     with chat:
-        for role, text in st.session_state["data_chat_history"]:
+        for role, text in st.session_state[keys["chat_history"]]:
             with st.chat_message(role):
                 st.markdown(text)
 
-    if user_text := st.chat_input("詢問資料 Agent...", key="data_chat"):
-        st.session_state["data_chat_history"].append(("user", user_text))
+    if user_text := st.chat_input("詢問資料 Agent...", key=f"{agent_scope}_chat"):
+        st.session_state[keys["chat_history"]].append(("user", user_text))
         # host_context 已在建立 Agent 時注入 system；此處只組 user 層
-        snapshot = dataset_page_snapshot(df, extra_context)
+        if skip_working_snapshot:
+            snapshot = extra_context.strip()
+        else:
+            snapshot = dataset_page_snapshot(df, extra_context)
         prompt = format_user_turn(user_text, extra_context=snapshot)
 
         with chat:
@@ -991,11 +1124,10 @@ def render_chat_panel(extra_context: str = "", page_name: str = "") -> None:
                 else:
                     answer = "".join(answer_parts).strip() or final_text.strip()
 
-                st.session_state["data_chat_history"].append(("assistant", answer))
+                st.session_state[keys["chat_history"]].append(("assistant", answer))
                 if st.session_state["data_tts_enabled"] and tts_settings is not None and answer:
                     try:
                         stream_tts_play(answer, tts_settings)
                     except Exception as exc:
                         st.warning(f"語音播放發生錯誤，文字回答已保留：`{exc}`")
-                # 供 NN 等頁在 chat 後偵測共享檔變更（例如訓練請求）
-                st.session_state["data_chat_just_replied"] = True
+                st.session_state[keys["chat_just_replied"]] = True
