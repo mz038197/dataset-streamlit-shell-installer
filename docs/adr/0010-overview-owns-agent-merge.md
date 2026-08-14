@@ -4,4 +4,4 @@
 
 **Considered Options**: 兩頁並存只把表單疊進本頁；選對 join 就自動寫檔、不經 Agent。前者仍比現在更擠，後者對不上「請 Agent 改」。選定單一「欄位與資料整合」頁＋Agent 兩步（先改鍵名、再合併）。
 
-**Consequences**: host 必須拒絕未解鎖／未對齊鍵的合併，以及合併前對副本的其他清理；合併前重整／重置文案不得借用 Working／Original；成功合併後刪雙表工作副本。
+**Consequences**: 雙表起點進頁即種出雙表工作副本，Agent 只改已存在的 voyage.csv、不得另存新檔；host 必須拒絕未解鎖／未對齊鍵的合併，以及合併前對副本的其他清理；合併前重整／重置文案不得借用 Working／Original；成功合併後刪雙表工作副本。

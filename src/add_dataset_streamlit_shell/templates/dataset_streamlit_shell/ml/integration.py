@@ -75,6 +75,16 @@ def write_dual_table_copies(
     voyage.to_csv(voyage_path, index=False)
 
 
+def ensure_dual_table_copies(workspace: Path) -> None:
+    passengers_path, voyage_path = dual_table_copy_paths(workspace)
+    if passengers_path.is_file() and voyage_path.is_file():
+        return
+    builtin_p, builtin_v = load_titanic_integration_frames()
+    passengers = pd.read_csv(passengers_path) if passengers_path.is_file() else builtin_p
+    voyage = pd.read_csv(voyage_path) if voyage_path.is_file() else builtin_v
+    write_dual_table_copies(workspace, passengers, voyage)
+
+
 def clear_dual_table_copies(workspace: Path) -> None:
     passengers_path, voyage_path = dual_table_copy_paths(workspace)
     for path in (passengers_path, voyage_path):

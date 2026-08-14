@@ -551,6 +551,7 @@ def dataset_base_context() -> str:
         f"Working 工作資料路徑：{working}。"
         "資料整合成功時與 Original 一併寫入；Working 為之後整理用副本。"
         f"雙表工作副本目錄：{copies}（workspace/integration/passengers.csv、voyage.csv）。"
+        "雙表起點進頁時已寫出這兩份；請直接改航程表副本的 passenger_id 為 PassengerId，不要另存新檔。"
         "內建雙表教材不得覆寫。"
         "合併前只准將航程表副本的 passenger_id 改名為 PassengerId；不要補值、刪欄或改乘客表。"
         "通過訓練前預測（資料整合）且鍵名已對齊後，才可依學生指定的 left 或 inner 合併"

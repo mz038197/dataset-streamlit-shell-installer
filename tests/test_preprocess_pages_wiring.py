@@ -86,6 +86,7 @@ def test_quality_page_supports_dual_and_clear() -> None:
     assert "clear_split_datasets" in (UI / "data_ui.py").read_text(encoding="utf-8")
     assert "save_split_datasets" in (UI / "data_ui.py").read_text(encoding="utf-8")
     assert "clear_dual_table_copies" in (UI / "data_ui.py").read_text(encoding="utf-8")
+    assert "ensure_dual_table_copies" in src
 
 
 def test_charts_page_reads_ready_only() -> None:

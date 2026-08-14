@@ -34,6 +34,7 @@ def test_base_context_describes_merge_origin_not_upload() -> None:
     assert "資料整合成功時與 Original 一併寫入" in src
     assert "workspace/integration" in src
     assert "重新讀取工作資料" in src
+    assert "不要另存新檔" in src
 
 
 def test_chat_panel_has_no_empty_workspace_info_banner() -> None:

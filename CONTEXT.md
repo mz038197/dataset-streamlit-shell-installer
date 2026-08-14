@@ -225,16 +225,16 @@ _Avoid_: 訓練／驗證切分（指決策樹頁內靜默 holdout）、資料集
 _Avoid_: 分層抽樣（可作口語）、stratify（作頁標題主文）；無目標欄時仍強制分層
 
 **雙表起點**:
-課堂整合線的起始狀態與協作區入口狀態：無 working／ready／切分產物，亦無雙表工作副本；欄位與資料整合並排顯示內建雙表教材。「清除回雙表起點」回到此狀態。不提供單表 CSV 上傳進 Original／Working。
+課堂整合線的起始狀態與協作區入口狀態：無 working／ready／切分產物。進「欄位與資料整合」時從內建雙表教材寫出雙表工作副本。「清除回雙表起點」刪除 Working／Original／切分／副本後回到此狀態。不提供單表 CSV 上傳進 Original／Working。
 _Avoid_: 僅刪 working 卻留下 ready、train／val／test 或雙表工作副本仍稱為回到起點；以「資料上傳與預覽」或上傳 CSV 作為協作線起點；側欄再設僅名為「資料整合」的獨立頁才算起點完成
 
 **內建雙表教材**:
-課堂只讀的乘客表／航程表 CSV（`built-in-data/integration/`）。不得覆寫。雙表起點且尚無雙表工作副本時，畫面讀此。
+課堂只讀的乘客表／航程表 CSV（`built-in-data/integration/`）。不得覆寫。進雙表起點頁時複製為雙表工作副本。
 _Avoid_: Original、Working、雙表工作副本
 
 **雙表工作副本**:
-合併前 Agent 可改的兩份檔（`workspace/integration/passengers.csv`、`voyage.csv`）。合併前只准對齊航程表鍵名。不是 Original，也不是 Working。有副本時畫面顯示副本；「重新讀取雙表」重讀副本；「恢復內建雙表」刪副本並恢復內建雙表教材。資料整合寫入成功後刪除副本。
-_Avoid_: working.csv、original.csv；直接改內建雙表教材；把副本叫 Original 或 Working；合併前對副本做鍵名以外的清理；合併前按鈕寫「重新讀取工作資料」或「回到原始資料」
+合併前 Agent 可改的兩份檔（`workspace/integration/passengers.csv`、`voyage.csv`）。雙表起點進頁即確保兩份存在。合併前只准對齊航程表鍵名，不得另存新檔。不是 Original，也不是 Working。畫面讀副本；「重新讀取雙表」重讀副本；「恢復內建雙表」刪副本後由進頁再次從教材寫出。資料整合寫入成功後刪除副本。
+_Avoid_: working.csv、original.csv；直接改內建雙表教材；把副本叫 Original 或 Working；合併前對副本做鍵名以外的清理；合併前按鈕寫「重新讀取工作資料」或「回到原始資料」；靠 Agent 自行建立目錄或自創檔名
 
 **欄位與資料整合（雙模態）**:
 「AI 協作資料整理」側欄第一項；無 working.csv 時並排乘客表與航程表以便找合併鍵，並在本頁請 Agent 對齊鍵後做資料整合（主教學欄含訓練前預測（資料整合），控制為「重新讀取雙表」「恢復內建雙表」）；有 working.csv 時呈現單表欄位診斷（控制為「重新讀取工作資料」「回到原始資料」與「清除回雙表起點」）。無 Working 時的空狀態導引一律指本頁。

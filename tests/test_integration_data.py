@@ -23,7 +23,9 @@ from dataset_streamlit_shell.ml.integration import (  # noqa: E402
     VOYAGE_KEY_RAW,
     align_voyage_key,
     clear_dual_table_copies,
+    commit_dual_table_merge,
     dual_table_copy_paths,
+    ensure_dual_table_copies,
     is_join_how_correct,
     is_key_align_correct,
     key_overlap_count,
@@ -35,7 +37,6 @@ from dataset_streamlit_shell.ml.integration import (  # noqa: E402
     normalize_sex_series,
     voyage_key_is_aligned,
     write_dual_table_copies,
-    commit_dual_table_merge,
 )
 
 INTEGRATION_DIR = (
@@ -170,3 +171,37 @@ def test_commit_dual_table_merge_writes_both_files_and_deletes_copies(
     assert working.is_file()
     assert len(pd.read_csv(original)) == len(passengers)
     assert not dual_table_copy_paths(tmp_path)[1].is_file()
+
+
+def test_ensure_dual_table_copies_seeds_both_from_builtin(tmp_path: Path) -> None:
+    ensure_dual_table_copies(tmp_path)
+    passengers_path, voyage_path = dual_table_copy_paths(tmp_path)
+    assert passengers_path.is_file()
+    assert voyage_path.is_file()
+    _, voyage = load_dual_tables(tmp_path)
+    assert VOYAGE_KEY_RAW in voyage.columns
+    assert not voyage_key_is_aligned(voyage)
+
+
+def test_ensure_dual_table_copies_does_not_overwrite_aligned_voyage(
+    tmp_path: Path,
+) -> None:
+    passengers, voyage = load_titanic_integration_frames()
+    write_dual_table_copies(tmp_path, passengers, align_voyage_key(voyage))
+    ensure_dual_table_copies(tmp_path)
+    _, loaded_v = load_dual_tables(tmp_path)
+    assert voyage_key_is_aligned(loaded_v)
+
+
+def test_ensure_dual_table_copies_fills_missing_passengers_only(
+    tmp_path: Path,
+) -> None:
+    passengers, voyage = load_titanic_integration_frames()
+    _, voyage_path = dual_table_copy_paths(tmp_path)
+    voyage_path.parent.mkdir(parents=True, exist_ok=True)
+    align_voyage_key(voyage).to_csv(voyage_path, index=False)
+    ensure_dual_table_copies(tmp_path)
+    copy_p, copy_v = dual_table_copy_paths(tmp_path)
+    assert copy_p.is_file()
+    assert PASSENGER_KEY in pd.read_csv(copy_p).columns
+    assert voyage_key_is_aligned(pd.read_csv(copy_v))

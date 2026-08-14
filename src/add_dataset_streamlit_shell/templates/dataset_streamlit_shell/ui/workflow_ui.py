@@ -18,6 +18,7 @@ from dataset_streamlit_shell.ml.integration import (
     VOYAGE_KEY_RAW,
     VOYAGE_TABLE_LABEL,
     clear_dual_table_copies,
+    ensure_dual_table_copies,
     is_join_how_correct,
     is_key_align_correct,
     key_overlap_count,
@@ -354,12 +355,13 @@ def _render_integration_quiz() -> bool:
 
 
 def _render_dual_table_quality() -> str:
+    ensure_dual_table_copies(WORKSPACE_DIR)
     passengers, voyage = load_dual_tables(WORKSPACE_DIR)
     aligned = voyage_key_is_aligned(voyage)
     _render_dual_table_refresh_controls()
     st.info(
-        "目前還沒有 Working 工作資料。以下並排顯示內建雙表教材"
-        "（若 Agent 已對齊鍵名，則顯示雙表工作副本）——"
+        "目前還沒有 Working 工作資料。以下並排顯示雙表工作副本"
+        "（由內建雙表教材複製，Agent 只改航程表鍵名）——"
         f"**{PASSENGER_TABLE_LABEL}**（左）與 **{VOYAGE_TABLE_LABEL}**（右）。"
         "請先找出能當合併依據的欄位，請右側 Agent 只改航程表鍵名；通過關卡後再請 Agent 合併。"
     )
@@ -404,7 +406,7 @@ def _render_dual_table_quality() -> str:
     _render_prompts(
         [
             "請比較乘客表與航程表的欄名，指出哪一欄最可能當合併鍵，並說明兩邊寫法是否一致。",
-            "請把航程表的 passenger_id 改成 PassengerId，寫入 workspace/integration/voyage.csv。",
+            "請把航程表副本 workspace/integration/voyage.csv 的 passenger_id 改成 PassengerId，不要另存新檔。",
             "關卡通過後，請用 left 合併兩表，同時寫入 original.csv 與 working.csv，並刪除雙表工作副本。",
         ],
         caption="合併前請 Agent 只改航程表鍵名（雙表工作副本）。通過關卡後再合併，會同時寫入 Original 與 Working。",
