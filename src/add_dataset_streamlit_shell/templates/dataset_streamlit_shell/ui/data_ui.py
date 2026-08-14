@@ -26,6 +26,7 @@ from dataset_streamlit_shell.agent_loader import (  # noqa: E402
     create_agent_for_session,
     load_create_agent,
 )
+from dataset_streamlit_shell.ml.integration import clear_dual_table_copies  # noqa: E402
 
 WORKSPACE_DIR = SHELL_ROOT / "workspace"
 SESSION_DIR = PROJECT_ROOT / "sessions"
@@ -435,12 +436,13 @@ def working_dataset_file_exists() -> bool:
 
 
 def clear_to_dual_start() -> None:
-    """清除 working／ready／切分產物／original，回到雙表起點。"""
+    """清除 working／ready／切分產物／original／雙表工作副本，回到雙表起點。"""
     clear_split_datasets()
     reset_working_dataset()
     st.session_state.pop("dataset_df", None)
     if ORIGINAL_DATASET_PATH.exists():
         ORIGINAL_DATASET_PATH.unlink()
+    clear_dual_table_copies(WORKSPACE_DIR)
 
 
 def reset_cleaning_log() -> None:
@@ -541,15 +543,26 @@ def dataset_base_context() -> str:
     nn_form = _display_path(WORKSPACE_DIR / "nn_form.json")
     nn_request = _display_path(WORKSPACE_DIR / "nn_train_request.json")
     nn_last = _display_path(WORKSPACE_DIR / "nn_last_run.json")
+    copies = _display_path(WORKSPACE_DIR / "integration")
     return (
         "目前為 Dataset Streamlit Shell。"
-        f"Original 原始資料路徑：{source}，只作為重置來源，請勿覆蓋。"
+        f"Original 原始資料路徑：{source}，只作為重置來源。"
+        "合併完成前不存在；僅在資料整合時可與 Working 同批寫入，此外請勿覆蓋。"
         f"Working 工作資料路徑：{working}。"
-        "Original 與 Working 在「資料整合」套用合併時一併建立；Working 為整理用副本。"
+        "資料整合成功時與 Original 一併寫入；Working 為之後整理用副本。"
+        f"雙表工作副本目錄：{copies}（workspace/integration/passengers.csv、voyage.csv）。"
+        "內建雙表教材不得覆寫。"
+        "合併前只准將航程表副本的 passenger_id 改名為 PassengerId；不要補值、刪欄或改乘客表。"
+        "通過訓練前預測（資料整合）且鍵名已對齊後，才可依學生指定的 left 或 inner 合併"
+        "（課堂主線建議 left），"
+        f"同時寫入 {source} 與 {working}，並刪除雙表工作副本"
+        "（可用 commit_dual_table_merge）。"
+        "寫入後請告訴學生按「重新讀取工作資料」。"
+        "未解鎖或未對齊鍵名時拒絕合併。"
         f"Ready 分析就緒資料路徑：{ready}，由工作資料凍結後供圖表探索、降維等分析頁使用；"
         "監督式與非監督式教學頁使用各頁內建範例資料。"
         "回答資料問題時，請使用你的 read_file 或 exec 工具實際讀取 CSV 後再回答。"
-        f"如果使用者要求補值、清理資料、計算欄位或新增欄位，請預設讀取並更新 {working}，不要覆蓋 {source}。"
+        f"如果使用者要求補值、清理資料、計算欄位或新增欄位，且 Working 已存在，請預設讀取並更新 {working}，不要覆蓋 {source}。"
         f"如果需要撰寫 Python 腳本來整理或檢查資料，請只建立在 {scripts} 底下，"
         "不要在專案根目錄建立臨時 Python 腳本。"
         f"修改 Working 工作資料後，請追加一筆 JSONL 紀錄到 {cleaning_log}，每行必須是單一 JSON 物件，"
@@ -574,8 +587,8 @@ def dataset_page_snapshot(df: pd.DataFrame | None, extra_context: str = "") -> s
     if df is None:
         parts.append(
             "尚未建立工作資料。"
-            "若詢問資料內容、清理、補值或欄位計算，請先提醒到「欄位與資料概覽」查看雙表，"
-            "再到「資料整合」合併後再整理。"
+            "若詢問資料內容、清理、補值或欄位計算，請先提醒到「欄位與資料整合」查看雙表；"
+            "合併前可請 Agent 對齊航程表鍵名，通過關卡後再請 Agent 合併，會同時寫入 Original 與 Working。"
             "一般概念問題可直接回答。"
         )
     else:

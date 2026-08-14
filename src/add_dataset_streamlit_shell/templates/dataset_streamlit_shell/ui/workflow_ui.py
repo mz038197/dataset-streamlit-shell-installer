@@ -13,18 +13,16 @@ import streamlit as st
 from dataset_streamlit_shell.ml.integration import (
     JOIN_HOW_OPTIONS,
     KEY_ALIGN_OPTIONS,
-    KEY_ALIGN_CORRECT,
-    LEFT_JOIN_CORRECT,
     PASSENGER_KEY,
     PASSENGER_TABLE_LABEL,
     VOYAGE_KEY_RAW,
     VOYAGE_TABLE_LABEL,
-    align_voyage_key,
+    clear_dual_table_copies,
     is_join_how_correct,
     is_key_align_correct,
     key_overlap_count,
-    load_titanic_integration_frames,
-    merge_passenger_voyage,
+    load_dual_tables,
+    voyage_key_is_aligned,
 )
 from dataset_streamlit_shell.ml.split import (
     DEFAULT_RANDOM_STATE,
@@ -42,11 +40,11 @@ from dataset_streamlit_shell.ui.data_ui import (
     TRAIN_DATASET_PATH,
     VAL_DATASET_PATH,
     WORKING_DATASET_PATH,
+    WORKSPACE_DIR,
     _display_path,
     append_cleaning_log,
     clear_to_dual_start,
     create_ready_dataset,
-    initialize_working_dataset,
     invoke_data_agent,
     load_cleaning_log,
     load_ready_dataset,
@@ -55,7 +53,6 @@ from dataset_streamlit_shell.ui.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
     reset_working_dataset_from_source,
-    save_dataset,
     save_split_datasets,
     working_dataset_file_exists,
 )
@@ -183,7 +180,7 @@ def _page_shell(
         df = load_working_dataset()
         if df is None:
             st.warning(
-                "尚未建立工作資料。請先到「欄位與資料概覽」查看雙表，再到「資料整合」合併。"
+                "尚未建立工作資料。請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。"
             )
             return
         _render_refresh_controls()
@@ -207,9 +204,12 @@ def _render_refresh_controls() -> None:
             st.error("找不到原始資料，無法重置。")
 
 
-def _render_prompts(prompts: PromptList) -> None:
+def _render_prompts(prompts: PromptList, caption: str | None = None) -> None:
     st.markdown("##### 建議問 Agent")
-    st.caption("學生可以自然提問；系統規則會讓 Agent 預設修改工作資料並保護原始資料。")
+    st.caption(
+        caption
+        or "學生可以自然提問；系統規則會讓 Agent 預設修改工作資料並保護原始資料。"
+    )
     for prompt in prompts:
         st.code(prompt, language="text")
 
@@ -303,7 +303,7 @@ def _column_overview_frame(df: pd.DataFrame) -> pd.DataFrame:
 
 def _render_single_table_quality(df: pd.DataFrame) -> None:
     render_dataset_metrics(df)
-    st.markdown("##### 診斷：欄位與資料概覽")
+    st.markdown("##### 診斷：欄位與資料整合")
     c1, c2, c3 = st.columns(3)
     c1.metric("重複列", f"{int(df.duplicated().sum()):,}")
     c2.metric("缺失儲存格", f"{int(df.isna().sum().sum()):,}")
@@ -320,12 +320,48 @@ def _render_single_table_quality(df: pd.DataFrame) -> None:
     )
 
 
+def _render_dual_table_refresh_controls() -> None:
+    refresh_col, reset_col = st.columns(2)
+    if refresh_col.button("重新讀取雙表", width="stretch"):
+        st.rerun()
+    if reset_col.button("恢復內建雙表", width="stretch"):
+        clear_dual_table_copies(WORKSPACE_DIR)
+        st.success("已恢復內建雙表教材。")
+        st.rerun()
+
+
+def _render_integration_quiz() -> bool:
+    st.markdown("##### 訓練前預測（資料整合）")
+    key_choice = st.selectbox(
+        "題1：兩表應對齊的鍵要怎麼處理？",
+        KEY_ALIGN_OPTIONS,
+        key="integration_quiz_key",
+    )
+    how_choice = st.selectbox(
+        "題2：若要保留全部乘客、船票缺的變空值，應選？",
+        JOIN_HOW_OPTIONS,
+        key="integration_quiz_how",
+    )
+    key_ok = is_key_align_correct(key_choice)
+    how_ok = is_join_how_correct(how_choice)
+    unlocked = key_ok and how_ok
+    st.info(f"進度：{int(key_ok) + int(how_ok)}／2 題答對。答對後請 Agent 合併寫入 Original 與 Working。")
+    if not key_ok and key_choice != "請選擇":
+        st.caption("題1：想想航程表的鍵名是否與乘客表一致。")
+    if not how_ok and how_choice != "請選擇":
+        st.caption("題2：保留左表全部列的是 left。")
+    return unlocked
+
+
 def _render_dual_table_quality() -> str:
-    passengers, voyage = load_titanic_integration_frames()
+    passengers, voyage = load_dual_tables(WORKSPACE_DIR)
+    aligned = voyage_key_is_aligned(voyage)
+    _render_dual_table_refresh_controls()
     st.info(
-        "目前還沒有工作資料。以下是課堂用的兩份來源表——"
+        "目前還沒有 Working 工作資料。以下並排顯示內建雙表教材"
+        "（若 Agent 已對齊鍵名，則顯示雙表工作副本）——"
         f"**{PASSENGER_TABLE_LABEL}**（左）與 **{VOYAGE_TABLE_LABEL}**（右）。"
-        "請先找出能當合併依據的欄位，再到「資料整合」頁合併。"
+        "請先找出能當合併依據的欄位，請右側 Agent 只改航程表鍵名；通過關卡後再請 Agent 合併。"
     )
     left_col, right_col = st.columns(2)
     with left_col:
@@ -340,41 +376,52 @@ def _render_dual_table_quality() -> str:
         st.caption(f"列數 {len(voyage):,} · 欄位數 {voyage.shape[1]}")
         st.write("欄名：" + "、".join(f"`{c}`" for c in voyage.columns))
         st.dataframe(_column_overview_frame(voyage), width="stretch")
-        st.warning(
-            f"注意：航程表的鍵欄是 `{VOYAGE_KEY_RAW}`，"
-            f"與乘客表的 `{PASSENGER_KEY}` 寫法不同。"
-        )
+        if aligned:
+            st.success(f"航程表鍵名已對齊為 `{PASSENGER_KEY}`。")
+        else:
+            st.warning(
+                f"注意：航程表的鍵欄是 `{VOYAGE_KEY_RAW}`，"
+                f"與乘客表的 `{PASSENGER_KEY}` 寫法不同。"
+            )
         with st.expander("預覽", expanded=True):
             st.dataframe(voyage.head(10), width="stretch", hide_index=True)
 
-    overlap_raw = key_overlap_count(
+    overlap = key_overlap_count(
         passengers,
         voyage,
         left_on=PASSENGER_KEY,
         right_on=PASSENGER_KEY,
     )
-    st.caption(
-        f"若直接用兩邊的 `{PASSENGER_KEY}` 對鍵，重疊鍵數量為 {overlap_raw} "
-        f"（航程表實際鍵名是 `{VOYAGE_KEY_RAW}`）。"
-    )
+    if aligned:
+        st.caption(f"對齊後以 `{PASSENGER_KEY}` 對鍵，重疊鍵數量為 {overlap}。")
+    else:
+        st.caption(
+            f"若直接用兩邊的 `{PASSENGER_KEY}` 對鍵，重疊鍵數量為 {overlap} "
+            f"（航程表實際鍵名是 `{VOYAGE_KEY_RAW}`）。"
+        )
+
+    unlocked = _render_integration_quiz()
     _render_prompts(
         [
             "請比較乘客表與航程表的欄名，指出哪一欄最可能當合併鍵，並說明兩邊寫法是否一致。",
-            "請說明若鍵名大小寫不同，合併前應該先做什麼。",
-            "請不要修改資料；先討論找到可對齊的鍵之後，再到資料整合頁操作。",
-        ]
+            "請把航程表的 passenger_id 改成 PassengerId，寫入 workspace/integration/voyage.csv。",
+            "關卡通過後，請用 left 合併兩表，同時寫入 original.csv 與 working.csv，並刪除雙表工作副本。",
+        ],
+        caption="合併前請 Agent 只改航程表鍵名（雙表工作副本）。通過關卡後再合併，會同時寫入 Original 與 Working。",
     )
     return (
         f"學生在雙表起點查看{PASSENGER_TABLE_LABEL}與{VOYAGE_TABLE_LABEL}。"
         f"乘客表欄名：{'、'.join(map(str, passengers.columns))}。"
         f"航程表欄名：{'、'.join(map(str, voyage.columns))}。"
-        f"航程表鍵欄為 {VOYAGE_KEY_RAW}，乘客表鍵欄為 {PASSENGER_KEY}。"
+        f"航程表鍵已對齊={'是' if aligned else '否'}。"
+        f"關卡解鎖={'是' if unlocked else '否'}。"
+        "合併前只准改航程表鍵名；合併須同時寫入 original.csv 與 working.csv。"
     )
 
 
 def render_quality_page() -> None:
-    title = "欄位與資料概覽"
-    caption = "先看欄位名稱、型態、列數欄數與基本結構。"
+    title = "欄位與資料整合"
+    caption = "先看欄位名稱、型態、列數欄數與基本結構；請 Agent 對齊鍵名後合併。"
     teaching, agent = open_content_dual_pane()
     with teaching:
         st.title(title)
@@ -384,7 +431,7 @@ def render_quality_page() -> None:
             if df is None:
                 st.warning("無法讀取工作資料。")
                 return
-            if st.button("清除工作資料並顯示雙表教材", width="stretch"):
+            if st.button("清除回雙表起點", width="stretch"):
                 clear_to_dual_start()
                 st.rerun()
             _render_refresh_controls()
@@ -3041,131 +3088,6 @@ def _render_regression_prompts(prompts: list[str]) -> None:
     st.markdown("##### 建議問 Agent")
     for prompt in prompts:
         st.code(prompt, language="text")
-
-
-def render_integration_page() -> None:
-    title = "資料整合"
-    passengers, voyage = load_titanic_integration_frames()
-    teaching, agent = open_content_dual_pane()
-    with teaching:
-        st.title(title)
-        st.caption(
-            f"左表固定為{PASSENGER_TABLE_LABEL}、右表固定為{VOYAGE_TABLE_LABEL}。"
-            "對齊鍵名後選擇 join，通過兩題再寫入工作資料。"
-        )
-        if working_dataset_file_exists():
-            st.warning("目前已有工作資料。套用合併會覆蓋 original 與 working。")
-            if st.button("清除回雙表起點", key="integration_clear_dual"):
-                clear_to_dual_start()
-                st.rerun()
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric(PASSENGER_TABLE_LABEL, f"{len(passengers):,} 列")
-        c2.metric(VOYAGE_TABLE_LABEL, f"{len(voyage):,} 列")
-        aligned_preview = align_voyage_key(voyage)
-        overlap = key_overlap_count(
-            passengers,
-            aligned_preview,
-            left_on=PASSENGER_KEY,
-            right_on=PASSENGER_KEY,
-        )
-        c3.metric("對齊鍵後重疊", f"{overlap:,}")
-
-        align_key = st.checkbox(
-            f"先將航程表 `{VOYAGE_KEY_RAW}` 重新命名為 `{PASSENGER_KEY}`",
-            value=False,
-            key="integration_align_key",
-        )
-        how = st.radio(
-            "合併方式 how",
-            options=["inner", "left"],
-            horizontal=True,
-            key="integration_how",
-        )
-        merge_error = ""
-        merged: pd.DataFrame | None = None
-        try:
-            merged = merge_passenger_voyage(
-                passengers,
-                voyage,
-                how=how,
-                align_key=align_key,
-            )
-        except ValueError as exc:
-            merge_error = str(exc)
-
-        if merge_error:
-            st.error(merge_error)
-        elif merged is not None:
-            st.markdown("##### 合併預覽")
-            st.caption(f"合併後 {len(merged):,} 列、{merged.shape[1]} 欄（how=`{how}`）")
-            if how == "left":
-                st.caption(
-                    f"left：保留全部 {len(passengers):,} 位乘客；"
-                    f"航程缺列時對應欄位為空。"
-                )
-            st.dataframe(merged.head(15), width="stretch", hide_index=True)
-
-        st.markdown("##### 訓練前預測（解鎖套用）")
-        key_choice = st.selectbox(
-            "題1：兩表應對齊的鍵要怎麼處理？",
-            KEY_ALIGN_OPTIONS,
-            key="integration_quiz_key",
-        )
-        how_choice = st.selectbox(
-            "題2：若要保留全部乘客、船票缺的變空值，應選？",
-            JOIN_HOW_OPTIONS,
-            key="integration_quiz_how",
-        )
-        key_ok = is_key_align_correct(key_choice)
-        how_ok = is_join_how_correct(how_choice)
-        unlocked = key_ok and how_ok
-        st.info(f"進度：{int(key_ok) + int(how_ok)}／2 題答對。")
-        if not key_ok and key_choice != "請選擇":
-            st.caption("題1：想想航程表的鍵名是否與乘客表一致。")
-        if not how_ok and how_choice != "請選擇":
-            st.caption("題2：保留左表全部列的是 left。")
-
-        apply = st.button(
-            "套用合併並寫入工作資料",
-            type="primary",
-            width="stretch",
-            disabled=not unlocked or merged is None,
-            key="integration_apply",
-        )
-        if apply and unlocked and merged is not None:
-            if not align_key:
-                st.error("請勾選對齊鍵名後再套用（航程表鍵為 passenger_id）。")
-            elif how != LEFT_JOIN_CORRECT:
-                st.error("本題教學要求使用 left，以保留全部乘客。")
-            else:
-                reset_ready_dataset()
-                save_dataset(merged)
-                initialize_working_dataset(merged)
-                append_cleaning_log(
-                    action="merge_tables",
-                    columns=merged.columns,
-                    rows=len(merged),
-                    note=f"left={PASSENGER_TABLE_LABEL}, right={VOYAGE_TABLE_LABEL}, how={how}",
-                    actor="ui",
-                )
-                st.success("已寫入 original.csv 與 working.csv。可到欄位與資料概覽查看合併後大表。")
-                st.rerun()
-
-        _render_prompts(
-            [
-                "請說明為什麼航程表的 passenger_id 不能直接和乘客表的 PassengerId 對上。",
-                "請比較 inner 與 left：哪一種會保留全部乘客？",
-                KEY_ALIGN_CORRECT,
-            ]
-        )
-
-    with agent:
-        extra = (
-            f"資料整合頁。左={PASSENGER_TABLE_LABEL}，右={VOYAGE_TABLE_LABEL}。"
-            f"align_key={align_key}，how={how}，關卡解鎖={'是' if unlocked else '否'}。"
-        )
-        render_chat_panel(extra_context=extra, page_name=title)
 
 
 def render_transform_page() -> None:

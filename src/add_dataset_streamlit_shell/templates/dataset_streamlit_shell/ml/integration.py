@@ -59,6 +59,67 @@ def load_titanic_integration_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
     return passengers, voyage
 
 
+def dual_table_copy_paths(workspace: Path) -> tuple[Path, Path]:
+    folder = workspace / "integration"
+    return folder / "passengers.csv", folder / "voyage.csv"
+
+
+def write_dual_table_copies(
+    workspace: Path,
+    passengers: pd.DataFrame,
+    voyage: pd.DataFrame,
+) -> None:
+    passengers_path, voyage_path = dual_table_copy_paths(workspace)
+    passengers_path.parent.mkdir(parents=True, exist_ok=True)
+    passengers.to_csv(passengers_path, index=False)
+    voyage.to_csv(voyage_path, index=False)
+
+
+def clear_dual_table_copies(workspace: Path) -> None:
+    passengers_path, voyage_path = dual_table_copy_paths(workspace)
+    for path in (passengers_path, voyage_path):
+        if path.is_file():
+            path.unlink()
+    folder = passengers_path.parent
+    if folder.is_dir() and not any(folder.iterdir()):
+        folder.rmdir()
+
+
+def load_dual_tables(workspace: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    builtin_p, builtin_v = load_titanic_integration_frames()
+    passengers_path, voyage_path = dual_table_copy_paths(workspace)
+    passengers = pd.read_csv(passengers_path) if passengers_path.is_file() else builtin_p
+    voyage = pd.read_csv(voyage_path) if voyage_path.is_file() else builtin_v
+    return passengers, voyage
+
+
+def voyage_key_is_aligned(voyage: pd.DataFrame) -> bool:
+    return PASSENGER_KEY in voyage.columns and VOYAGE_KEY_RAW not in voyage.columns
+
+
+def merge_from_dual_tables(workspace: Path, *, how: str) -> pd.DataFrame:
+    passengers, voyage = load_dual_tables(workspace)
+    if not voyage_key_is_aligned(voyage):
+        raise ValueError("未對齊鍵名不得合併")
+    return merge_passenger_voyage(passengers, voyage, how=how, align_key=False)
+
+
+def commit_dual_table_merge(
+    workspace: Path,
+    *,
+    how: str,
+    original_path: Path,
+    working_path: Path,
+) -> pd.DataFrame:
+    merged = merge_from_dual_tables(workspace, how=how)
+    original_path.parent.mkdir(parents=True, exist_ok=True)
+    working_path.parent.mkdir(parents=True, exist_ok=True)
+    merged.to_csv(original_path, index=False)
+    merged.to_csv(working_path, index=False)
+    clear_dual_table_copies(workspace)
+    return merged
+
+
 def align_voyage_key(voyage: pd.DataFrame) -> pd.DataFrame:
     frame = voyage.copy()
     if VOYAGE_KEY_RAW in frame.columns and PASSENGER_KEY not in frame.columns:

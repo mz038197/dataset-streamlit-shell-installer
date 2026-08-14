@@ -22,13 +22,20 @@ from dataset_streamlit_shell.ml.integration import (  # noqa: E402
     SEX_CANONICAL,
     VOYAGE_KEY_RAW,
     align_voyage_key,
+    clear_dual_table_copies,
+    dual_table_copy_paths,
     is_join_how_correct,
     is_key_align_correct,
     key_overlap_count,
+    load_dual_tables,
     load_titanic_integration_frames,
+    merge_from_dual_tables,
     merge_passenger_voyage,
     normalize_embarked_series,
     normalize_sex_series,
+    voyage_key_is_aligned,
+    write_dual_table_copies,
+    commit_dual_table_merge,
 )
 
 INTEGRATION_DIR = (
@@ -99,3 +106,67 @@ def test_integration_quiz_answers() -> None:
 def test_csv_files_on_disk() -> None:
     assert (INTEGRATION_DIR / "titanic_passengers.csv").is_file()
     assert (INTEGRATION_DIR / "titanic_voyage.csv").is_file()
+
+
+def test_load_dual_tables_falls_back_to_builtin(tmp_path: Path) -> None:
+    passengers, voyage = load_dual_tables(tmp_path)
+    builtin_p, builtin_v = load_titanic_integration_frames()
+    assert list(passengers.columns) == list(builtin_p.columns)
+    assert list(voyage.columns) == list(builtin_v.columns)
+    assert VOYAGE_KEY_RAW in voyage.columns
+    assert not voyage_key_is_aligned(voyage)
+
+
+def test_load_dual_tables_prefers_workspace_copies(tmp_path: Path) -> None:
+    passengers, voyage = load_titanic_integration_frames()
+    aligned = align_voyage_key(voyage)
+    write_dual_table_copies(tmp_path, passengers, aligned)
+    loaded_p, loaded_v = load_dual_tables(tmp_path)
+    assert PASSENGER_KEY in loaded_v.columns
+    assert VOYAGE_KEY_RAW not in loaded_v.columns
+    assert voyage_key_is_aligned(loaded_v)
+    copy_p, copy_v = dual_table_copy_paths(tmp_path)
+    assert copy_p.is_file()
+    assert copy_v.is_file()
+
+
+def test_clear_dual_table_copies_restores_builtin_key(tmp_path: Path) -> None:
+    passengers, voyage = load_titanic_integration_frames()
+    write_dual_table_copies(tmp_path, passengers, align_voyage_key(voyage))
+    clear_dual_table_copies(tmp_path)
+    _, loaded_v = load_dual_tables(tmp_path)
+    assert VOYAGE_KEY_RAW in loaded_v.columns
+    assert not dual_table_copy_paths(tmp_path)[1].is_file()
+
+
+def test_merge_from_dual_tables_rejects_unaligned_key(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="未對齊鍵名"):
+        merge_from_dual_tables(tmp_path, how="left")
+
+
+def test_merge_from_aligned_copies_supports_left_and_inner(tmp_path: Path) -> None:
+    passengers, voyage = load_titanic_integration_frames()
+    write_dual_table_copies(tmp_path, passengers, align_voyage_key(voyage))
+    left = merge_from_dual_tables(tmp_path, how="left")
+    inner = merge_from_dual_tables(tmp_path, how="inner")
+    assert len(left) == len(passengers)
+    assert len(inner) < len(left)
+
+
+def test_commit_dual_table_merge_writes_both_files_and_deletes_copies(
+    tmp_path: Path,
+) -> None:
+    passengers, voyage = load_titanic_integration_frames()
+    write_dual_table_copies(tmp_path, passengers, align_voyage_key(voyage))
+    original = tmp_path / "original.csv"
+    working = tmp_path / "working.csv"
+    commit_dual_table_merge(
+        tmp_path,
+        how="left",
+        original_path=original,
+        working_path=working,
+    )
+    assert original.is_file()
+    assert working.is_file()
+    assert len(pd.read_csv(original)) == len(passengers)
+    assert not dual_table_copy_paths(tmp_path)[1].is_file()

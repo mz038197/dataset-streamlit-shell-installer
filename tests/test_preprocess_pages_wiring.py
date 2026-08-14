@@ -30,28 +30,30 @@ UI = (
 
 def test_new_preprocess_pages_exist() -> None:
     for name in (
-        "15_Data_Integration.py",
         "17_Data_Transform.py",
         "20_Data_Split.py",
     ):
         assert (PAGES / name).is_file()
     assert not (PAGES / "1_Database.py").is_file()
+    assert not (PAGES / "15_Data_Integration.py").is_file()
 
 
 def test_app_nav_order_for_integration_transform_split() -> None:
     src = APP.read_text(encoding="utf-8")
     assert "1_Database.py" not in src
     assert "資料上傳與預覽" not in src
+    assert "15_Data_Integration.py" not in src
     collab = src.index('"AI 協作資料整理"')
     quality = src.index("3_Field_Quality.py")
-    integration = src.index("15_Data_Integration.py")
     transform = src.index("17_Data_Transform.py")
     duplicates = src.index("4_Duplicates.py")
     ready = src.index("8_Ready.py")
     charts = src.index("2_Charts.py")
     split = src.index("20_Data_Split.py")
-    assert collab < quality < integration < transform < duplicates
+    assert collab < quality < transform < duplicates
     assert ready < charts < split
+    assert 'title="欄位與資料整合"' in src
+    assert 'title="資料整合"' not in src
 
 
 def test_guidance_strings_point_to_field_quality_not_upload() -> None:
@@ -61,9 +63,10 @@ def test_guidance_strings_point_to_field_quality_not_upload() -> None:
     app = APP.read_text(encoding="utf-8")
     for src in (data_ui, workflow, charts, app):
         assert "資料上傳與預覽" not in src
-    assert "欄位與資料概覽" in data_ui
-    assert "欄位與資料概覽" in workflow
-    assert "欄位與資料概覽" in app
+    assert "欄位與資料整合" in data_ui
+    assert "欄位與資料整合" in workflow
+    assert "欄位與資料整合" in app
+    assert "欄位與資料概覽" not in workflow
     assert "建立 Ready 分析就緒資料" in charts
 
 
@@ -72,11 +75,17 @@ def test_quality_page_supports_dual_and_clear() -> None:
     assert "working_dataset_file_exists" in src
     assert "clear_to_dual_start" in src
     assert "_render_dual_table_quality" in src
-    assert "render_integration_page" in src
+    assert "render_integration_page" not in src
+    assert "integration_apply" not in src
+    assert "套用合併並寫入工作資料" not in src
+    assert "重新讀取雙表" in src
+    assert "恢復內建雙表" in src
+    assert "訓練前預測（資料整合）" in src
     assert "render_transform_page" in src
     assert "render_split_page" in src
     assert "clear_split_datasets" in (UI / "data_ui.py").read_text(encoding="utf-8")
     assert "save_split_datasets" in (UI / "data_ui.py").read_text(encoding="utf-8")
+    assert "clear_dual_table_copies" in (UI / "data_ui.py").read_text(encoding="utf-8")
 
 
 def test_charts_page_reads_ready_only() -> None:
