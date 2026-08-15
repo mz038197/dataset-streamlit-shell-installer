@@ -68,6 +68,15 @@ def test_chat_panel_marks_fill_height_host() -> None:
     assert 'data-dss-chat' in src
 
 
+def test_dual_pane_chrome_tightens_top_gap_under_nav() -> None:
+    chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")
+    styles = (UI / "data_ui.py").read_text(encoding="utf-8")
+    assert "padding-top: 0.5rem !important" in chrome
+    assert 'setProperty("padding-top", "0.5rem"' in chrome
+    assert "padding-top: 0.5rem !important" in styles
+    assert '[data-testid="stHtml"] style' in chrome
+
+
 def test_agent_chat_pins_input_and_scrolls_messages() -> None:
     """資料 Agent 欄：訊息自捲、chat_input 釘欄底（對齊 waku dock）。"""
     chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")

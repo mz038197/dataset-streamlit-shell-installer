@@ -113,7 +113,15 @@ def inject_style() -> None:
     st.markdown(
         """
 <style>
-    .block-container { padding-top: 2rem; }
+    .block-container,
+    .stMainBlockContainer,
+    [data-testid="stMainBlockContainer"] {
+        padding-top: 0.5rem !important;
+    }
+    /* CSS 注入列不要佔導航列底下的垂直空間 */
+    [data-testid="stElementContainer"]:has([data-testid="stMarkdownContainer"] > style:only-child) {
+        display: none !important;
+    }
     .data-card {
         border: 1px solid rgba(250, 250, 250, 0.12);
         border-radius: 18px;
