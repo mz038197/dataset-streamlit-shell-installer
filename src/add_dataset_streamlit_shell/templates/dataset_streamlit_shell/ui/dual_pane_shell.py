@@ -64,6 +64,18 @@ def inject_dual_pane_chrome() -> None:
   [data-testid="stElementContainer"]:has([data-testid="stHtml"] style) {{
     display: none !important;
   }}
+  /* Pane marker 內層 display:none 仍佔一個 element slot + 欄內 gap。 */
+  [data-testid="stElementContainer"]:has([data-dss-pane]) {{
+    display: none !important;
+  }}
+  /* 欄頂貼齊第一個標題，不要再疊 st.title 預設 padding-top。 */
+  .dss-main-pane [data-testid="stHeading"],
+  .dss-main-pane [data-testid="stHeading"] h1,
+  .dss-agent-pane [data-testid="stHeading"],
+  .dss-agent-pane [data-testid="stHeading"] h1 {{
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }}
   /* First paint before JS: honour ADR default Agent width. */
   [data-testid="stColumn"]:has([data-dss-pane="agent"]) {{
     flex: 0 0 {AGENT_WIDTH_DEFAULT}px !important;

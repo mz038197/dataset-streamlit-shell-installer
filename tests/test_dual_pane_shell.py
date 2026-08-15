@@ -76,6 +76,9 @@ def test_dual_pane_chrome_clears_overlay_header() -> None:
     assert "padding-top: 4rem !important" in styles
     assert "0.5rem" not in styles.split("padding-top", 1)[1][:40]
     assert '[data-testid="stHtml"] style' in chrome
+    assert '[data-testid="stElementContainer"]:has([data-dss-pane])' in chrome
+    assert ".dss-main-pane [data-testid=\"stHeading\"]" in chrome
+    assert "data-agent-title-spacer" not in styles
 
 
 def test_sidebar_brand_uses_classroom_logo_and_wordmark() -> None:

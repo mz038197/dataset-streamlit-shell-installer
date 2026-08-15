@@ -169,9 +169,6 @@ def inject_style() -> None:
         border: 1px solid rgba(90, 160, 255, 0.24);
         font-size: 0.8rem;
     }
-    .data-agent-title-spacer {
-        height: 0.75rem;
-    }
     .data-agent-title-text {
         font-size: 1.25rem;
         font-weight: 800;
@@ -963,7 +960,6 @@ def render_chat_panel(
         st.session_state.pop(keys["agent_session_path"], None)
     if page_name:
         st.session_state["last_chat_page"] = page_name
-    st.markdown('<div class="data-agent-title-spacer"></div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="data-agent-title-text">資料 Agent</div>',
         unsafe_allow_html=True,

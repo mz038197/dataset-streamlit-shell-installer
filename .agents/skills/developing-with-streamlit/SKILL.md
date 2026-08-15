@@ -22,3 +22,7 @@ The script prints either:
 - **An `ERROR:` block on stderr** (non-zero exit). Follow the printed instructions and re-run.
 
 `<SKILL_DIR>` is the directory containing this file; `<USER_PROJECT_DIR>` is the absolute path to the user's project. Passing `--project-dir` matters because the script resolves `.venv`, `../.venv`, `Pipfile`, `poetry.lock`, `pdm.lock`, and `uv.lock` relative to it.
+
+## 已知坑
+
+- Windows 若 `python` 不在 PATH（exit 9009），改用 `py` 或 `uv run python` 跑 `discover.py`／pytest；本專案測試用 `uv run pytest`。
