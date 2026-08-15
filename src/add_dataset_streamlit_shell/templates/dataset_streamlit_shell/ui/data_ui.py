@@ -133,20 +133,12 @@ def inject_style() -> None:
     [data-testid="stSidebarHeader"] {
         display: flex !important;
         align-items: center !important;
+        justify-content: flex-start !important;
         gap: 10px !important;
         overflow: visible !important;
     }
-    [data-testid="stSidebarHeader"] [data-testid="stLogo"] {
-        display: flex !important;
-        align-items: center !important;
-        gap: 10px !important;
-        overflow: visible !important;
-        width: auto !important;
-        max-width: none !important;
-        height: auto !important;
-        max-height: none !important;
-    }
-    [data-testid="stSidebarHeader"] [data-testid="stLogo"]::after {
+    /* stLogo 在 1.61 是 img；img 上的 ::after 不會畫出來 */
+    [data-testid="stSidebarHeader"]::after {
         content: "VansCoding.AI";
         font-weight: 700;
         font-size: 14px;
@@ -157,8 +149,9 @@ def inject_style() -> None:
         background-clip: text;
         -webkit-text-fill-color: transparent;
         color: transparent;
+        order: 1;
     }
-    [data-testid="stSidebarHeader"] [data-testid="stLogo"] img {
+    [data-testid="stSidebarHeader"] img {
         box-sizing: border-box !important;
         width: 40px !important;
         height: 40px !important;
@@ -169,6 +162,11 @@ def inject_style() -> None:
         box-shadow: 0 0 0 1px rgba(0, 112, 112, 0.18);
         object-fit: contain;
         object-position: center;
+        order: 0;
+    }
+    [data-testid="stSidebarHeader"] [data-testid="stSidebarCollapseButton"] {
+        margin-left: auto !important;
+        order: 2;
     }
     .data-card {
         border: 1px solid rgba(250, 250, 250, 0.12);

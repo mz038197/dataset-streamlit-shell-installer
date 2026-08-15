@@ -91,6 +91,8 @@ def test_sidebar_brand_uses_classroom_logo_and_wordmark() -> None:
     assert logo.is_file()
     assert "st.logo" in styles
     assert 'size="small"' in styles
+    assert '[data-testid="stSidebarHeader"]::after' in styles
+    assert '[data-testid="stLogo"]::after' not in styles
     assert 'content: "VansCoding.AI"' in wordmark
     assert '[data-testid="stHeader"]' not in styles
     assert "40px" in sidebar_block
@@ -103,6 +105,10 @@ def test_sidebar_brand_uses_classroom_logo_and_wordmark() -> None:
     assert "font-size: 14px" in wordmark
     assert "letter-spacing: -0.02em" in wordmark
     assert "overflow: visible" in sidebar_block
+    collapse = sidebar_block.split("stSidebarCollapseButton", 1)[1].split("}", 1)[0]
+    assert "margin-left: auto" in collapse
+    assert "order: 2" in collapse
+    assert '[data-testid="stSidebarHeader"] button' not in styles
     assert "brand_page_icon" in styles
     assert "page_icon=brand_page_icon()" in app
     assert "**側欄品牌列**:" in context
