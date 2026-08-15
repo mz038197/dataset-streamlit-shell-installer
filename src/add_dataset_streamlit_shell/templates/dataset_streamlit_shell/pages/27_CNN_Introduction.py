@@ -10,8 +10,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataset_streamlit_shell.ui.cnn_ui import render_cnn_introduction_page
-from dataset_streamlit_shell.ui.data_ui import inject_style
+from dataset_streamlit_shell.ui.data_ui import brand_page_icon, inject_style
 
-st.set_page_config(page_title="卷積神經網路（CNN）", page_icon="CNN", layout="wide")
+st.set_page_config(page_title="卷積神經網路（CNN）", page_icon=brand_page_icon(), layout="wide")
 inject_style()
 render_cnn_introduction_page()

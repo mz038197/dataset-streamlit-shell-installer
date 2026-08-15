@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from dataset_streamlit_shell.ui.data_ui import (
     READY_DATASET_PATH,
     _display_path,
+    brand_page_icon,
     inject_style,
     load_ready_dataset,
     render_chat_panel,
@@ -29,7 +30,7 @@ from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 
 
-st.set_page_config(page_title="圖表探索", page_icon="CH", layout="wide")
+st.set_page_config(page_title="圖表探索", page_icon=brand_page_icon(), layout="wide")
 inject_style()
 
 COUNT_ROWS = "資料筆數"

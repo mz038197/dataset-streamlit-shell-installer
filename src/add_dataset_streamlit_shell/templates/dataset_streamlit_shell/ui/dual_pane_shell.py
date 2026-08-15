@@ -57,7 +57,7 @@ def inject_dual_pane_chrome() -> None:
   section.main > div.block-container:has([data-dss-pane="main"]) {{
     max-height: 100% !important;
     overflow: hidden !important;
-    padding-top: 0.5rem !important;
+    padding-top: 4rem !important;
     padding-bottom: 0.5rem !important;
   }}
   /* Chrome 的 st.html 列不要把雙欄往下推。 */
@@ -183,7 +183,7 @@ def inject_dual_pane_chrome() -> None:
     ).forEach(function (bc) {{
       bc.style.setProperty("overflow", "hidden", "important");
       bc.style.setProperty("max-height", "100%", "important");
-      bc.style.setProperty("padding-top", "0.5rem", "important");
+      bc.style.setProperty("padding-top", "4rem", "important");
       bc.style.setProperty("padding-bottom", "0.5rem", "important");
     }});
   }}

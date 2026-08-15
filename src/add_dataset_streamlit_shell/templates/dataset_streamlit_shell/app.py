@@ -15,6 +15,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     WORKING_DATASET_PATH,
     SHELL_ROOT,
     _display_path,
+    brand_page_icon,
     inject_style,
     load_dataset,
     load_ready_dataset,
@@ -26,7 +27,7 @@ from dataset_streamlit_shell.ui.data_ui import (
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 
-st.set_page_config(page_title="資料學習實驗室", page_icon="CSV", layout="wide")
+st.set_page_config(page_title="資料學習實驗室", page_icon=brand_page_icon(), layout="wide")
 inject_style()
 
 

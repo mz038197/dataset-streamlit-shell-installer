@@ -68,13 +68,26 @@ def test_chat_panel_marks_fill_height_host() -> None:
     assert 'data-dss-chat' in src
 
 
-def test_dual_pane_chrome_tightens_top_gap_under_nav() -> None:
+def test_dual_pane_chrome_clears_overlay_header() -> None:
     chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")
     styles = (UI / "data_ui.py").read_text(encoding="utf-8")
-    assert "padding-top: 0.5rem !important" in chrome
-    assert 'setProperty("padding-top", "0.5rem"' in chrome
-    assert "padding-top: 0.5rem !important" in styles
+    assert "padding-top: 4rem !important" in chrome
+    assert 'setProperty("padding-top", "4rem"' in chrome
+    assert "padding-top: 4rem !important" in styles
+    assert "0.5rem" not in styles.split("padding-top", 1)[1][:40]
     assert '[data-testid="stHtml"] style' in chrome
+
+
+def test_sidebar_brand_uses_classroom_logo_and_wordmark() -> None:
+    styles = (UI / "data_ui.py").read_text(encoding="utf-8")
+    app = (TEMPLATE / "app.py").read_text(encoding="utf-8")
+    logo = TEMPLATE / "assets" / "brand-logo.png"
+    assert logo.is_file()
+    assert "st.logo" in styles
+    assert 'content: "VansCoding.AI"' in styles
+    assert "[data-testid=\"stSidebarHeader\"]" in styles
+    assert "brand_page_icon" in styles
+    assert "page_icon=brand_page_icon()" in app
 
 
 def test_agent_chat_pins_input_and_scrolls_messages() -> None:

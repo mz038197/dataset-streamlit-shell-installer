@@ -28,6 +28,7 @@ from dataset_streamlit_shell.agent_loader import (  # noqa: E402
 )
 from dataset_streamlit_shell.ml.integration import clear_dual_table_copies  # noqa: E402
 
+BRAND_LOGO_PATH = SHELL_ROOT / "assets" / "brand-logo.png"
 WORKSPACE_DIR = SHELL_ROOT / "workspace"
 SESSION_DIR = PROJECT_ROOT / "sessions"
 AGENT_ACTIVATION_MARKER_PATH = SHELL_ROOT / ".agent_activated"
@@ -109,18 +110,47 @@ def _display_path(path: Path) -> str:
         return path.as_posix()
 
 
+def brand_page_icon() -> str:
+    return str(BRAND_LOGO_PATH)
+
+
 def inject_style() -> None:
+    if BRAND_LOGO_PATH.is_file():
+        st.logo(str(BRAND_LOGO_PATH), size="small", icon_image=str(BRAND_LOGO_PATH))
     st.markdown(
         """
 <style>
+    /* 4rem 讓開固定 header（Deploy／選單）；勿再用 0.5rem，標題會被裁切 */
     .block-container,
     .stMainBlockContainer,
     [data-testid="stMainBlockContainer"] {
-        padding-top: 0.5rem !important;
+        padding-top: 4rem !important;
     }
     /* CSS 注入列不要佔導航列底下的垂直空間 */
     [data-testid="stElementContainer"]:has([data-testid="stMarkdownContainer"] > style:only-child) {
         display: none !important;
+    }
+    [data-testid="stSidebarHeader"] {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.4rem !important;
+    }
+    [data-testid="stSidebarHeader"] [data-testid="stLogo"] {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.45rem !important;
+    }
+    [data-testid="stSidebarHeader"] [data-testid="stLogo"]::after {
+        content: "VansCoding.AI";
+        font-weight: 700;
+        font-size: 0.92rem;
+        letter-spacing: 0.01em;
+        white-space: nowrap;
+        color: inherit;
+    }
+    [data-testid="stSidebarHeader"] img {
+        max-height: 2rem !important;
+        width: auto !important;
     }
     .data-card {
         border: 1px solid rgba(250, 250, 250, 0.12);
