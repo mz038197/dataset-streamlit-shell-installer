@@ -19,10 +19,13 @@ from dataset_streamlit_shell.ml.integration import (
     VOYAGE_TABLE_LABEL,
     clear_dual_table_copies,
     ensure_dual_table_copies,
+    flagged_synonym_columns,
     is_join_how_correct,
     is_key_align_correct,
     key_overlap_count,
     load_dual_tables,
+    text_object_columns,
+    transform_column_overview,
     voyage_key_is_aligned,
 )
 from dataset_streamlit_shell.ml.split import (
@@ -152,6 +155,8 @@ OUTLIER_METHOD_WIDGET_KEY = "outlier_method"
 OUTLIER_ZSCORE_THRESHOLD_WIDGET_KEY = "outlier_zscore_threshold"
 FEATURE_SCALING_METHOD_WIDGET_KEY = "feature_scaling_method_widget"
 FEATURE_SCALING_COLUMNS_WIDGET_KEY = "feature_scaling_columns_widget"
+TRANSFORM_FOCUS_COLUMNS_WIDGET_KEY = "transform_focus_columns_widget"
+TRANSFORM_DETAIL_COLUMN_WIDGET_KEY = "transform_column"
 
 _SCALING_METHOD_LABELS: dict[str, str] = {
     "zscore": "Z 分數正規化（Z-score normalization）",
@@ -3097,25 +3102,56 @@ def render_transform_page() -> None:
         st.markdown("##### 診斷：資料轉換（同義寫法）")
         st.caption(
             "把同一語意的不同寫法收成約定標準值。"
-            "本頁由 Agent 更新 working；請先看分布再討論對照表。"
+            "本頁由 Agent 更新 working；請先看輔助資訊與同義提示，再討論對照表。"
         )
-        object_cols = [
-            str(column)
-            for column in df.columns
-            if str(df[column].dtype) in {"object", "string"}
-            or str(df[column].dtype).startswith("string")
-        ]
-        preferred = [column for column in ("Sex", "Embarked") if column in df.columns]
-        default = preferred[0] if preferred else (object_cols[0] if object_cols else None)
+        object_cols = text_object_columns(df)
         if not object_cols:
             st.warning("目前沒有文字／類別欄可檢視。")
             return
+
+        st.info(
+            "請先看欄位輔助資訊與同義提示，勾選要關注的文字欄，再選一欄查看分布。"
+            "同義提示僅供參考，不會自動改資料。"
+        )
+        st.markdown("###### 欄位輔助資訊")
+        st.dataframe(transform_column_overview(df, object_cols), width="stretch")
+
+        flagged = flagged_synonym_columns(df)
+        default_focus = [column for column in flagged if column in object_cols]
+        if TRANSFORM_FOCUS_COLUMNS_WIDGET_KEY not in st.session_state:
+            st.session_state[TRANSFORM_FOCUS_COLUMNS_WIDGET_KEY] = default_focus
+        focus_columns = st.multiselect(
+            "請選擇要關注的文字欄",
+            object_cols,
+            key=TRANSFORM_FOCUS_COLUMNS_WIDGET_KEY,
+        )
+        if not focus_columns:
+            st.warning("尚未選擇要關注的欄位。請先勾選可能有同義寫法的欄，或自行挑選。")
+            _render_prompts(
+                [
+                    "請檢視 working 的文字欄，指出哪些欄可能有同義寫法需要收斂。",
+                    "請把 Sex 映射成只有 male／female，更新 working.csv，並寫入 cleaning_log。",
+                    "請把 Embarked 映射成只有 S／C／Q，更新 working.csv，並寫入 cleaning_log。",
+                ]
+            )
+            return
+
         selected = st.selectbox(
             "查看欄位分布",
-            object_cols,
-            index=object_cols.index(default) if default in object_cols else 0,
-            key="transform_column",
+            ["請選擇欄位"] + focus_columns,
+            key=TRANSFORM_DETAIL_COLUMN_WIDGET_KEY,
         )
+        if selected == "請選擇欄位":
+            st.info("請選擇一個欄位，查看分布。")
+            _render_prompts(
+                [
+                    "請檢視我勾選的文字欄，指出哪些值其實是同一語意。",
+                    "請把 Sex 映射成只有 male／female，更新 working.csv，並寫入 cleaning_log。",
+                    "請把 Embarked 映射成只有 S／C／Q，更新 working.csv，並寫入 cleaning_log。",
+                ]
+            )
+            return
+
         counts = df[selected].fillna("Missing").astype(str).value_counts().head(30)
         st.metric("不同值數量", f"{int(df[selected].nunique(dropna=True)):,}")
         st.bar_chart(counts)
@@ -3137,12 +3173,22 @@ def render_transform_page() -> None:
         )
 
     def extra(df: pd.DataFrame) -> str:
-        column = st.session_state.get("transform_column")
-        if not column or column not in df.columns:
-            return "學生在資料轉換頁，尚未選欄。"
+        focus = st.session_state.get(TRANSFORM_FOCUS_COLUMNS_WIDGET_KEY, [])
+        if not isinstance(focus, list):
+            focus = []
+        focus = [str(column) for column in focus if str(column) in df.columns]
+        column = st.session_state.get(TRANSFORM_DETAIL_COLUMN_WIDGET_KEY)
+        if not focus:
+            return "學生在資料轉換頁，尚未勾選要關注的文字欄。"
+        focus_text = "、".join(focus)
+        if not column or column == "請選擇欄位" or column not in df.columns:
+            return f"資料轉換頁，學生關注欄位：{focus_text}；尚未選欄查看分布。"
         top = df[column].fillna("Missing").astype(str).value_counts().head(12)
         lines = "；".join(f"{index}={int(count)}" for index, count in top.items())
-        return f"資料轉換頁，目前欄位 {column}，前幾名分布：{lines}。"
+        return (
+            f"資料轉換頁，學生關注欄位：{focus_text}；"
+            f"目前查看 {column}，前幾名分布：{lines}。"
+        )
 
     _page_shell(
         "資料轉換",

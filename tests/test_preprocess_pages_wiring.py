@@ -83,6 +83,11 @@ def test_quality_page_supports_dual_and_clear() -> None:
     assert "訓練前預測（資料整合）" in src
     assert "render_transform_page" in src
     assert "render_split_page" in src
+    assert "transform_column_overview" in src
+    assert "flagged_synonym_columns" in src
+    assert "欄位輔助資訊" in src
+    assert "同義提示" in src
+    assert "請選擇要關注的文字欄" in src
     assert "clear_split_datasets" in (UI / "data_ui.py").read_text(encoding="utf-8")
     assert "save_split_datasets" in (UI / "data_ui.py").read_text(encoding="utf-8")
     assert "clear_dual_table_copies" in (UI / "data_ui.py").read_text(encoding="utf-8")

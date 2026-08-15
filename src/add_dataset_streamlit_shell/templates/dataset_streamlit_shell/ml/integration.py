@@ -176,6 +176,90 @@ def normalize_embarked_series(series: pd.Series) -> pd.Series:
     return cleaned.map(lambda value: EMBARKED_CANONICAL.get(str(value), pd.NA))
 
 
+SYNONYM_HINT_YES = "可能有同義寫法"
+SYNONYM_HINT_NONE = "—"
+
+
+def text_object_columns(df: pd.DataFrame) -> list[str]:
+    columns: list[str] = []
+    for column in df.columns:
+        dtype = str(df[column].dtype)
+        if dtype in {"object", "string"} or dtype.startswith("string") or dtype == "str":
+            columns.append(str(column))
+    return columns
+
+
+def surface_normalized_series(series: pd.Series) -> pd.Series:
+    cleaned = series.astype("string").str.strip()
+    cleaned = cleaned.str.replace(r"\s+", " ", regex=True)
+    return cleaned.str.casefold()
+
+
+def _canonical_fold_map(canonical: dict[str, str]) -> dict[str, str]:
+    return {key.casefold().strip(): value for key, value in canonical.items()}
+
+
+def hinted_series(series: pd.Series, column_name: str) -> pd.Series:
+    surface = surface_normalized_series(series)
+    if column_name == "Sex":
+        lookup = _canonical_fold_map(SEX_CANONICAL)
+    elif column_name == "Embarked":
+        lookup = _canonical_fold_map(EMBARKED_CANONICAL)
+    else:
+        return surface
+    return surface.map(
+        lambda value: lookup.get(str(value), pd.NA) if pd.notna(value) else pd.NA
+    )
+
+
+def hinted_nunique(series: pd.Series, column_name: str) -> int:
+    return int(hinted_series(series, column_name).nunique(dropna=True))
+
+
+def synonym_hint_label(series: pd.Series, column_name: str) -> str:
+    raw = int(series.nunique(dropna=True))
+    hinted = hinted_nunique(series, column_name)
+    if raw > hinted:
+        return SYNONYM_HINT_YES
+    return SYNONYM_HINT_NONE
+
+
+def flagged_synonym_columns(df: pd.DataFrame) -> list[str]:
+    return [
+        column
+        for column in text_object_columns(df)
+        if synonym_hint_label(df[column], column) == SYNONYM_HINT_YES
+    ]
+
+
+def _safe_top_value(series: pd.Series) -> str:
+    mode = series.mode(dropna=True)
+    if mode.empty:
+        return ""
+    return str(mode.iloc[0])
+
+
+def transform_column_overview(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for column in columns:
+        series = df[column]
+        raw_nunique = int(series.nunique(dropna=True))
+        hinted = hinted_nunique(series, column)
+        rows.append(
+            {
+                "資料型態": str(series.dtype),
+                "空值筆數": int(series.isna().sum()),
+                "不同值數量": raw_nunique,
+                "提示後不同值數量": hinted,
+                "同義提示": (
+                    SYNONYM_HINT_YES if raw_nunique > hinted else SYNONYM_HINT_NONE
+                ),
+                "常見值": _safe_top_value(series),
+            }
+        )
+    return pd.DataFrame(rows, index=columns)
+
+
 def is_key_align_correct(choice: str) -> bool:
     return choice == KEY_ALIGN_CORRECT
 
