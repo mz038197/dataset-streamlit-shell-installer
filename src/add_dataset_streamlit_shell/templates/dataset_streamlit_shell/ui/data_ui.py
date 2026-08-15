@@ -133,24 +133,42 @@ def inject_style() -> None:
     [data-testid="stSidebarHeader"] {
         display: flex !important;
         align-items: center !important;
-        gap: 0.4rem !important;
+        gap: 10px !important;
+        overflow: visible !important;
     }
     [data-testid="stSidebarHeader"] [data-testid="stLogo"] {
         display: flex !important;
         align-items: center !important;
-        gap: 0.45rem !important;
+        gap: 10px !important;
+        overflow: visible !important;
+        width: auto !important;
+        max-width: none !important;
+        height: auto !important;
+        max-height: none !important;
     }
     [data-testid="stSidebarHeader"] [data-testid="stLogo"]::after {
         content: "VansCoding.AI";
         font-weight: 700;
-        font-size: 0.92rem;
-        letter-spacing: 0.01em;
+        font-size: 14px;
+        letter-spacing: -0.02em;
         white-space: nowrap;
-        color: inherit;
+        background: linear-gradient(135deg, #007070 0%, #009999 50%, #f8c000 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
     }
-    [data-testid="stSidebarHeader"] img {
-        max-height: 2rem !important;
-        width: auto !important;
+    [data-testid="stSidebarHeader"] [data-testid="stLogo"] img {
+        box-sizing: border-box !important;
+        width: 40px !important;
+        height: 40px !important;
+        max-height: 40px !important;
+        padding: 3px;
+        border-radius: 8px;
+        background: #eef5f5;
+        box-shadow: 0 0 0 1px rgba(0, 112, 112, 0.18);
+        object-fit: contain;
+        object-position: center;
     }
     .data-card {
         border: 1px solid rgba(250, 250, 250, 0.12);

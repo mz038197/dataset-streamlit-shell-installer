@@ -84,13 +84,28 @@ def test_dual_pane_chrome_clears_overlay_header() -> None:
 def test_sidebar_brand_uses_classroom_logo_and_wordmark() -> None:
     styles = (UI / "data_ui.py").read_text(encoding="utf-8")
     app = (TEMPLATE / "app.py").read_text(encoding="utf-8")
+    context = (ROOT / "CONTEXT.md").read_text(encoding="utf-8")
     logo = TEMPLATE / "assets" / "brand-logo.png"
+    sidebar_block = styles.split('[data-testid="stSidebarHeader"]', 1)[1]
+    wordmark = sidebar_block.split("::after", 1)[1].split("}", 1)[0]
     assert logo.is_file()
     assert "st.logo" in styles
-    assert 'content: "VansCoding.AI"' in styles
-    assert "[data-testid=\"stSidebarHeader\"]" in styles
+    assert 'size="small"' in styles
+    assert 'content: "VansCoding.AI"' in wordmark
+    assert '[data-testid="stHeader"]' not in styles
+    assert "40px" in sidebar_block
+    assert "#eef5f5" in sidebar_block
+    assert "#007070" in wordmark
+    assert "#009999" in wordmark
+    assert "#f8c000" in wordmark
+    assert "background-clip: text" in wordmark
+    assert "font-weight: 700" in wordmark
+    assert "font-size: 14px" in wordmark
+    assert "letter-spacing: -0.02em" in wordmark
+    assert "overflow: visible" in sidebar_block
     assert "brand_page_icon" in styles
     assert "page_icon=brand_page_icon()" in app
+    assert "**側欄品牌列**:" in context
 
 
 def test_agent_chat_pins_input_and_scrolls_messages() -> None:
