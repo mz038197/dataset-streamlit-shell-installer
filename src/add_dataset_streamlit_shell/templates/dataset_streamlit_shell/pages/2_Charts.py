@@ -56,46 +56,15 @@ class QuizItem:
     id: str
     prompt: str
     correct: ChartType
-    agent_hints: tuple[str, ...]
 
 
 QUIZ_ITEMS: tuple[QuizItem, ...] = (
-    QuizItem(
-        "compare_category",
-        "比較類別數量",
-        "bar",
-        ("這一題在比較不同類別的多寡，適合哪一種圖？", "為什麼這一題比較不適合用圓餅圖？"),
-    ),
-    QuizItem(
-        "overall_proportion",
-        "整體比例（非時間）",
-        "pie",
-        ("整體占比要用哪一種圖比較清楚？", "類別很多時，圓餅圖可能有什麼問題？"),
-    ),
-    QuizItem(
-        "stacked_composition",
-        "多組比例構成",
-        "stacked_bar",
-        ("想同時看「分組」又看「裡面怎麼組成」，該選哪種圖？", "帶形圖和一般長條圖差在哪裡？"),
-    ),
-    QuizItem(
-        "trend",
-        "時間或連續趨勢",
-        "line",
-        ("時間或連續變化該選哪種圖？", "為什麼這一題不該用圓餅圖？"),
-    ),
-    QuizItem(
-        "radar_balance",
-        "多指標平衡比較",
-        "radar",
-        ("要同時看多個數值指標是否平衡，適合哪種圖？", "雷達圖為什麼常需要標準化？"),
-    ),
-    QuizItem(
-        "distribution",
-        "定量資料區間分布",
-        "histogram",
-        ("想看某個數值落在哪些區間，該選哪種圖？", "直方圖和長條圖差在哪裡？"),
-    ),
+    QuizItem("compare_category", "比較類別數量", "bar"),
+    QuizItem("overall_proportion", "整體比例（非時間）", "pie"),
+    QuizItem("stacked_composition", "多組比例構成", "stacked_bar"),
+    QuizItem("trend", "時間或連續趨勢", "line"),
+    QuizItem("radar_balance", "多指標平衡比較", "radar"),
+    QuizItem("distribution", "定量資料區間分布", "histogram"),
 )
 
 
@@ -591,17 +560,6 @@ def _build_agent_context(
             if value not in (None, ""):
                 lines.append(f"- {key}：{value}")
     return "\n".join(lines)
-
-
-def _quiz_agent_hints(focus_id: str | None) -> list[str]:
-    item = next((entry for entry in QUIZ_ITEMS if entry.id == focus_id), None)
-    if item is None:
-        return [
-            "這一題為什麼不能選圓餅圖？",
-            "時間或連續趨勢該選哪種圖？為什麼？",
-            "選圖前要先問清楚要比較什麼（類別／比例／時間／關係）？",
-        ]
-    return list(item.agent_hints) + ["請根據題幹，說明選圖時該先問清楚什麼。"]
 
 
 def _default_draw_config(
@@ -1433,11 +1391,6 @@ def run_page() -> None:
             drawn_id=active_draw,
             draw_summary=draw_summary_for_agent,
         )
-        st.markdown("##### 建議問 Agent")
-        for question in _quiz_agent_hints(focus_id):
-            st.markdown(f"- {question}")
-        if draw_summary_for_agent:
-            st.markdown("- 請依目前預覽圖與數據表，說明圖在比較什麼、最顯著的發現是什麼。")
         render_chat_panel(extra_context=extra_context, page_name="圖表探索")
 
 

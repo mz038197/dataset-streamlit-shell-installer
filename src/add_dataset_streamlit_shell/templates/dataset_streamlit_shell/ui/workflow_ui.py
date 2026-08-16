@@ -103,7 +103,6 @@ from dataset_streamlit_shell.ui.simple_regression_quiz import (
     build_regression_frame_hint_summary,
     can_send_hint,
     expected_slope_direction,
-    focus_prompt_lines,
     hint_display_text,
     hint_user_text,
     is_alpha_correct,
@@ -142,7 +141,6 @@ from dataset_streamlit_shell.plotting import (
 configure_matplotlib_for_traditional_chinese()
 
 
-PromptList = list[str]
 CORRELATION_FORMULA_IMAGE_PATH = SHELL_ROOT / "assets" / "correlation_formula.png"
 ENCODING_REFERENCE_IMAGE_PATH = SHELL_ROOT / "assets" / "encoding_onehot_vs_label.png"
 CATEGORICAL_SELECTION_STATE_KEY = "confirmed_categorical_columns"
@@ -208,16 +206,6 @@ def _render_refresh_controls() -> None:
             st.rerun()
         else:
             st.error("找不到原始資料，無法重置。")
-
-
-def _render_prompts(prompts: PromptList, caption: str | None = None) -> None:
-    st.markdown("##### 建議問 Agent")
-    st.caption(
-        caption
-        or "學生可以自然提問；系統規則會讓 Agent 預設修改工作資料並保護原始資料。"
-    )
-    for prompt in prompts:
-        st.code(prompt, language="text")
 
 
 def _render_recent_log() -> None:
@@ -317,13 +305,6 @@ def _render_single_table_quality(df: pd.DataFrame) -> None:
     st.dataframe(_column_overview_frame(df), width="stretch")
     with st.expander("資料預覽", expanded=False):
         st.dataframe(df.head(20), width="stretch", hide_index=True)
-    _render_prompts(
-        [
-            "請檢查目前工作資料的欄位名稱，並建議哪些欄位需要重新命名。",
-            "請檢查目前工作資料的欄位型態是否合理，先不要修改資料。",
-            "請把不清楚的欄位名稱改成適合資料分析的名稱，並回報修改前後對照。",
-        ]
-    )
 
 
 def _render_dual_table_refresh_controls() -> None:
@@ -402,14 +383,6 @@ def _render_dual_table_quality() -> str:
         )
 
     unlocked = _render_integration_quiz()
-    _render_prompts(
-        [
-            "請比較乘客表與航程表的欄名，指出哪一欄最可能當合併鍵，並說明兩邊寫法是否一致。",
-            "請把航程表副本 workspace/integration/voyage.csv 的 passenger_id 改成 PassengerId，不要另存新檔。",
-            "關卡通過後，請用 left 合併兩表，同時寫入 original.csv 與 working.csv，並刪除雙表工作副本。",
-        ],
-        caption="合併前請 Agent 只改航程表鍵名（雙表工作副本）。通過關卡後再合併，會同時寫入 Original 與 Working。",
-    )
     return (
         f"學生在雙表起點查看{PASSENGER_TABLE_LABEL}與{VOYAGE_TABLE_LABEL}。"
         f"乘客表欄名：{'、'.join(map(str, passengers.columns))}。"
@@ -467,13 +440,6 @@ def render_missing_page() -> None:
         else:
             st.success("綠燈：目前沒有缺失儲存格，可以進入下一個整理步驟。")
         st.dataframe(missing_frame, width="stretch")
-        _render_prompts(
-            [
-                "請依缺失比例整理目前工作資料的缺失值問題，先不要修改資料。",
-                "請建議各欄位缺失值適合刪除、補平均數、中位數、眾數，或另外建立 Unknown 類別。",
-                "請依你的建議處理目前工作資料的缺失值，並回報每個欄位修改了幾筆。",
-            ]
-        )
 
     _page_shell("缺失值處理", "專心判斷缺失值，不混入離群值或分布探索。", body)
 
@@ -736,13 +702,6 @@ def render_duplicates_page() -> None:
             if not selected_columns
             else "、".join(f"`{column}`" for column in selected_columns)
         )
-        _render_prompts(
-            [
-                f"請依「{rule_for_prompt}」檢查目前工作資料的重複資料列，先不要修改資料，請說明重複候選列數與可能影響。",
-                f"請依「{rule_for_prompt}」刪除目前工作資料中的重複資料列，每個重複組別保留第一筆，並回報刪除了幾筆。",
-                "請刪除重複資料後，在 cleaning_log.jsonl 追加一筆紀錄，actor 是 agent，action 是 remove_duplicate_rows。",
-            ]
-        )
 
     _page_shell(
         "刪除重複資料列",
@@ -857,13 +816,6 @@ def render_outliers_page() -> None:
         outlier_rows = df[outlier_mask.fillna(False)]
         st.markdown("##### 離群值資料列預覽")
         st.dataframe(outlier_rows.head(30), width="stretch", hide_index=True)
-        _render_prompts(
-            [
-                f"請使用 {method} 檢查目前工作資料的 `{selected}` 欄位離群值，先不要修改資料。",
-                f"請針對 `{selected}` 欄位說明這些離群值可能是錯誤資料，還是真實但極端的觀察。",
-                f"請依你的判斷處理 `{selected}` 欄位的離群值，並回報修改前後摘要，最後寫入 cleaning_log.jsonl。",
-            ]
-        )
 
     _page_shell(
         "離群值檢查",
@@ -996,13 +948,6 @@ def render_categorical_page() -> None:
             if selected != "請選擇欄位":
                 counts = df[selected].fillna("Missing").astype(str).value_counts().head(30)
                 st.bar_chart(counts)
-        _render_prompts(
-            [
-                "請根據目前工作資料，判斷哪些欄位適合視為類別欄位，並逐一說明理由。",
-                "請指出哪些數字欄位其實可能是類別代碼，哪些數字欄位比較像真正的數值或計數。",
-                "請根據我選出的類別欄位，檢查是否有需要合併稀有類別或補上 Unknown 的欄位。",
-            ]
-        )
 
     _page_shell(
         "類別欄位診斷",
@@ -1067,13 +1012,6 @@ def render_encoding_page() -> None:
                 )
             else:
                 st.caption("目前找不到可預覽的類別欄位或編碼結果欄位。")
-        _render_prompts(
-            [
-                "請根據目前已選取的類別欄位，建議哪些欄位適合 One-Hot Encoding，哪些適合 Label Encoding。",
-                "請先不要修改資料，說明哪些欄位適合做 One-Hot Encoding，哪些不適合。",
-                "請針對適合的類別欄位新增 One-Hot Encoding 欄位，保留原欄位，並回報新增了哪些欄位。",
-            ]
-        )
 
     _page_shell(
         "類別欄位編碼",
@@ -1132,13 +1070,6 @@ def render_correlation_page() -> None:
         corr = numeric_frame[usable_columns].corr()
         st.markdown("###### 相關性矩陣")
         st.dataframe(corr.style.format("{:.2f}"), width="stretch")
-        _render_prompts(
-            [
-                "請解讀我目前選取欄位之間的相關性矩陣，指出值得注意的關係。",
-                "請根據這些欄位的相關矩陣，判斷是否有欄位可能帶有重複資訊，先不要修改資料。",
-                "請說明這些欄位的相關性對後續學習或分析可能有什麼影響。",
-            ]
-        )
 
     _page_shell(
         "數值相關性",
@@ -1412,13 +1343,6 @@ def render_feature_scaling_page() -> None:
         new_columns = "、".join(
             f"`{_scaled_output_column(column, method)}`" for column in valid_columns
         )
-        _render_prompts(
-            [
-                f"請依 **{method_name}** 為 {column_list} 在 working 新增縮放欄位（例如 {new_columns}），保留原欄位，並回報新欄名稱。",
-                f"請說明 **{method_name}** 為什麼適合或不適合我目前選的欄位。",
-                "請將此次修改寫入 cleaning_log，action 使用 feature_scaling。",
-            ]
-        )
 
     _page_shell(
         "特徵縮放（Feature Scaling）",
@@ -1484,13 +1408,6 @@ def render_ready_page() -> None:
                 mime="text/csv",
                 width="stretch",
             )
-        _render_prompts(
-            [
-                "請檢查目前 Working 工作資料是否適合建立 Ready 分析就緒資料，列出還需要整理的問題。",
-                "請確認目前工作資料是否還有缺失值、重複列或未編碼欄位，先不要修改資料。",
-                "請建議建立 Ready 分析就緒資料前還需要完成哪些整理步驟。",
-            ]
-        )
 
     _page_shell("建立 Ready 分析就緒資料", "把 Working 工作資料凍結成後續分析使用的穩定資料表。", body)
 
@@ -1960,8 +1877,6 @@ def _render_simple_regression_stage() -> None:
         + "\n"
         + quiz_note
     )
-    focus = st.session_state.get(SESSION_FOCUS)
-    _render_regression_prompts(focus_prompt_lines(focus, unlocked=quiz_unlocked))
 
 
 def _run_simple_training_session(
@@ -2325,8 +2240,6 @@ def _render_multiple_regression_stage() -> None:
         + "\n"
         + quiz_note
     )
-    focus = st.session_state.get(multi_quiz.SESSION_FOCUS)
-    _render_regression_prompts(multi_quiz.focus_prompt_lines(focus, unlocked=quiz_unlocked))
 
 
 def _run_multiple_training_session(
@@ -3085,11 +2998,6 @@ def _render_training_results(
     _render_prediction_error_table(working, target, prediction)
 
 
-def _render_regression_prompts(prompts: list[str]) -> None:
-    st.markdown("##### 建議問 Agent")
-    for prompt in prompts:
-        st.code(prompt, language="text")
-
 
 def render_transform_page() -> None:
     def body(df: pd.DataFrame) -> None:
@@ -3121,13 +3029,6 @@ def render_transform_page() -> None:
         )
         if not focus_columns:
             st.warning("尚未選擇要關注的欄位。請先勾選可能有同義寫法的欄，或自行挑選。")
-            _render_prompts(
-                [
-                    "請檢視 working 的文字欄，指出哪些欄可能有同義寫法需要收斂。",
-                    "請把 Sex 映射成只有 male／female，更新 working.csv，並寫入 cleaning_log。",
-                    "請把 Embarked 映射成只有 S／C／Q，更新 working.csv，並寫入 cleaning_log。",
-                ]
-            )
             return
 
         selected = st.selectbox(
@@ -3137,13 +3038,6 @@ def render_transform_page() -> None:
         )
         if selected == "請選擇欄位":
             st.info("請選擇一個欄位，查看分布。")
-            _render_prompts(
-                [
-                    "請檢視我勾選的文字欄，指出哪些值其實是同一語意。",
-                    "請把 Sex 映射成只有 male／female，更新 working.csv，並寫入 cleaning_log。",
-                    "請把 Embarked 映射成只有 S／C／Q，更新 working.csv，並寫入 cleaning_log。",
-                ]
-            )
             return
 
         counts = df[selected].fillna("Missing").astype(str).value_counts().head(30)
@@ -3158,13 +3052,6 @@ def render_transform_page() -> None:
             st.info("課堂約定：收成 `male`／`female`（含 man／woman／大小寫／空白）。")
         if selected == "Embarked":
             st.info("課堂約定：收成 `S`／`C`／`Q`（Southampton／Cherbourg 等併入）。")
-        _render_prompts(
-            [
-                f"請檢視 working 的 `{selected}` 分布，指出哪些值其實是同一語意。",
-                "請把 Sex 映射成只有 male／female，更新 working.csv，並寫入 cleaning_log。",
-                "請把 Embarked 映射成只有 S／C／Q，更新 working.csv，並寫入 cleaning_log。",
-            ]
-        )
 
     def extra(df: pd.DataFrame) -> str:
         focus = st.session_state.get(TRANSFORM_FOCUS_COLUMNS_WIDGET_KEY, [])
@@ -3301,14 +3188,6 @@ def render_split_page() -> None:
                     f"`{_display_path(VAL_DATASET_PATH)}`、"
                     f"`{_display_path(TEST_DATASET_PATH)}`。"
                 )
-
-        _render_prompts(
-            [
-                "請說明為什麼要留測試集，以及什麼是資料洩漏。",
-                "請解釋分層切分如何讓各份的 Survived 比例接近整體。",
-                "請依目前 Ready 建議一組訓練／驗證／測試比例並說明理由。",
-            ]
-        )
 
     with agent:
         render_chat_panel(

@@ -195,7 +195,6 @@ def _render_single_tree_stage() -> None:
     _merge_stage_context(
         note="目前階段：單顆決策樹。\n" + _tree_quiz_appendix(unlocked=unlocked)
     )
-    _render_tree_prompts()
 
 
 def _render_random_forest_stage() -> None:
@@ -284,11 +283,6 @@ def _render_random_forest_stage() -> None:
             )
         )
     )
-    for prompt in (
-        "為什麼森林的驗證準確率常常比單顆樹穩？",
-        "n_estimators 一直加大，驗證準確率一定會一直升嗎？",
-    ):
-        st.code(prompt, language="text")
 
 
 def _render_xgboost_stage() -> None:
@@ -388,11 +382,6 @@ def _render_xgboost_stage() -> None:
             )
         )
     )
-    for prompt in (
-        "Bagging 與 Boosting 差在平行多數決還是序列糾錯？請用本頁對照表說明。",
-        "learning_rate 變小通常會怎樣？和隨機森林的 n_estimators 能直接類比嗎？",
-    ):
-        st.code(prompt, language="text")
 
 
 def _status(session_key: str, checker) -> str:
@@ -828,14 +817,3 @@ def _render_xgboost_stage_results(cached: dict) -> None:
         f"森林基線 n_estimators={cached['forest_n_estimators']}；"
         f"one-hot 後 features={cached['feature_count']}。"
     )
-
-
-def _render_tree_prompts() -> None:
-    st.markdown("##### 建議問 Agent")
-    prompts = [
-        "為什麼資訊增益表排名第一的 feature，可能和 sklearn 樹根節點選的 feature 不同？",
-        "同一 max_depth 下，Gini 與 Entropy 畫出的樹會一樣嗎？請對照本頁結果說明。",
-        "max_depth=1 和 max_depth=2 的葉節點數有什麼差別？",
-    ]
-    for prompt in prompts:
-        st.code(prompt, language="text")

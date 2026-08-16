@@ -211,19 +211,3 @@ def can_send_hint(last_ts: float | None, now: float, *, cooldown: float = HINT_C
     if last_ts is None:
         return True
     return (now - float(last_ts)) >= cooldown
-
-
-def focus_prompt_lines(focus_qid: str | None, *, unlocked: bool) -> list[str]:
-    if not unlocked:
-        if focus_qid == QID_ALPHA:
-            return [
-                "可按題2旁的「Agent 提示」詢問 α 與 Cost 的關係（請 Agent 不要直接講正解）。",
-            ]
-        return [
-            "可按題1旁的「Agent 提示」詢問如何從散點判斷斜率方向（請 Agent 不要直接講正解）。",
-        ]
-    return [
-        "請解釋這條回歸線代表什麼，並用 w 和 b 說明模型公式。",
-        "請用 Cost J 說明這個模型目前預測得好不好。",
-        "請找出誤差最大的幾筆資料，推測可能原因。",
-    ]

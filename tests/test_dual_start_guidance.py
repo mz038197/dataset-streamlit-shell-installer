@@ -60,4 +60,4 @@ def test_dual_start_page_has_no_missing_working_info_banner() -> None:
     assert "目前還沒有 Working 工作資料" not in src
     assert "以下並排顯示雙表工作副本" not in src
     assert "答對後請 Agent 合併寫入 Original 與 Working" in src
-    assert "合併前請 Agent 只改航程表鍵名" in src
+    assert "請 Agent 對齊鍵名後合併" in src

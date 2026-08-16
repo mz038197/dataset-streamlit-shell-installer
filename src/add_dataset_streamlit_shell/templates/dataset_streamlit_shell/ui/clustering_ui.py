@@ -65,12 +65,6 @@ def render_kmeans_page() -> None:
             title=f"K-Means（K={n_clusters}）",
         )
 
-        st.markdown("##### 建議問 Agent")
-        st.code(
-            "請說明 K-Means 分群在做什麼，以及為什麼第一版範例資料尺度要設計得相近。",
-            language="text",
-        )
-
     with agent:
         render_chat_panel(
             extra_context=(
@@ -120,12 +114,6 @@ def render_wards_page() -> None:
             centers=None,
             show_truth=show_truth,
             title=f"Ward 切群（k={n_clusters}）",
-        )
-
-        st.markdown("##### 建議問 Agent")
-        st.code(
-            "請說明 Ward's Method 和 K-Means 的差異，以及樹狀圖如何幫助決定切幾群。",
-            language="text",
         )
 
     with agent:

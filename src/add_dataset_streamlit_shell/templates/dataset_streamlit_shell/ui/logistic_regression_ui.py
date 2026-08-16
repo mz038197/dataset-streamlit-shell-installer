@@ -875,9 +875,6 @@ def _update_boundary_agent_context(
         threshold=threshold if artifact is not None else None,
     )
     st.session_state[CONTEXT_KEY] = f"{base_context}\n{appendix}"
-    _render_classification_prompts(
-        quiz.focus_prompt_lines(focus, stage=quiz.STAGE_BOUNDARY, unlocked=quiz_unlocked)
-    )
 
 
 def _update_poly_agent_context(
@@ -912,9 +909,6 @@ def _update_poly_agent_context(
         threshold=threshold if artifact is not None else None,
     )
     st.session_state[CONTEXT_KEY] = f"{base_context}\n{appendix}"
-    _render_classification_prompts(
-        quiz.focus_prompt_lines(focus, stage=quiz.STAGE_POLY_LAMBDA, unlocked=quiz_unlocked)
-    )
 
 
 def _render_boundary_pretrain_quiz() -> bool:
@@ -1350,9 +1344,3 @@ def _render_logistic_training_results(
         }
     )
     st.dataframe(result.head(30).style.format({"ŷ": "{:.4f}"}), width="stretch")
-
-
-def _render_classification_prompts(prompts: list[str]) -> None:
-    st.markdown("##### 建議問 Agent")
-    for prompt in prompts:
-        st.code(prompt, language="text")

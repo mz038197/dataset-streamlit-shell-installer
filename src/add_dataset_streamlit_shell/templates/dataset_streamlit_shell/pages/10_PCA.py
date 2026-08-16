@@ -79,10 +79,5 @@ def _render_pca(df: pd.DataFrame) -> None:
     loading = pd.DataFrame(vt[:2].T, index=matrix.columns, columns=["PC1", "PC2"])
     st.dataframe(loading.style.format("{:.3f}"), width="stretch")
 
-    st.markdown("##### 建議問 Agent")
-    st.code("請解讀解釋變異量，說明前兩個主成分保留了多少資訊。", language="text")
-    st.code("請根據欄位權重表格，說明哪些欄位最影響 PC1 與 PC2。", language="text")
-    st.code("請檢查目前 Ready 分析就緒資料是否還需要標準化或處理缺失值後再做 PCA。", language="text")
-
 
 render_analysis_shell("PCA 主成分分析", "以 Ready 分析就緒資料進行主成分分析與條件檢查。", _render_pca)

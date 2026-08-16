@@ -121,19 +121,3 @@ def can_send_hint(last_ts: float | None, now: float, *, cooldown: float = HINT_C
     if last_ts is None:
         return True
     return (now - float(last_ts)) >= cooldown
-
-
-def focus_prompt_lines(focus_qid: str | None, *, unlocked: bool) -> list[str]:
-    if not unlocked:
-        if focus_qid == QID_WEIGHTS:
-            return [
-                "可按題2旁的「Agent 提示」詢問 w、b 的意義（請 Agent 不要直接講正解）。",
-            ]
-        return [
-            "可按題1旁的「Agent 提示」詢問為什麼要用多個 feature（請 Agent 不要直接講正解）。",
-        ]
-    return [
-        "請解釋每個 w 的正負方向，以及它和 target 的關係。",
-        "請說明為什麼多變量線性回歸常需要特徵縮放。",
-        "請找出預測誤差最大的資料列，並說明可能原因。",
-    ]

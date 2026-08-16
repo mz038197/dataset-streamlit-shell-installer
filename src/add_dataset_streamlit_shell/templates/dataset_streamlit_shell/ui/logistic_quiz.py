@@ -160,25 +160,3 @@ def hint_display_text(qid: str) -> str:
     if qid == QID_MAP:
         return "（Agent 提示）請說明為什麼晶片資料常要特徵映射，不要直接講正解。"
     return "（Agent 提示）請說明 λ 變大時權重與邊界通常怎麼變，不要直接講正解。"
-
-
-def focus_prompt_lines(focus_qid: str | None, *, stage: str, unlocked: bool) -> list[str]:
-    if not unlocked:
-        if stage == STAGE_BOUNDARY:
-            if focus_qid == QID_COST:
-                return ["可按題2旁的「Agent 提示」詢問 Cost 與 threshold（請 Agent 不要直接講正解）。"]
-            return ["可按題1旁的「Agent 提示」詢問 sigmoid／機率（請 Agent 不要直接講正解）。"]
-        if focus_qid == QID_LAMBDA:
-            return ["可按題2旁的「Agent 提示」詢問 λ 的作用（請 Agent 不要直接講正解）。"]
-        return ["可按題1旁的「Agent 提示」詢問多項式映射（請 Agent 不要直接講正解）。"]
-    if stage == STAGE_BOUNDARY:
-        return [
-            "請解釋這條決策邊界代表什麼，以及錄取機率如何隨考試分數改變。",
-            "請用 Cost J 說明模型目前擬合得好不好。",
-            "調整 threshold 後，訓練集正確率如何變化？",
-        ]
-    return [
-        "請解釋為什麼晶片資料需要多項式特徵映射與正則化。",
-        "λ 變大時，決策邊界與 Cost 可能如何改變？",
-        "請找出被判錯的樣本，推測可能原因。",
-    ]

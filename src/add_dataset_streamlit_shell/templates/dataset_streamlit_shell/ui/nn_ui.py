@@ -250,14 +250,6 @@ def _render_agent_experiment_controls() -> None:
     last_run = load_last_run(WORKSPACE_DIR)
     st.caption(f"Agent 最近一次實驗：{format_last_run_summary(last_run)}")
 
-    st.markdown("##### 建議問 Agent")
-    for question in (
-        "請設計一個不過大的二元分類網路，寫回左欄架構，並寫入訓練請求開始第一輪動畫訓練。",
-        "請先說明你選的層數與 activation 理由，再更新 nn_form.json 並請求訓練。",
-        "依最近一次訓練結果調整 learning rate 或隱藏層寬度，解釋取捨後再請求下一輪訓練。",
-    ):
-        st.markdown(f"- `{question}`")
-
 
 def _render_training_tab(frame: pd.DataFrame) -> None:
     """訓練分頁主內容（右欄 Agent 由 render_neural_network_page 固定渲染）。"""
