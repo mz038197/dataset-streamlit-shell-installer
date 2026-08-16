@@ -1,10 +1,11 @@
-"""教學流程圖 — 純函式（SVG／公式／作動狀態），供線性回歸等頁掛載。"""
+"""教學流程圖 — 純函式（SVG／公式／作動狀態），供線性回歸、邏輯迴歸等頁掛載。"""
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, Mapping
 
 if TYPE_CHECKING:
     from dataset_streamlit_shell.ml.regression import GradientDescentStep
@@ -25,6 +26,22 @@ FLOW_VIEW_INPUT = FLOW_NODE_LABELS[FLOW_INPUT]
 FLOW_VIEW_MODEL = FLOW_NODE_LABELS[FLOW_MODEL]
 FLOW_VIEW_OUTPUT = FLOW_NODE_LABELS[FLOW_OUTPUT]
 FLOW_VIEW_LABELS = (FLOW_VIEW_INPUT, FLOW_VIEW_MODEL, FLOW_VIEW_OUTPUT)
+
+CLASSIFICATION_FLOW_NODE_LABELS = {
+    FLOW_INPUT: "輸入資料",
+    FLOW_MODEL: "分類模型",
+    FLOW_OUTPUT: "輸出呈現",
+}
+CLASSIFICATION_FLOW_VIEW_INPUT = CLASSIFICATION_FLOW_NODE_LABELS[FLOW_INPUT]
+CLASSIFICATION_FLOW_VIEW_MODEL = CLASSIFICATION_FLOW_NODE_LABELS[FLOW_MODEL]
+CLASSIFICATION_FLOW_VIEW_OUTPUT = CLASSIFICATION_FLOW_NODE_LABELS[FLOW_OUTPUT]
+CLASSIFICATION_FLOW_VIEW_LABELS = (
+    CLASSIFICATION_FLOW_VIEW_INPUT,
+    CLASSIFICATION_FLOW_VIEW_MODEL,
+    CLASSIFICATION_FLOW_VIEW_OUTPUT,
+)
+
+SAMPLE_OPS_POLY_NOTE = "ŷ = σ(w·φ(x)+b)；表上不展開 27 維 φ。"
 
 MICRO_PREDICT = "predict"
 MICRO_COST = "cost"
@@ -79,6 +96,16 @@ class TrainingMicroFrame:
 class FlowRenderState:
     hot: str | None
     done: frozenset[str]
+
+
+def symbolic_logistic_z_latex(*, mapped: bool = False) -> str:
+    if mapped:
+        return r"z = w\cdot\phi(x)+b"
+    return r"z = w\cdot x+b"
+
+
+def symbolic_logistic_yhat_latex() -> str:
+    return r"\hat{y} = \sigma(z) = \frac{1}{1+e^{-z}}"
 
 
 def symbolic_prediction_latex(features: list[str]) -> str:
@@ -311,12 +338,104 @@ def sample_ops_table_rows(
     return rows
 
 
-def regression_flow_svg(
+def _sigmoid_scalar(z: float) -> float:
+    clipped = min(max(float(z), -500.0), 500.0)
+    return 1.0 / (1.0 + math.exp(-clipped))
+
+
+def _logistic_ell(y_hat: float, y: float) -> float:
+    probability = min(max(float(y_hat), 1e-15), 1.0 - 1e-15)
+    return float(-(y * math.log(probability) + (1.0 - y) * math.log(1.0 - probability)))
+
+
+def logistic_sample_ops_table_rows(
+    frame: TrainingMicroFrame,
+    *,
+    model_x_rows: list[list[float]],
+    y_rows: list[float],
+    show_x: bool = True,
+) -> list[dict[str, str]] | None:
+    if not sample_ops_table_visible(frame.micro_step):
+        return None
+    if len(model_x_rows) != len(y_rows):
+        raise ValueError("model_x_rows and y_rows length mismatch")
+    n_features = len(frame.feature_names)
+    show_ell = frame.micro_step == MICRO_COST
+    x_labels = sample_ops_x_labels(frame.feature_names)
+    rows: list[dict[str, str]] = []
+    for x_row, y in zip(model_x_rows, y_rows, strict=True):
+        if len(x_row) != n_features:
+            raise ValueError("model_x_rows feature width mismatch")
+        z = sum(
+            float(w) * float(x) for w, x in zip(frame.weights_before, x_row, strict=True)
+        ) + float(frame.intercept_before)
+        y_hat = _sigmoid_scalar(z)
+        row: dict[str, str] = {}
+        if show_x:
+            row.update(
+                {label: f"{float(x):.6g}" for label, x in zip(x_labels, x_row, strict=True)}
+            )
+        row["ŷ"] = f"{y_hat:.6g}"
+        row["y"] = f"{float(y):.6g}"
+        if show_ell:
+            row["ℓ"] = f"{_logistic_ell(y_hat, float(y)):.6g}"
+        rows.append(row)
+    return rows
+
+
+def regularized_compact_board_lines(
+    frame: TrainingMicroFrame,
+    *,
+    lambda_: float,
+) -> list[str]:
+    w_sq = sum(float(weight) * float(weight) for weight in frame.weights_before)
+    w_sq_after = sum(float(weight) * float(weight) for weight in frame.weights_after)
+    lines = [
+        f"目前步驟：{MICRO_STEP_LABELS[frame.micro_step]}",
+        f"Iteration {frame.iteration:,} / {frame.total_iterations:,}",
+        f"α = {frame.learning_rate:g}",
+        f"λ = {lambda_:g}",
+        f"‖w‖² = {w_sq:.6g}",
+        f"b = {frame.intercept_before:.6g}",
+    ]
+    if frame.micro_step == MICRO_PREDICT:
+        lines.append("ŷ = σ(w·φ(x)+b)")
+        return lines
+    if frame.micro_step in {MICRO_COST, MICRO_GRAD, MICRO_UPDATE}:
+        lines.append(f"Cost J = {frame.cost_before:.6g}")
+    if frame.micro_step in {MICRO_GRAD, MICRO_UPDATE}:
+        lines.append("∂J/∂w = (1/m)Xᵀ(ŷ−y) + (λ/m)w")
+        lines.append(f"∂J/∂b = {frame.dj_db:.6g}（不加 λ）")
+    if frame.micro_step == MICRO_UPDATE:
+        lines.append(f"Δb = −α·∂J/∂b = {frame.delta_b:.6g}")
+        lines.append(f"b' = b + Δb = {frame.intercept_after:.6g}")
+        lines.append(f"更新後 ‖w‖² = {w_sq_after:.6g}")
+        lines.append(f"更新後 Cost J = {frame.cost_after:.6g}")
+    return lines
+
+
+def classification_flow_svg(
     *,
     hot: str | None = None,
     done: Iterable[str] = (),
     live_caption: str = "",
 ) -> str:
+    return regression_flow_svg(
+        hot=hot,
+        done=done,
+        live_caption=live_caption,
+        node_labels=CLASSIFICATION_FLOW_NODE_LABELS,
+    )
+
+
+def regression_flow_svg(
+    *,
+    hot: str | None = None,
+    done: Iterable[str] = (),
+    live_caption: str = "",
+    node_labels: Mapping[str, str] | None = None,
+) -> str:
+    labels = FLOW_NODE_LABELS if node_labels is None else node_labels
     done_set = set(done)
     # Layout: three boxes left → right with cubic edges (waku-style, small graph).
     width, height = 720, 110
@@ -355,7 +474,7 @@ def regression_flow_svg(
     nodes = []
     for name in FLOW_NODE_ORDER:
         x, y = positions[name]
-        label = escape(FLOW_NODE_LABELS[name])
+        label = escape(labels[name])
         nodes.append(
             f'<g class="{node_class(name)}" data-node="{name}">'
             f'<rect class="bx" x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="9"/>'
@@ -373,7 +492,7 @@ def regression_flow_svg(
     return (
         f'<div class="teaching-flow-wrap">'
         f'<svg viewBox="0 0 {width} {height}" class="teaching-flow" role="img" '
-        f'aria-label="教學流程圖：輸入資料、回歸模型、輸出呈現">'
+        f'aria-label="教學流程圖：{"、".join(labels[name] for name in FLOW_NODE_ORDER)}">'
         f"<defs><marker id=\"tf-arr\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" "
         f'markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
         f'<path d="M0 0 L10 5 L0 10 z" class="head"/></marker></defs>'

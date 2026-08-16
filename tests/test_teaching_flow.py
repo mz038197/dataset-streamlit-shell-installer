@@ -273,3 +273,121 @@ def test_sample_ops_table_hidden_returns_none() -> None:
         )
         is None
     )
+
+
+def test_classification_flow_labels_use_classifier_node() -> None:
+    from dataset_streamlit_shell.ui.teaching_flow import (
+        CLASSIFICATION_FLOW_VIEW_LABELS,
+        CLASSIFICATION_FLOW_VIEW_MODEL,
+        classification_flow_svg,
+    )
+
+    assert CLASSIFICATION_FLOW_VIEW_LABELS == ("輸入資料", "分類模型", "輸出呈現")
+    assert CLASSIFICATION_FLOW_VIEW_MODEL == "分類模型"
+    svg = classification_flow_svg(hot=FLOW_MODEL, done={FLOW_INPUT})
+    assert "分類模型" in svg
+    assert "回歸模型" not in svg
+    assert "輸入資料" in svg and "輸出呈現" in svg
+
+
+def test_symbolic_logistic_prediction_splits_z_and_yhat() -> None:
+    from dataset_streamlit_shell.ui.teaching_flow import (
+        symbolic_logistic_yhat_latex,
+        symbolic_logistic_z_latex,
+    )
+
+    assert symbolic_logistic_z_latex(mapped=False) == r"z = w\cdot x+b"
+    assert symbolic_logistic_z_latex(mapped=True) == r"z = w\cdot\phi(x)+b"
+    yhat = symbolic_logistic_yhat_latex()
+    assert r"\sigma(z)" in yhat
+    assert r"\frac{1}{1+e^{-z}}" in yhat
+    assert r"w\cdot x+b" not in yhat
+
+
+def test_logistic_sample_ops_predict_uses_sigmoid() -> None:
+    from dataset_streamlit_shell.ui.teaching_flow import logistic_sample_ops_table_rows
+
+    frame = _sample_micro_frame(micro=MICRO_PREDICT)
+    # z = 0.5 * 0 + 0.1 = 0.1 ; ŷ = σ(0.1)
+    rows = logistic_sample_ops_table_rows(
+        frame,
+        model_x_rows=[[0.0]],
+        y_rows=[1.0],
+        show_x=True,
+    )
+    assert rows is not None
+    assert list(rows[0].keys()) == ["x（Z-score）", "ŷ", "y"]
+    expected = 1.0 / (1.0 + pow(2.718281828459045, -0.1))
+    assert abs(float(rows[0]["ŷ"]) - expected) < 1e-6
+    assert 0.0 < float(rows[0]["ŷ"]) < 1.0
+    assert "error" not in rows[0]
+    assert "ℓ" not in rows[0]
+
+
+def test_logistic_sample_ops_cost_adds_ell_not_squared_error() -> None:
+    from dataset_streamlit_shell.ui.teaching_flow import logistic_sample_ops_table_rows
+
+    frame = _sample_micro_frame(micro=MICRO_COST)
+    rows = logistic_sample_ops_table_rows(
+        frame,
+        model_x_rows=[[0.0]],
+        y_rows=[1.0],
+        show_x=True,
+    )
+    assert rows is not None
+    assert "ℓ" in rows[0]
+    assert "error" not in rows[0]
+    assert "error²" not in rows[0]
+    assert "J" not in rows[0]
+    y_hat = float(rows[0]["ŷ"])
+    ell = -1.0 * (1.0 * __import__("math").log(y_hat))
+    assert abs(float(rows[0]["ℓ"]) - ell) < 1e-6
+
+
+def test_logistic_sample_ops_yhat_changes_if_x_not_scaled() -> None:
+    from dataset_streamlit_shell.ui.teaching_flow import logistic_sample_ops_table_rows
+
+    frame = _sample_micro_frame(micro=MICRO_PREDICT)
+    scaled = logistic_sample_ops_table_rows(
+        frame,
+        model_x_rows=[[-1.0]],
+        y_rows=[1.0],
+        show_x=True,
+    )
+    raw = logistic_sample_ops_table_rows(
+        frame,
+        model_x_rows=[[50.0]],
+        y_rows=[1.0],
+        show_x=True,
+    )
+    assert scaled is not None and raw is not None
+    assert scaled[0]["ŷ"] != raw[0]["ŷ"]
+
+
+def test_logistic_sample_ops_poly_hides_mapped_x() -> None:
+    from dataset_streamlit_shell.ui.teaching_flow import logistic_sample_ops_table_rows
+
+    frame = _sample_micro_frame(micro=MICRO_PREDICT, feature_names=["φ1", "φ2"])
+    rows = logistic_sample_ops_table_rows(
+        frame,
+        model_x_rows=[[0.2, -0.1]],
+        y_rows=[0.0],
+        show_x=False,
+    )
+    assert rows is not None
+    assert list(rows[0].keys()) == ["ŷ", "y"]
+    assert "φ1" not in rows[0]
+
+
+def test_regularized_compact_board_shows_lambda_and_reg_grad() -> None:
+    from dataset_streamlit_shell.ui.teaching_flow import regularized_compact_board_lines
+
+    frame = _sample_micro_frame(micro=MICRO_GRAD, feature_names=[f"φ{i}" for i in range(27)])
+    lines = regularized_compact_board_lines(frame, lambda_=0.01)
+    joined = "\n".join(lines)
+    assert "λ = 0.01" in joined
+    assert "‖w‖²" in joined
+    assert "∂J/∂w" in joined
+    assert "λ/m" in joined or r"\frac{\lambda}{m}" in joined
+    assert "不加 λ" in joined
+    assert joined.count("φ") < 5

@@ -34,10 +34,30 @@ def test_logistic_ui_has_two_learning_stages() -> None:
     assert "st.tabs" not in ui_src
 
 
-def test_logistic_model_formula_uses_explicit_sigmoid_fraction() -> None:
+def test_logistic_model_formula_splits_z_and_sigmoid() -> None:
     ui_src = UI_PATH.read_text(encoding="utf-8")
+    assert "symbolic_logistic_z_latex" in ui_src
+    assert "symbolic_logistic_yhat_latex" in ui_src
     assert r"\mathrm{sigmoid}" not in ui_src
-    assert r"\frac{1}{1+e^{-(w\cdot x+b)}}" in ui_src or r"\frac{1}{1+e^{-(w \cdot x + b)}}" in ui_src
+    assert "MODEL_FORMULA_LATEX" not in ui_src
+
+
+def test_logistic_ui_uses_classification_teaching_shell() -> None:
+    ui_src = UI_PATH.read_text(encoding="utf-8")
+    assert "classification_flow_svg" in ui_src
+    assert "TEACHING_FLOW_CSS" in ui_src
+    assert "目前查看" in ui_src
+    assert "分類模型" in ui_src
+    assert "回歸模型" not in ui_src
+    assert "micro_stepper_html" in ui_src
+    assert "梯度演算板" in ui_src
+    assert "樣本運算表" in ui_src
+    assert "逐步模式" in ui_src
+    assert "logistic_sample_ops_table_rows" in ui_src
+    assert "regularized_compact_board_lines" in ui_src
+    assert '"ŷ"' in ui_src
+    assert "predicted_class" in ui_src
+    assert "ŷ=0.5" in ui_src
 
 
 def test_logistic_cost_expander_matches_linear_regression_layout() -> None:

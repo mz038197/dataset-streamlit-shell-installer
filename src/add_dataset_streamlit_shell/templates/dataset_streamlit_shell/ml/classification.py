@@ -186,16 +186,39 @@ def logistic_gradient_descent_steps(
 
     steps = [_logistic_step_snapshot(0, x, y, weights, intercept, lambda_, regularized)]
     for iteration in range(1, epochs + 1):
+        prev_weights = weights.copy()
+        prev_intercept = float(intercept)
+        if regularized:
+            prev_cost = compute_cost_logistic_reg(x, y, weights, intercept, lambda_)
+        else:
+            prev_cost = compute_cost_logistic(x, y, weights, intercept)
         prediction = sigmoid(x @ weights + intercept)
         error = prediction - y
         dj_dw = (x.T @ error) / m
         if regularized:
             dj_dw = dj_dw + (float(lambda_) / m) * weights
         dj_db = float(np.sum(error) / m)
-        weights = weights - learning_rate * dj_dw
-        intercept = intercept - learning_rate * dj_db
+        delta_w = -learning_rate * dj_dw
+        delta_b = -learning_rate * dj_db
+        weights = weights + delta_w
+        intercept = intercept + delta_b
         steps.append(
-            _logistic_step_snapshot(iteration, x, y, weights, intercept, lambda_, regularized)
+            _logistic_step_snapshot(
+                iteration,
+                x,
+                y,
+                weights,
+                intercept,
+                lambda_,
+                regularized,
+                prev_weights=[float(weight) for weight in prev_weights],
+                prev_intercept=prev_intercept,
+                prev_cost=float(prev_cost),
+                dj_dw=[float(value) for value in dj_dw],
+                dj_db=dj_db,
+                delta_w=[float(value) for value in delta_w],
+                delta_b=float(delta_b),
+            )
         )
     return steps
 
@@ -208,6 +231,14 @@ def _logistic_step_snapshot(
     intercept: float,
     lambda_: float,
     regularized: bool,
+    *,
+    prev_weights: list[float] | None = None,
+    prev_intercept: float | None = None,
+    prev_cost: float | None = None,
+    dj_dw: list[float] | None = None,
+    dj_db: float | None = None,
+    delta_w: list[float] | None = None,
+    delta_b: float | None = None,
 ) -> GradientDescentStep:
     if regularized:
         cost = compute_cost_logistic_reg(x, y, weights, intercept, lambda_)
@@ -218,6 +249,13 @@ def _logistic_step_snapshot(
         weights=[float(weight) for weight in weights],
         intercept=float(intercept),
         cost=float(cost),
+        prev_weights=prev_weights,
+        prev_intercept=prev_intercept,
+        prev_cost=prev_cost,
+        dj_dw=dj_dw,
+        dj_db=dj_db,
+        delta_w=delta_w,
+        delta_b=delta_b,
     )
 
 

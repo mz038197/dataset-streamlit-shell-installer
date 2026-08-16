@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -54,6 +53,33 @@ from dataset_streamlit_shell.ui.data_ui import (
     render_chat_panel,
     render_dataset_metrics,
 )
+from dataset_streamlit_shell.ui.teaching_flow import (
+    CLASSIFICATION_FLOW_VIEW_INPUT,
+    CLASSIFICATION_FLOW_VIEW_LABELS,
+    CLASSIFICATION_FLOW_VIEW_MODEL,
+    CLASSIFICATION_FLOW_VIEW_OUTPUT,
+    MICRO_COST,
+    MICRO_GRAD,
+    MICRO_PREDICT,
+    MICRO_STEP_LABELS,
+    SAMPLE_OPS_HEAD,
+    SAMPLE_OPS_POLY_NOTE,
+    SAMPLE_OPS_SCALE_NOTE,
+    TEACHING_FLOW_CSS,
+    TrainingMicroFrame,
+    build_training_micro_frames,
+    classification_flow_svg,
+    gradient_board_rows,
+    live_fit_caption,
+    logistic_sample_ops_table_rows,
+    micro_stepper_html,
+    regularized_compact_board_lines,
+    sample_ops_cost_caption,
+    sample_ops_table_visible,
+    symbolic_logistic_yhat_latex,
+    symbolic_logistic_z_latex,
+    training_flow_state,
+)
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -68,14 +94,17 @@ MICROCHIP_TARGET = "是否通過"
 
 PAGE_TITLE = "邏輯迴歸"
 CONTEXT_KEY = f"{PAGE_TITLE}_agent_context"
-MODEL_FORMULA_LATEX = r"f_{w,b}(x)=\frac{1}{1+e^{-(w\cdot x+b)}}"
 
 
 def render_logistic_regression_page() -> None:
     teaching, agent = open_content_dual_pane()
     with teaching:
         st.title(PAGE_TITLE)
-        st.caption("先用直線決策邊界建立 sigmoid／Cost，再看多項式映射與 λ 正則化。")
+        st.caption(
+            "沿著教學流程圖：輸入資料 → 分類模型 → 輸出呈現；用「目前查看」一次看一節。"
+            "訓練時會展開微步驟，演示梯度如何更新 w。"
+        )
+        st.markdown(TEACHING_FLOW_CSS, unsafe_allow_html=True)
         stage = st.radio(
             "學習階段",
             list(quiz.LEARNING_STAGES),
@@ -93,6 +122,142 @@ def render_logistic_regression_page() -> None:
         )
 
 
+def _paint_teaching_flow(
+    placeholder,
+    *,
+    finished: bool = False,
+    training: bool = False,
+    live_caption: str = "",
+) -> None:
+    if training or finished:
+        state = training_flow_state(finished=finished)
+        html = classification_flow_svg(
+            hot=state.hot,
+            done=state.done,
+            live_caption=live_caption,
+        )
+    else:
+        html = classification_flow_svg()
+    placeholder.markdown(html, unsafe_allow_html=True)
+
+
+def _paint_micro_stepper(placeholder, *, hot: str | None) -> None:
+    placeholder.markdown(micro_stepper_html(hot=hot), unsafe_allow_html=True)
+
+
+def _render_view_radio(key: str) -> str:
+    if key not in st.session_state:
+        st.session_state[key] = CLASSIFICATION_FLOW_VIEW_MODEL
+    return str(
+        st.radio(
+            "目前查看",
+            CLASSIFICATION_FLOW_VIEW_LABELS,
+            horizontal=True,
+            key=key,
+        )
+    )
+
+
+def _render_logistic_prediction_formula(*, mapped: bool) -> None:
+    st.markdown("**預測公式**")
+    if mapped:
+        st.latex(rf"x \mapsto \phi(x)\ (\mathrm{{degree}}={DEFAULT_MAP_DEGREE})")
+    st.latex(symbolic_logistic_z_latex(mapped=mapped))
+    st.latex(symbolic_logistic_yhat_latex())
+    st.caption("ŷ = σ(z) ∈ (0,1)，不是 0/1 類別。訓練中主公式保持符號式。")
+
+
+def _micro_live_caption(
+    frame: TrainingMicroFrame,
+    *,
+    compact: bool = False,
+    lambda_: float | None = None,
+) -> str:
+    if not compact:
+        return live_fit_caption(
+            iteration=frame.iteration,
+            total_iterations=frame.total_iterations,
+            weights=frame.chart_weights,
+            intercept=frame.chart_intercept,
+            cost=frame.chart_cost,
+        )
+    w_sq = sum(float(weight) * float(weight) for weight in frame.chart_weights)
+    extra = f"λ = {lambda_:g}，" if lambda_ is not None else ""
+    return (
+        f"Iteration {frame.iteration:,} / {frame.total_iterations:,}，"
+        f"{extra}‖w‖² = {w_sq:.4f}，B = {frame.chart_intercept:.4f}，"
+        f"Cost J = {frame.chart_cost:.4f}"
+    )
+
+
+def _cost_history_for_frame(
+    steps: list[GradientDescentStep],
+    frame: TrainingMicroFrame,
+) -> list[GradientDescentStep]:
+    if frame.micro_step == MICRO_UPDATE:
+        return steps[: frame.iteration + 1]
+    return steps[: frame.iteration]
+
+
+def _render_gradient_board(
+    frame: TrainingMicroFrame,
+    *,
+    compact: bool,
+    lambda_: float | None = None,
+) -> None:
+    st.markdown("##### 梯度演算板")
+    if compact:
+        for line in regularized_compact_board_lines(frame, lambda_=float(lambda_ or 0.0)):
+            st.markdown(f"- {line}")
+        if frame.micro_step in {MICRO_GRAD, MICRO_UPDATE}:
+            st.latex(COST_DJ_DW_LOGISTIC_REG_LATEX)
+        with st.expander("全部 w 與 b", expanded=False):
+            st.dataframe(
+                pd.DataFrame(gradient_board_rows(frame)),
+                width="stretch",
+                hide_index=True,
+            )
+        return
+    st.caption(
+        f"目前步驟：{MICRO_STEP_LABELS[frame.micro_step]}｜"
+        f"Iteration {frame.iteration:,} / {frame.total_iterations:,}｜"
+        f"α = {frame.learning_rate:g}｜"
+        f"Cost J（更新前）= {frame.cost_before:.6g}"
+    )
+    if frame.micro_step == MICRO_PREDICT:
+        st.caption("用當前 w、b 計算 ŷ = σ(z)，z = w·x + b。")
+    elif frame.micro_step == MICRO_COST:
+        st.caption("看整批 log-loss J；逐筆是 ℓ，不是平方誤差。")
+    st.dataframe(pd.DataFrame(gradient_board_rows(frame)), width="stretch", hide_index=True)
+
+
+def _render_logistic_sample_ops_table(
+    frame: TrainingMicroFrame,
+    *,
+    model_x: pd.DataFrame,
+    target: pd.Series,
+    show_x: bool,
+) -> None:
+    if not sample_ops_table_visible(frame.micro_step):
+        return
+    st.markdown("##### 樣本運算表")
+    st.caption(SAMPLE_OPS_SCALE_NOTE if show_x else SAMPLE_OPS_POLY_NOTE)
+    feature_names = list(frame.feature_names)
+    head_x = model_x[feature_names].head(SAMPLE_OPS_HEAD)
+    head_y = target.reindex(head_x.index)
+    rows = logistic_sample_ops_table_rows(
+        frame,
+        model_x_rows=head_x.to_numpy(dtype=float).tolist(),
+        y_rows=[float(value) for value in head_y.to_numpy(dtype=float)],
+        show_x=show_x,
+    )
+    if rows:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    cost_caption = sample_ops_cost_caption(frame)
+    if cost_caption is not None:
+        st.caption(cost_caption)
+
+
 def _render_boundary_stage() -> None:
     df = pd.read_csv(UNIVERSITY_ADMISSION_PATH)
     source_label = "內建範例資料：大學錄取（ex2data1）"
@@ -105,124 +270,171 @@ def _render_boundary_stage() -> None:
         st.warning("可用樣本少於 2 筆，無法訓練。")
         return
 
-    _render_classification_data_intro(
-        working,
-        features=features,
-        target=target,
-        dataset_note="每一列是一位申請者：兩科筆試為 x，是否錄取為 y（1=錄取、0=未錄取）。",
-    )
-    # 考試分數尺度約 30–100；未縮放時 α≈0.01 會讓 Cost 爆炸，教案 α=0.001 也幾乎不降。
     scaler = create_standard_scaler(working, features)
     feature_matrix = apply_standard_scaler(working[features], scaler)
 
-    st.markdown("##### 訓練設定")
-    c1, c2 = st.columns(2)
-    learning_rate = c1.number_input(
-        "學習率 α",
-        min_value=0.0001,
-        max_value=1.0,
-        value=0.001,
-        step=0.001,
-        format="%.4f",
-        key="logistic_learning_rate",
-    )
-    epochs = c2.number_input(
-        "Epoch / 迭代次數",
-        min_value=1,
-        max_value=20000,
-        value=10000,
-        step=1,
-        key="logistic_epochs",
-    )
-    st.caption(
-        "訓練前會對特徵做 Z-score 縮放。教案參考：α=0.001、10000 次迭代，Cost 約可降至 0.30。"
-    )
-    st.markdown("##### 模型公式")
-    st.latex(MODEL_FORMULA_LATEX)
-    _render_sigmoid_visualization()
-    _render_logistic_cost_formula(regularized=False)
-
-    quiz_unlocked = _render_boundary_pretrain_quiz()
+    view_key = "logistic_view"
+    anim_key = "logistic_anim"
     result_key = "logistic_regression_last_artifact"
+    lr_key = "logistic_learning_rate"
+    epochs_key = "logistic_epochs"
+    step_mode_key = "logistic_step_mode"
+
+    learning_rate = float(st.session_state.get(lr_key, 0.001))
+    epochs = int(st.session_state.get(epochs_key, 10000))
     signature = (
         source_label,
         tuple(features),
         target,
-        float(learning_rate),
-        int(epochs),
+        learning_rate,
+        epochs,
         len(working),
     )
-    if not quiz_unlocked:
-        st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
-    train_clicked = st.button(
-        "開始訓練",
-        type="primary",
-        width="stretch",
-        key="train_logistic_regression",
-        disabled=not quiz_unlocked,
-    )
+    stored = st.session_state.get(result_key)
     artifact: LogisticModelArtifact | None = None
-    if train_clicked and quiz_unlocked:
-        steps = logistic_gradient_descent_steps(
-            feature_matrix,
-            working[target],
-            learning_rate=float(learning_rate),
-            epochs=int(epochs),
-        )
-        chart_left, chart_right = st.columns(2)
-        boundary_placeholder = chart_left.empty()
-        cost_placeholder = chart_right.empty()
-        status_placeholder = st.empty()
-        _animate_logistic_boundary(
-            working,
-            features,
-            target,
-            steps,
-            boundary_placeholder,
-            cost_placeholder,
-            status_placeholder,
-            scaler=scaler,
-        )
-        final_step = steps[-1]
-        artifact = LogisticModelArtifact(
-            model_kind=MODEL_KIND_LOGISTIC,
-            features=list(features),
-            target=target,
-            weights=[float(value) for value in final_step.weights],
-            intercept=float(final_step.intercept),
-            scaler=scaler,
-            training_cost=float(final_step.cost),
-            data_source=source_label,
-        )
-        st.session_state[result_key] = {"signature": signature, "artifact": artifact}
-    else:
-        stored = st.session_state.get(result_key)
-        if isinstance(stored, dict) and stored.get("signature") == signature:
-            artifact = stored["artifact"]
-            st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
-        elif quiz_unlocked:
-            st.info("兩題已過關。按下「開始訓練」觀察決策邊界與 Cost 的演進。")
+    if isinstance(stored, dict) and stored.get("signature") == signature:
+        artifact = stored["artifact"]
 
-    threshold = _classification_threshold_slider("logistic", enabled=artifact is not None)
-    focus = st.session_state.get(quiz.SESSION_FOCUS_BOUNDARY)
-    appendix = _boundary_quiz_appendix(unlocked=quiz_unlocked, focus_qid=focus)
-    base_context = build_classification_agent_context(
-        page_name=PAGE_TITLE,
-        data_source=source_label,
+    quiz_unlocked = quiz.both_boundary_quiz_correct(
+        str(st.session_state.get(quiz.SESSION_SIGMOID, quiz.PLEASE_SELECT)),
+        str(st.session_state.get(quiz.SESSION_COST, quiz.PLEASE_SELECT)),
+    )
+    anim = st.session_state.get(anim_key)
+    training_active = isinstance(anim, dict) and not anim.get("finished", True)
+
+    flow_placeholder = st.empty()
+    micro_placeholder = st.empty()
+
+    if training_active:
+        _run_training_session(
+            working,
+            model_x=feature_matrix,
+            features=features,
+            target=target,
+            source_label=source_label,
+            signature=signature,
+            result_key=result_key,
+            anim_key=anim_key,
+            view_key=view_key,
+            flow_placeholder=flow_placeholder,
+            micro_placeholder=micro_placeholder,
+            compact=False,
+            scaler=scaler,
+            mapped_features=None,
+        )
+        stored_after = st.session_state.get(result_key)
+        if isinstance(stored_after, dict) and stored_after.get("signature") == signature:
+            artifact = stored_after["artifact"]
+        anim = st.session_state.get(anim_key)
+        training_active = isinstance(anim, dict) and not anim.get("finished", True)
+
+    if not training_active:
+        _paint_teaching_flow(flow_placeholder, finished=artifact is not None)
+        micro_placeholder.empty()
+        view = _render_view_radio(view_key)
+        if view == CLASSIFICATION_FLOW_VIEW_INPUT:
+            st.markdown("###### 輸入資料")
+            _render_classification_data_intro(
+                working,
+                features=features,
+                target=target,
+                dataset_note="每一列是一位申請者：兩科筆試為 x，是否錄取為 y（1=錄取、0=未錄取）。",
+            )
+        elif view == CLASSIFICATION_FLOW_VIEW_MODEL:
+            st.markdown("###### 分類模型")
+            st.markdown("##### 訓練設定")
+            c1, c2 = st.columns(2)
+            learning_rate = float(
+                c1.number_input(
+                    "學習率 α",
+                    min_value=0.0001,
+                    max_value=1.0,
+                    value=learning_rate,
+                    step=0.001,
+                    format="%.4f",
+                    key=lr_key,
+                )
+            )
+            epochs = int(
+                c2.number_input(
+                    "Epoch / 迭代次數",
+                    min_value=1,
+                    max_value=20000,
+                    value=epochs,
+                    step=1,
+                    key=epochs_key,
+                )
+            )
+            st.caption(
+                "訓練前會對特徵做 Z-score 縮放。教案參考：α=0.001、10000 次迭代，Cost 約可降至 0.30。"
+            )
+            signature = (
+                source_label,
+                tuple(features),
+                target,
+                learning_rate,
+                epochs,
+                len(working),
+            )
+            stored = st.session_state.get(result_key)
+            if isinstance(stored, dict) and stored.get("signature") == signature:
+                artifact = stored["artifact"]
+            _render_logistic_prediction_formula(mapped=False)
+            _render_sigmoid_visualization()
+            _render_logistic_cost_formula(regularized=False)
+            quiz_unlocked = _render_boundary_pretrain_quiz()
+            step_mode = st.toggle("逐步模式", value=False, key=step_mode_key)
+            if not quiz_unlocked:
+                st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+            train_clicked = st.button(
+                "開始訓練",
+                type="primary",
+                width="stretch",
+                key="train_logistic_regression",
+                disabled=not quiz_unlocked,
+            )
+            if train_clicked and quiz_unlocked:
+                steps = logistic_gradient_descent_steps(
+                    feature_matrix,
+                    working[target],
+                    learning_rate=learning_rate,
+                    epochs=epochs,
+                )
+                frames = build_training_micro_frames(
+                    _animation_steps(steps),
+                    learning_rate=learning_rate,
+                    feature_names=features,
+                )
+                st.session_state[anim_key] = {
+                    "frames": frames,
+                    "steps": steps,
+                    "index": 0,
+                    "finished": False,
+                    "step_mode": bool(step_mode),
+                    "signature": signature,
+                }
+                st.rerun()
+        else:
+            _render_output_view(
+                working,
+                features=features,
+                target=target,
+                artifact=artifact,
+                result_key=result_key,
+                quiz_unlocked=quiz_unlocked,
+                scaler=scaler,
+                mapped_features=None,
+                threshold_key="logistic",
+            )
+
+    _update_boundary_agent_context(
+        source_label=source_label,
         features=features,
         target=target,
-        learning_rate=float(learning_rate),
-        epochs=int(epochs),
+        learning_rate=float(st.session_state.get(lr_key, learning_rate)),
+        epochs=int(st.session_state.get(epochs_key, epochs)),
         row_count=len(working),
         artifact=artifact,
-        threshold=threshold if artifact is not None else None,
-    )
-    st.session_state[CONTEXT_KEY] = f"{base_context}\n{appendix}"
-    if artifact is not None:
-        probability = predict_proba_from_logistic_artifact(artifact, working[artifact.features])
-        _render_logistic_training_results(artifact, working, target, probability, threshold)
-    _render_classification_prompts(
-        quiz.focus_prompt_lines(focus, stage=quiz.STAGE_BOUNDARY, unlocked=quiz_unlocked)
     )
 
 
@@ -239,140 +451,467 @@ def _render_poly_lambda_stage() -> None:
         return
 
     mapped, mapped_features = map_feature(working, base_features, degree=DEFAULT_MAP_DEGREE)
-    _render_classification_data_intro(
-        working,
-        features=base_features,
-        target=target,
-        dataset_note=(
-            f"原始 2 個 features 會映射為 {len(mapped_features)} 維多項式特徵"
-            f"（degree={DEFAULT_MAP_DEGREE}），再以 λ 做正則化邏輯迴歸。"
-        ),
-    )
 
-    st.markdown("##### 訓練設定")
-    c1, c2, c3 = st.columns(3)
-    learning_rate = c1.number_input(
-        "學習率 α",
-        min_value=0.0001,
-        max_value=1.0,
-        value=0.01,
-        step=0.001,
-        format="%.4f",
-        key="regularized_learning_rate",
-    )
-    epochs = c2.number_input(
-        "Epoch / 迭代次數",
-        min_value=1,
-        max_value=20000,
-        value=10000,
-        step=1,
-        key="regularized_epochs",
-    )
-    lambda_ = c3.number_input(
-        "正則化 λ",
-        min_value=0.0,
-        max_value=10.0,
-        value=0.01,
-        step=0.001,
-        format="%.4f",
-        key="regularized_lambda",
-    )
-    st.caption("教案參考：α=0.01、λ=0.01、10000 次迭代（預設已對齊）。")
-    st.markdown("##### 模型公式")
-    st.latex(rf"x \mapsto \phi(x)\ (\mathrm{{degree}}={DEFAULT_MAP_DEGREE})")
-    st.latex(r"f_{w,b}(x)=\frac{1}{1+e^{-(w\cdot \phi(x)+b)}}")
-    _render_logistic_cost_formula(regularized=True)
-
-    quiz_unlocked = _render_poly_pretrain_quiz()
+    view_key = "regularized_logistic_view"
+    anim_key = "regularized_logistic_anim"
     result_key = "regularized_logistic_last_artifact"
+    lr_key = "regularized_learning_rate"
+    epochs_key = "regularized_epochs"
+    lambda_key = "regularized_lambda"
+    step_mode_key = "regularized_step_mode"
+
+    learning_rate = float(st.session_state.get(lr_key, 0.01))
+    epochs = int(st.session_state.get(epochs_key, 10000))
+    lambda_ = float(st.session_state.get(lambda_key, 0.01))
     signature = (
         source_label,
         tuple(base_features),
         target,
-        float(learning_rate),
-        int(epochs),
-        float(lambda_),
+        learning_rate,
+        epochs,
+        lambda_,
         len(working),
     )
-    if not quiz_unlocked:
-        st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
-    train_clicked = st.button(
-        "開始訓練",
-        type="primary",
-        width="stretch",
-        key="train_regularized_logistic",
-        disabled=not quiz_unlocked,
-    )
+    stored = st.session_state.get(result_key)
     artifact: RegularizedLogisticModelArtifact | None = None
-    if train_clicked and quiz_unlocked:
-        rng = np.random.default_rng(1)
-        initial_w = rng.random(len(mapped_features)) - 0.5
-        steps = logistic_gradient_descent_steps(
-            mapped,
-            working[target],
-            learning_rate=float(learning_rate),
-            epochs=int(epochs),
-            initial_weights=initial_w.tolist(),
-            initial_intercept=1.0,
-            lambda_=float(lambda_),
-            regularized=True,
-        )
-        chart_left, chart_right = st.columns(2)
-        contour_placeholder = chart_left.empty()
-        cost_placeholder = chart_right.empty()
-        status_placeholder = st.empty()
-        _animate_regularized_contour(
+    if isinstance(stored, dict) and stored.get("signature") == signature:
+        artifact = stored["artifact"]
+
+    quiz_unlocked = quiz.both_poly_quiz_correct(
+        str(st.session_state.get(quiz.SESSION_MAP, quiz.PLEASE_SELECT)),
+        str(st.session_state.get(quiz.SESSION_LAMBDA, quiz.PLEASE_SELECT)),
+    )
+    anim = st.session_state.get(anim_key)
+    training_active = isinstance(anim, dict) and not anim.get("finished", True)
+
+    flow_placeholder = st.empty()
+    micro_placeholder = st.empty()
+
+    if training_active:
+        _run_training_session(
             working,
-            base_features,
+            model_x=mapped,
+            features=base_features,
+            target=target,
+            source_label=source_label,
+            signature=signature,
+            result_key=result_key,
+            anim_key=anim_key,
+            view_key=view_key,
+            flow_placeholder=flow_placeholder,
+            micro_placeholder=micro_placeholder,
+            compact=True,
+            scaler=None,
+            mapped_features=mapped_features,
+            lambda_=lambda_,
+        )
+        stored_after = st.session_state.get(result_key)
+        if isinstance(stored_after, dict) and stored_after.get("signature") == signature:
+            artifact = stored_after["artifact"]
+        anim = st.session_state.get(anim_key)
+        training_active = isinstance(anim, dict) and not anim.get("finished", True)
+
+    if not training_active:
+        _paint_teaching_flow(flow_placeholder, finished=artifact is not None)
+        micro_placeholder.empty()
+        view = _render_view_radio(view_key)
+        if view == CLASSIFICATION_FLOW_VIEW_INPUT:
+            st.markdown("###### 輸入資料")
+            _render_classification_data_intro(
+                working,
+                features=base_features,
+                target=target,
+                dataset_note=(
+                    f"原始 2 個 features 會映射為 {len(mapped_features)} 維多項式特徵"
+                    f"（degree={DEFAULT_MAP_DEGREE}），再以 λ 做正則化邏輯迴歸。"
+                ),
+            )
+        elif view == CLASSIFICATION_FLOW_VIEW_MODEL:
+            st.markdown("###### 分類模型")
+            st.markdown("##### 訓練設定")
+            c1, c2, c3 = st.columns(3)
+            learning_rate = float(
+                c1.number_input(
+                    "學習率 α",
+                    min_value=0.0001,
+                    max_value=1.0,
+                    value=learning_rate,
+                    step=0.001,
+                    format="%.4f",
+                    key=lr_key,
+                )
+            )
+            epochs = int(
+                c2.number_input(
+                    "Epoch / 迭代次數",
+                    min_value=1,
+                    max_value=20000,
+                    value=epochs,
+                    step=1,
+                    key=epochs_key,
+                )
+            )
+            lambda_ = float(
+                c3.number_input(
+                    "正則化 λ",
+                    min_value=0.0,
+                    max_value=10.0,
+                    value=lambda_,
+                    step=0.001,
+                    format="%.4f",
+                    key=lambda_key,
+                )
+            )
+            st.caption("教案參考：α=0.01、λ=0.01、10000 次迭代（預設已對齊）。")
+            signature = (
+                source_label,
+                tuple(base_features),
+                target,
+                learning_rate,
+                epochs,
+                lambda_,
+                len(working),
+            )
+            stored = st.session_state.get(result_key)
+            if isinstance(stored, dict) and stored.get("signature") == signature:
+                artifact = stored["artifact"]
+            _render_logistic_prediction_formula(mapped=True)
+            _render_logistic_cost_formula(regularized=True)
+            quiz_unlocked = _render_poly_pretrain_quiz()
+            step_mode = st.toggle("逐步模式", value=False, key=step_mode_key)
+            if not quiz_unlocked:
+                st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
+            train_clicked = st.button(
+                "開始訓練",
+                type="primary",
+                width="stretch",
+                key="train_regularized_logistic",
+                disabled=not quiz_unlocked,
+            )
+            if train_clicked and quiz_unlocked:
+                rng = np.random.default_rng(1)
+                initial_w = rng.random(len(mapped_features)) - 0.5
+                steps = logistic_gradient_descent_steps(
+                    mapped,
+                    working[target],
+                    learning_rate=learning_rate,
+                    epochs=epochs,
+                    initial_weights=initial_w.tolist(),
+                    initial_intercept=1.0,
+                    lambda_=lambda_,
+                    regularized=True,
+                )
+                frames = build_training_micro_frames(
+                    _animation_steps(steps),
+                    learning_rate=learning_rate,
+                    feature_names=mapped_features,
+                )
+                st.session_state[anim_key] = {
+                    "frames": frames,
+                    "steps": steps,
+                    "index": 0,
+                    "finished": False,
+                    "step_mode": bool(step_mode),
+                    "signature": signature,
+                    "lambda_": lambda_,
+                }
+                st.rerun()
+        else:
+            _render_output_view(
+                working,
+                features=base_features,
+                target=target,
+                artifact=artifact,
+                result_key=result_key,
+                quiz_unlocked=quiz_unlocked,
+                scaler=None,
+                mapped_features=mapped_features,
+                threshold_key="regularized",
+            )
+
+    _update_poly_agent_context(
+        source_label=source_label,
+        features=base_features,
+        target=target,
+        learning_rate=float(st.session_state.get(lr_key, learning_rate)),
+        epochs=int(st.session_state.get(epochs_key, epochs)),
+        lambda_=float(st.session_state.get(lambda_key, lambda_)),
+        row_count=len(working),
+        artifact=artifact,
+    )
+
+
+def _run_training_session(
+    working: pd.DataFrame,
+    *,
+    model_x: pd.DataFrame,
+    features: list[str],
+    target: str,
+    source_label: str,
+    signature: tuple,
+    result_key: str,
+    anim_key: str,
+    view_key: str,
+    flow_placeholder,
+    micro_placeholder,
+    compact: bool,
+    scaler: dict | None,
+    mapped_features: list[str] | None,
+    lambda_: float | None = None,
+) -> None:
+    anim = st.session_state.get(anim_key)
+    if not isinstance(anim, dict) or anim.get("finished"):
+        return
+    frames: list[TrainingMicroFrame] = list(anim["frames"])
+    steps: list[GradientDescentStep] = list(anim["steps"])
+    if not frames:
+        anim["finished"] = True
+        return
+
+    last_plot_key: bool | None = None
+    board_col, chart_col = st.columns(2, gap="medium")
+    with board_col:
+        board_placeholder = st.empty()
+        next_placeholder = st.empty()
+    with chart_col:
+        plot_placeholder = st.empty()
+        cost_placeholder = st.empty()
+        status_placeholder = st.empty()
+
+    def _show_frame(frame: TrainingMicroFrame) -> None:
+        nonlocal last_plot_key
+        caption = _micro_live_caption(frame, compact=compact, lambda_=lambda_)
+        _paint_teaching_flow(flow_placeholder, training=True, live_caption=caption)
+        _paint_micro_stepper(micro_placeholder, hot=frame.micro_step)
+        with board_placeholder.container():
+            _render_gradient_board(frame, compact=compact, lambda_=lambda_)
+            _render_logistic_sample_ops_table(
+                frame,
+                model_x=model_x,
+                target=working[target],
+                show_x=not compact,
+            )
+        chart_step = GradientDescentStep(
+            iteration=frame.iteration,
+            weights=list(frame.chart_weights),
+            intercept=float(frame.chart_intercept),
+            cost=float(frame.chart_cost),
+        )
+        # 階段2 contour 很貴；同一組 w 的預測／Cost／梯度微步重用上一張圖。
+        redraw_plot = (not compact) or last_plot_key is None or frame.micro_step == MICRO_UPDATE
+        if redraw_plot:
+            if compact and mapped_features is not None:
+                _render_regularized_contour_plot(
+                    working,
+                    features,
+                    target,
+                    mapped_features,
+                    chart_step,
+                    plot_placeholder,
+                    grid_size=30,
+                )
+            else:
+                _render_logistic_boundary_plot(
+                    working,
+                    features,
+                    target,
+                    chart_step,
+                    plot_placeholder,
+                    scaler=scaler,
+                )
+            last_plot_key = True
+        _render_cost_history_plot(_cost_history_for_frame(steps, frame), cost_placeholder)
+        status_placeholder.caption(caption)
+
+    def _finalize() -> None:
+        final_step = steps[-1]
+        if compact and mapped_features is not None:
+            artifact: ClassificationArtifact = RegularizedLogisticModelArtifact(
+                model_kind=MODEL_KIND_REGULARIZED,
+                base_features=list(features),
+                mapped_features=list(mapped_features),
+                target=target,
+                weights=[float(value) for value in final_step.weights],
+                intercept=float(final_step.intercept),
+                map_degree=DEFAULT_MAP_DEGREE,
+                lambda_=float(lambda_ or 0.0),
+                training_cost=float(final_step.cost),
+                data_source=source_label,
+            )
+        else:
+            artifact = LogisticModelArtifact(
+                model_kind=MODEL_KIND_LOGISTIC,
+                features=list(features),
+                target=target,
+                weights=[float(value) for value in final_step.weights],
+                intercept=float(final_step.intercept),
+                scaler=scaler,
+                training_cost=float(final_step.cost),
+                data_source=source_label,
+            )
+        st.session_state[result_key] = {
+            "signature": signature,
+            "artifact": artifact,
+            "steps": steps,
+        }
+        anim["finished"] = True
+        st.session_state[view_key] = CLASSIFICATION_FLOW_VIEW_OUTPUT
+        _paint_teaching_flow(flow_placeholder, finished=True)
+        micro_placeholder.empty()
+
+    if anim.get("step_mode"):
+        index = int(anim.get("index", 0))
+        index = min(max(index, 0), len(frames) - 1)
+        _show_frame(frames[index])
+        with next_placeholder.container():
+            next_key = "regularized_logistic_next_micro" if compact else "logistic_next_micro"
+            if st.button("下一步", type="primary", key=next_key):
+                if index + 1 >= len(frames):
+                    _finalize()
+                else:
+                    anim["index"] = index + 1
+                st.rerun()
+        return
+
+    for frame in frames:
+        _show_frame(frame)
+        time.sleep(0.015)
+    _finalize()
+    st.rerun()
+
+
+def _render_output_view(
+    working: pd.DataFrame,
+    *,
+    features: list[str],
+    target: str,
+    artifact: ClassificationArtifact | None,
+    result_key: str,
+    quiz_unlocked: bool,
+    scaler: dict | None,
+    mapped_features: list[str] | None,
+    threshold_key: str,
+) -> None:
+    st.markdown("###### 輸出呈現")
+    st.caption("圖上決策邊界／contour 維持 ŷ=0.5；threshold 只切表上的類別與正確率。")
+    chart_left, chart_right = st.columns(2)
+    plot_placeholder = chart_left.empty()
+    cost_placeholder = chart_right.empty()
+    status_placeholder = st.empty()
+    threshold = _classification_threshold_slider(threshold_key, enabled=artifact is not None)
+    if artifact is None:
+        st.caption("訓練後這裡會出現決策邊界、Cost 曲線與 y／ŷ／predicted_class 表。")
+        if quiz_unlocked:
+            status_placeholder.info(
+                "兩題已過關。到「分類模型」按下「開始訓練」，觀察梯度如何更新 w。"
+            )
+        else:
+            status_placeholder.info("先到「分類模型」完成兩題訓練前預測，再開始訓練。")
+        return
+
+    status_placeholder.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
+    chart_step = GradientDescentStep(
+        iteration=0,
+        weights=[float(value) for value in artifact.weights],
+        intercept=float(artifact.intercept),
+        cost=float(artifact.training_cost),
+    )
+    if mapped_features is not None:
+        _render_regularized_contour_plot(
+            working,
+            features,
             target,
             mapped_features,
-            steps,
-            contour_placeholder,
-            cost_placeholder,
-            status_placeholder,
+            chart_step,
+            plot_placeholder,
+            grid_size=30,
         )
-        final_step = steps[-1]
-        artifact = RegularizedLogisticModelArtifact(
-            model_kind=MODEL_KIND_REGULARIZED,
-            base_features=list(base_features),
-            mapped_features=list(mapped_features),
-            target=target,
-            weights=[float(value) for value in final_step.weights],
-            intercept=float(final_step.intercept),
-            map_degree=DEFAULT_MAP_DEGREE,
-            lambda_=float(lambda_),
-            training_cost=float(final_step.cost),
-            data_source=source_label,
-        )
-        st.session_state[result_key] = {"signature": signature, "artifact": artifact}
     else:
-        stored = st.session_state.get(result_key)
-        if isinstance(stored, dict) and stored.get("signature") == signature:
-            artifact = stored["artifact"]
-            st.caption("顯示最近一次訓練結果；調整設定後請重新按「開始訓練」。")
-        elif quiz_unlocked:
-            st.info("兩題已過關。按下「開始訓練」觀察 contour 與 Cost 的演進。")
+        _render_logistic_boundary_plot(
+            working,
+            features,
+            target,
+            chart_step,
+            plot_placeholder,
+            scaler=scaler,
+        )
+    result_bundle = st.session_state.get(result_key)
+    cached_steps = result_bundle.get("steps") if isinstance(result_bundle, dict) else None
+    if isinstance(cached_steps, list) and cached_steps:
+        _render_cost_history_plot(cached_steps, cost_placeholder)
+    if isinstance(artifact, LogisticModelArtifact):
+        probability = predict_proba_from_logistic_artifact(artifact, working[artifact.features])
+    else:
+        probability = predict_proba_from_regularized_artifact(artifact, working)
+    _render_logistic_training_results(artifact, working, target, probability, threshold)
 
-    threshold = _classification_threshold_slider("regularized", enabled=artifact is not None)
+
+def _update_boundary_agent_context(
+    *,
+    source_label: str,
+    features: list[str],
+    target: str,
+    learning_rate: float,
+    epochs: int,
+    row_count: int,
+    artifact: LogisticModelArtifact | None,
+) -> None:
+    quiz_unlocked = quiz.both_boundary_quiz_correct(
+        str(st.session_state.get(quiz.SESSION_SIGMOID, quiz.PLEASE_SELECT)),
+        str(st.session_state.get(quiz.SESSION_COST, quiz.PLEASE_SELECT)),
+    )
+    focus = st.session_state.get(quiz.SESSION_FOCUS_BOUNDARY)
+    threshold = float(st.session_state.get("logistic_threshold", 0.5))
+    appendix = _boundary_quiz_appendix(unlocked=quiz_unlocked, focus_qid=focus)
+    base_context = build_classification_agent_context(
+        page_name=PAGE_TITLE,
+        data_source=source_label,
+        features=features,
+        target=target,
+        learning_rate=learning_rate,
+        epochs=epochs,
+        row_count=row_count,
+        artifact=artifact,
+        threshold=threshold if artifact is not None else None,
+    )
+    st.session_state[CONTEXT_KEY] = f"{base_context}\n{appendix}"
+    _render_classification_prompts(
+        quiz.focus_prompt_lines(focus, stage=quiz.STAGE_BOUNDARY, unlocked=quiz_unlocked)
+    )
+
+
+def _update_poly_agent_context(
+    *,
+    source_label: str,
+    features: list[str],
+    target: str,
+    learning_rate: float,
+    epochs: int,
+    lambda_: float,
+    row_count: int,
+    artifact: RegularizedLogisticModelArtifact | None,
+) -> None:
+    quiz_unlocked = quiz.both_poly_quiz_correct(
+        str(st.session_state.get(quiz.SESSION_MAP, quiz.PLEASE_SELECT)),
+        str(st.session_state.get(quiz.SESSION_LAMBDA, quiz.PLEASE_SELECT)),
+    )
     focus = st.session_state.get(quiz.SESSION_FOCUS_POLY)
+    threshold = float(st.session_state.get("regularized_threshold", 0.5))
     appendix = _poly_quiz_appendix(unlocked=quiz_unlocked, focus_qid=focus)
     base_context = build_classification_agent_context(
         page_name=PAGE_TITLE,
         data_source=source_label,
-        features=base_features,
+        features=features,
         target=target,
-        learning_rate=float(learning_rate),
-        epochs=int(epochs),
-        row_count=len(working),
+        learning_rate=learning_rate,
+        epochs=epochs,
+        row_count=row_count,
         artifact=artifact,
-        lambda_=float(lambda_),
+        lambda_=lambda_,
         map_degree=DEFAULT_MAP_DEGREE,
         threshold=threshold if artifact is not None else None,
     )
     st.session_state[CONTEXT_KEY] = f"{base_context}\n{appendix}"
-    if artifact is not None:
-        probability = predict_proba_from_regularized_artifact(artifact, working)
-        _render_logistic_training_results(artifact, working, target, probability, threshold)
     _render_classification_prompts(
         quiz.focus_prompt_lines(focus, stage=quiz.STAGE_POLY_LAMBDA, unlocked=quiz_unlocked)
     )
@@ -678,56 +1217,6 @@ def _classification_threshold_slider(page_key: str, *, enabled: bool) -> float:
     )
 
 
-def _animate_logistic_boundary(
-    frame: pd.DataFrame,
-    features: list[str],
-    target: str,
-    steps: list[GradientDescentStep],
-    boundary_placeholder,
-    cost_placeholder,
-    status_placeholder,
-    *,
-    scaler: dict | None,
-) -> None:
-    for step in _animation_steps(steps):
-        _render_logistic_boundary_plot(
-            frame, features, target, step, boundary_placeholder, scaler=scaler
-        )
-        _render_cost_history_plot(steps[: step.iteration + 1], cost_placeholder)
-        status_placeholder.caption(
-            f"Iteration {step.iteration:,} / {steps[-1].iteration:,}，"
-            f"Cost J = {step.cost:.4f}"
-        )
-        time.sleep(0.02)
-
-
-def _animate_regularized_contour(
-    frame: pd.DataFrame,
-    base_features: list[str],
-    target: str,
-    mapped_features: list[str],
-    steps: list[GradientDescentStep],
-    contour_placeholder,
-    cost_placeholder,
-    status_placeholder,
-) -> None:
-    for step in _animation_steps(steps):
-        _render_regularized_contour_plot(
-            frame,
-            base_features,
-            target,
-            mapped_features,
-            step,
-            contour_placeholder,
-            grid_size=30,
-        )
-        _render_cost_history_plot(steps[: step.iteration + 1], cost_placeholder)
-        status_placeholder.caption(
-            f"Iteration {step.iteration:,} / {steps[-1].iteration:,}，Cost J = {step.cost:.4f}"
-        )
-        time.sleep(0.02)
-
-
 def _animation_steps(steps: list[GradientDescentStep]) -> list[GradientDescentStep]:
     if len(steps) <= 80:
         return steps
@@ -751,7 +1240,6 @@ def _render_logistic_boundary_plot(
     plot_frame = frame[[x1_name, x2_name]]
     w1, w2 = float(step.weights[0]), float(step.weights[1])
     intercept = float(step.intercept)
-    # 散點維持原始分數尺度；若訓練用 Z-score，把邊界反變換回原始座標
     if scaler is not None:
         m1 = float(scaler["mean"][x1_name])
         s1 = float(scaler["scale"][x1_name])
@@ -850,15 +1338,18 @@ def _render_logistic_training_results(
         "訓練集正確率",
         f"{training_accuracy(working[target], probability, threshold):.2f}%",
     )
+    if isinstance(artifact, RegularizedLogisticModelArtifact):
+        w_sq = sum(float(weight) * float(weight) for weight in artifact.weights)
+        st.caption(f"λ = {artifact.lambda_:g}，‖w‖² = {w_sq:.4g}（輸出主路徑不列 27 個 w）。")
     predicted = predict_class_from_proba(probability, threshold)
     result = pd.DataFrame(
         {
-            "actual": working[target],
-            "probability": probability,
+            "y": working[target],
+            "ŷ": probability,
             "predicted_class": predicted,
         }
     )
-    st.dataframe(result.head(30).style.format({"probability": "{:.4f}"}), width="stretch")
+    st.dataframe(result.head(30).style.format({"ŷ": "{:.4f}"}), width="stretch")
 
 
 def _render_classification_prompts(prompts: list[str]) -> None:

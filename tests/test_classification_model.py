@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 TEMPLATE_ROOT = (
     Path(__file__).resolve().parents[1]
@@ -201,3 +202,44 @@ def test_build_classification_agent_context() -> None:
     )
     assert "邏輯迴歸" in context
     assert "threshold" in context
+
+
+def test_regularized_gd_penalizes_weights_not_intercept() -> None:
+    frame = pd.DataFrame({"x": [0.0, 1.0], "y": [0, 1]})
+    kwargs = {
+        "learning_rate": 0.1,
+        "epochs": 1,
+        "initial_weights": [1.0],
+        "initial_intercept": 0.5,
+    }
+    plain = logistic_gradient_descent_steps(frame[["x"]], frame["y"], **kwargs)
+    regularized = logistic_gradient_descent_steps(
+        frame[["x"]],
+        frame["y"],
+        lambda_=2.0,
+        regularized=True,
+        **kwargs,
+    )
+    assert regularized[1].dj_db == pytest.approx(plain[1].dj_db)
+    assert regularized[1].dj_dw is not None and plain[1].dj_dw is not None
+    assert regularized[1].dj_dw[0] == pytest.approx(plain[1].dj_dw[0] + (2.0 / 2.0) * 1.0)
+
+
+def test_logistic_gd_steps_include_micro_step_fields() -> None:
+    frame = pd.DataFrame({"x": [0.0, 1.0], "y": [0, 1]})
+    steps = logistic_gradient_descent_steps(
+        frame[["x"]],
+        frame["y"],
+        learning_rate=0.1,
+        epochs=2,
+    )
+    update = steps[1]
+    assert update.prev_weights is not None
+    assert update.prev_intercept is not None
+    assert update.prev_cost is not None
+    assert update.dj_dw is not None
+    assert update.dj_db is not None
+    assert update.delta_w is not None
+    assert update.delta_b is not None
+    assert len(update.dj_dw) == 1
+    assert len(update.delta_w) == 1
