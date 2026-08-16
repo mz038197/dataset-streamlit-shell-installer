@@ -364,12 +364,6 @@ def _render_dual_table_quality() -> str:
     passengers, voyage = load_dual_tables(WORKSPACE_DIR)
     aligned = voyage_key_is_aligned(voyage)
     _render_dual_table_refresh_controls()
-    st.info(
-        "目前還沒有 Working 工作資料。以下並排顯示雙表工作副本"
-        "（由內建雙表教材複製，Agent 只改航程表鍵名）——"
-        f"**{PASSENGER_TABLE_LABEL}**（左）與 **{VOYAGE_TABLE_LABEL}**（右）。"
-        "請先找出能當合併依據的欄位，請右側 Agent 只改航程表鍵名；通過關卡後再請 Agent 合併。"
-    )
     left_col, right_col = st.columns(2)
     with left_col:
         st.markdown(f"##### {PASSENGER_TABLE_LABEL}")

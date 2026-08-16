@@ -53,3 +53,11 @@ def test_overview_mentions_dual_start_not_upload_page() -> None:
     assert "欄位與資料概覽" not in src
     assert "雙表起點" in src
     assert "15_Data_Integration.py" not in src
+
+
+def test_dual_start_page_has_no_missing_working_info_banner() -> None:
+    src = (UI / "workflow_ui.py").read_text(encoding="utf-8")
+    assert "目前還沒有 Working 工作資料" not in src
+    assert "以下並排顯示雙表工作副本" not in src
+    assert "答對後請 Agent 合併寫入 Original 與 Working" in src
+    assert "合併前請 Agent 只改航程表鍵名" in src
