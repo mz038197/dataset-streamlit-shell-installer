@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +13,20 @@ CHALLENGE_COMPANIES: tuple[str, ...] = (
     "churnlab",
     "flowcast",
 )
+
+DATA_VIEW_START = "起點"
+DATA_VIEW_WORKING = "工作"
+DATA_VIEW_TRAIN = "訓練"
+DATA_VIEW_TEST = "測試"
+DATA_VIEW_LABELS: tuple[str, ...] = (
+    DATA_VIEW_START,
+    DATA_VIEW_WORKING,
+    DATA_VIEW_TRAIN,
+    DATA_VIEW_TEST,
+)
+
+CHALLENGE_ARTIFACT_KEY = "challenge_model_artifact"
+CHALLENGE_SPLIT_SIGNATURE_KEY = "challenge_split_signature"
 
 _COMPANY_FRAGMENTS: dict[str, str] = {
     "edupulse": (
@@ -47,6 +62,8 @@ class ChallengePaths:
     start_csv: Path
     handbook: Path
     working_csv: Path
+    train_csv: Path
+    test_csv: Path
     challenge_dir: Path
 
 
@@ -56,17 +73,83 @@ def challenge_paths(workspace_dir: Path, company: str) -> ChallengePaths:
         start_csv=challenge_dir / f"{company}.csv",
         handbook=challenge_dir / f"{company}_資料說明書.md",
         working_csv=challenge_dir / "working.csv",
+        train_csv=challenge_dir / "train.csv",
+        test_csv=challenge_dir / "test.csv",
         challenge_dir=challenge_dir,
     )
 
 
-def company_changed_should_clear_working(
+def company_changed_should_reset(
     previous: str | None,
     current: str,
 ) -> bool:
     if previous is None:
         return False
     return previous != current
+
+
+def split_files_ready(paths: ChallengePaths) -> bool:
+    return paths.train_csv.is_file() and paths.test_csv.is_file()
+
+
+def split_signature(paths: ChallengePaths) -> tuple[float, int, float, int] | None:
+    if not split_files_ready(paths):
+        return None
+    train_stat = paths.train_csv.stat()
+    test_stat = paths.test_csv.stat()
+    return (
+        train_stat.st_mtime,
+        train_stat.st_size,
+        test_stat.st_mtime,
+        test_stat.st_size,
+    )
+
+
+def artifact_matches_current_split(
+    paths: ChallengePaths,
+    signature: tuple[float, int, float, int] | None,
+) -> bool:
+    current = split_signature(paths)
+    return current is not None and current == signature
+
+
+def model_zone_unlocked(paths: ChallengePaths) -> bool:
+    return split_files_ready(paths)
+
+
+def result_zone_unlocked(paths: ChallengePaths, *, artifact_present: bool) -> bool:
+    return split_files_ready(paths) and artifact_present
+
+
+def available_data_views(paths: ChallengePaths) -> list[str]:
+    mapping = (
+        (DATA_VIEW_START, paths.start_csv),
+        (DATA_VIEW_WORKING, paths.working_csv),
+        (DATA_VIEW_TRAIN, paths.train_csv),
+        (DATA_VIEW_TEST, paths.test_csv),
+    )
+    return [label for label, file_path in mapping if file_path.is_file()]
+
+
+def default_data_view(paths: ChallengePaths) -> str:
+    if paths.working_csv.is_file():
+        return DATA_VIEW_WORKING
+    return DATA_VIEW_START
+
+
+def csv_for_view(paths: ChallengePaths, view: str) -> Path | None:
+    return {
+        DATA_VIEW_START: paths.start_csv,
+        DATA_VIEW_WORKING: paths.working_csv,
+        DATA_VIEW_TRAIN: paths.train_csv,
+        DATA_VIEW_TEST: paths.test_csv,
+    }.get(view)
+
+
+def invalidate_challenge_split(paths: ChallengePaths) -> None:
+    for file_path in (paths.train_csv, paths.test_csv):
+        if file_path.is_file():
+            file_path.unlink()
 
 
 def clear_challenge_working(working_csv: Path) -> bool:
@@ -77,12 +160,37 @@ def clear_challenge_working(working_csv: Path) -> bool:
     return True
 
 
+def clear_challenge_runtime(paths: ChallengePaths) -> None:
+    clear_challenge_working(paths.working_csv)
+    invalidate_challenge_split(paths)
+
+
+def sync_split_if_working_stale(paths: ChallengePaths) -> bool:
+    """working 比切分檔新時刪除 train／test。回傳是否作廢了切分。"""
+    if not paths.working_csv.is_file():
+        return False
+    split_files = [path for path in (paths.train_csv, paths.test_csv) if path.is_file()]
+    if not split_files:
+        return False
+    working_mtime = paths.working_csv.stat().st_mtime
+    if not any(working_mtime > path.stat().st_mtime for path in split_files):
+        return False
+    invalidate_challenge_split(paths)
+    return True
+
+
+def restore_startup_challenge_ui(empty_shell: Path, live_ui: Path) -> None:
+    shutil.copyfile(empty_shell, live_ui)
+
+
 def challenge_host_context(
     *,
     company: str,
     start_csv: str,
     handbook: str,
     working_csv: str,
+    train_csv: str,
+    test_csv: str,
     scripts_dir: str,
 ) -> str:
     """專案展示專用 host_context；不叠加 dataset_base_context。"""
@@ -94,39 +202,48 @@ def challenge_host_context(
 你是學生團隊的第五位隊友（資料／專案 Agent），正在協助完成 Startup Challenge 上台展示。
 學生才是負責人：最後的清理決策、模型選擇、倫理界線與上台解釋，必須由學生做出並能說清楚。
 
-【本頁目標：薄白板三塊】
-協助學生完成並強化這三塊即可，不要引導他們重做整條 ML 教學實驗室頁面：
-1) 我們在解決什麼？（客戶、問題、預測目標欄）
-2) 我們做出來的結果（一個主模型、一個評估指標、一次可演示預測）
-3) 我們不能亂承諾什麼？（限制與倫理紅線）
-成果請以 AI coding 寫入允許檔案（尤其 ui/startup_challenge_ui.py 的白板常數與第②塊實作），不要只把文案留在對話裡。
+【本頁目標：資料 → 模型區 → 成果區】
+不要引導他們重做整條 ML 教學實驗室頁面。頁上幾乎沒有說明文字；引導發生在對話裡。
+1) 先讀說明書、檢查 Challenge 起點資料，再複製成 Challenge 工作資料後清理。起點 CSV 只讀、不可覆寫。
+2) 清理後從工作資料切出 Challenge 訓練資料與 Challenge 測試資料（預設 80／20；有類別目標則分層）。頁上無套用按鈕。模型只吃這兩份，不直接吃 working。
+3) 沒有訓練／測試檔時，模型區與成果區只顯示空輪廓，不可填入。
+4) 與學生討論要呈現的模型與方式後，以 AI coding 寫入 ui/startup_challenge_ui.py。
+   - 模型區：選型與訓練（名稱、必要旋鈕、開始訓練），不要放成果圖表。
+   - 成果區：訓練後的指標、圖與一次演示；沒有 Challenge 模型產物時維持空輪廓。
+   一次 coding 可以寫兩區程式，但成果區在尚未訓練前仍應顯示空輪廓。
+5) 倫理紅線只在對話與口頭 Gate 處理，不要在頁上加第三塊標題。
+6) 不要拆掉專案展示空殼「無檔則顯示輪廓」的判斷。
 
 【檔案規則】
 - Challenge 起點資料：{start_csv}
   → 只讀起點，不要覆蓋。
 - Challenge 資料說明書：{handbook}
-  → 解釋欄位與目標前，先用工具讀取說明書。
+  → 解釋欄位與目標前，先用工具讀取說明書。不要把說明書全文貼進頁面。
 - Challenge 工作資料：{working_csv}
-  （若尚未建立，可提醒學生從起點檔複製後再清理）
-- 展示／訓練請優先使用 Challenge 工作資料；沒有工作資料時，可以先讀起點檔做診斷，但改檔前必須先建立工作副本。
-- 不要改根目錄的 original.csv／working.csv／ready.csv；那些是雙表整理線，不是本挑戰軌道。
+  （若尚未建立，先從起點檔複製再清理）
+- Challenge 訓練資料：{train_csv}
+- Challenge 測試資料：{test_csv}
+- 改寫 working.csv 時必須刪除 train.csv 與 test.csv（切分作廢）。
+- 不要改根目錄的 original.csv／working.csv／ready.csv／train.csv／val.csv／test.csv；那些是雙表整理線，不是本挑戰軌道。
 - 不要上網下載替代資料集，不要改用其他公司的 CSV。
 - 不要修改其他教學頁（邏輯迴歸、決策樹等）的程式，除非學生明確只要修專案展示頁。
 - 若需寫檢查或整理腳本，只放在 {scripts_dir} 下。
+- 不要編輯 ui/startup_challenge_empty_shell.py；那是換公司時還原用的專案展示空殼。
 
 【允許改動範圍】
-- ui/startup_challenge_ui.py
-- workspace/challenge/*（含 working.csv）
+- ui/startup_challenge_ui.py（可填模型區／成果區；不可拆無檔則顯示輪廓）
+- workspace/challenge/*（含 working.csv、train.csv、test.csv）
 - 必要時 scripts/
 
 【回答與行動規則】
 1. 先理解問題：客戶是誰、目標欄是什麼、分類還是回歸。
 2. 先讀說明書，再用 read_file／exec 實際看 CSV，不要憑記憶捏造欄位意義。
 3. 發現缺失、異常、字串不一致時：先說明現象與選項利弊，再詢問學生要採哪一種；不要默默改完所有資料。
-4. 幫寫訓練程式時：只做最小可運行版本（切分、一個模型、一個指標、可選的一次預測）。不要做超參大掃描或完整 UI 重構。
-5. 用繁體中文、短句、可上台的口吻協助改寫解釋；技術細節可保留，但最後要能對客戶說人話。
-6. 若學生只要分數、不管限制：把對話拉回第 3 塊（不能亂承諾什麼）。
+4. 幫寫訓練程式時：讀 challenge/train.csv 訓練、用 challenge/test.csv 評估。只做最小可運行版本。不要做超參大掃描或完整 UI 重構。
+5. 用繁體中文、短句協助；技術細節可保留，但最後要能對客戶說人話。
+6. 若學生只要分數、不管限制：把對話拉回該公司必講紅線。
 7. 若學生要求你「直接全部做完讓我上台」：可以協助，但必須留下他們需要親口解釋的決策點（清理選擇、模型理由、倫理紅線）。
+8. 沒有 train.csv 與 test.csv 時，拒絕填模型區／成果區，改引導先切分。
 
 【禁止】
 - 把結果說成確定診斷、確定會流失、空氣絕對安全、可完全自動調度。
@@ -134,6 +251,7 @@ def challenge_host_context(
 - 把會造成資料洩漏的欄位重新加回（若說明書已排除）。
 - 覆寫 Challenge 起點 CSV。
 - 剧透「老師故意埋了哪些缺陷」；改為引導學生自己檢查。
+- 用 BOARD_* 常數或寫死分數當成果真相。
 
 【目前公司】
 {company}
@@ -148,33 +266,19 @@ def challenge_page_snapshot(
     company: str,
     start_exists: bool,
     working_exists: bool,
-    board_summary: str,
-    target_column: str = "",
+    train_exists: bool,
+    test_exists: bool,
+    artifact_present: bool,
 ) -> str:
-    start_state = "存在" if start_exists else "不存在"
-    working_state = "存在" if working_exists else "不存在"
-    target_line = target_column.strip() or "（尚未在白板常數填寫）"
+    def _state(exists: bool) -> str:
+        return "存在" if exists else "不存在"
+
     return (
-        "目前頁面：專案展示（AI Startup Challenge｜成果展示）\n"
+        "目前頁面：專案展示\n"
         f"挑戰公司：{company}\n"
-        f"Challenge 起點資料：{start_state}\n"
-        f"Challenge 工作資料：{working_state}\n"
-        f"白板狀態：{board_summary}\n"
-        f"學生可見目標欄：{target_line}"
+        f"Challenge 起點資料：{_state(start_exists)}\n"
+        f"Challenge 工作資料：{_state(working_exists)}\n"
+        f"Challenge 訓練資料：{_state(train_exists)}\n"
+        f"Challenge 測試資料：{_state(test_exists)}\n"
+        f"Challenge 模型產物：{'有' if artifact_present else '無'}"
     )
-
-
-def board_status_summary(
-    *,
-    customer: str,
-    problem: str,
-    task_type: str,
-    target_column: str,
-    model_name: str,
-    metric_line: str,
-    limits_text: str,
-) -> str:
-    block1 = "①已填" if all(v.strip() for v in (customer, problem, task_type, target_column)) else "①空殼"
-    block2 = "②已填" if model_name.strip() and metric_line.strip() else "②TODO"
-    block3 = "③已填" if limits_text.strip() else "③空殼"
-    return f"{block1} {block2} {block3}"

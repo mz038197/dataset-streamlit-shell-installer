@@ -9,12 +9,28 @@
 _Avoid_: Startup Challenge（作側欄分段名）、挑戰區、展示區
 
 **專案展示**:
-AI新創工作坊下的側欄頁正式名稱；極簡上台白板（白板三塊），不是重做整條 ML 教學實驗室。發佈給學生時可為空殼（② 留待學生／Agent 補齊）。頁內主標為「專案展示」，副標為「AI Startup Challenge｜成果展示」。
-_Avoid_: Startup Challenge 展示頁（舊草案頁名）、展示空頁（備課狀態口語）、以「成果展示」作側欄名、上台白板（口語）
+AI新創工作坊下的側欄頁正式名稱。學生工作流：選挑戰公司後瀏覽該公司資料、清理 Challenge 工作資料，再切成 Challenge 訓練資料與 Challenge 測試資料；下半為模型區與成果區空輪廓，討論後由 Agent 以 AI coding 補齊。不是重做整條 ML 教學實驗室，也不是上台講稿白板。頁內主標為「專案展示」。
+_Avoid_: Startup Challenge 展示頁（舊草案頁名）、展示空頁（備課狀態口語）、以「成果展示」作側欄名、上台白板（口語）、白板三塊（舊頁結構）
 
 **白板三塊**:
-專案展示頁主教學欄的三個固定區塊：①我們在解決什麼？②我們做出來的結果？③我們不能亂承諾什麼？第一版以 Agent 改允許範圍內的 UI／腳本把空殼補成可展示內容（AI coding），不以表單暫存當成果真相。
-_Avoid_: 三欄、三步驟教學、ML 流水線階段；以 text_input／session_state 當上台成果的唯一載體
+已廢止的舊頁結構：①我們在解決什麼？②我們做出來的結果？③我們不能亂承諾什麼？專案展示改為資料瀏覽＋模型區＋成果區後不再使用。
+_Avoid_: 當作現行頁結構；用①②③當區塊標題
+
+**模型區**:
+專案展示下半空輪廓之一（框始終可見）。內容為選型與訓練（模型名稱、必要旋鈕、開始訓練），不含成果圖表。無 Challenge 訓練資料與 Challenge 測試資料時只顯示空輪廓、不可填入。Agent 可一次寫入本區與成果區程式。
+_Avoid_: 白板②、我們做出來的結果；把指標圖／混淆矩陣放進本區；沒檔就隱藏下半；寫死分數當訓練結果
+
+**成果區**:
+專案展示下半空輪廓之二（框始終可見）。內容為訓練後的指標、圖與一次演示。無訓練／測試檔、或尚無 Challenge 模型產物時只顯示空輪廓。不是側欄名。
+_Avoid_: 以「成果展示」作側欄名、白板③、我們不能亂承諾什麼（不當本區標題）；寫死分數常數；沒檔就隱藏下半
+
+**專案展示空殼**:
+老師發佈時的 `ui/startup_challenge_ui.py`：上半 Challenge 資料檢視，下半模型區／成果區空輪廓，並依「有無訓練／測試檔、有無 Challenge 模型產物」決定顯示輪廓或填入內容。更換挑戰公司時還原為此檔；不還原其他教學頁。
+_Avoid_: 還原整份學生專案；只清資料卻留下上一組模型 UI；讓 Agent 拆掉無檔則顯示輪廓的判斷
+
+**Challenge 模型產物**:
+模型區訓練成功後、成果區用來判斷可以渲染的產物。沒有產物時成果區維持空輪廓。更換挑戰公司、或 Challenge 訓練資料／測試資料被刪除時一併失效。
+_Avoid_: BOARD_METRIC_LINE 寫死分數；把教學頁 artifact 當挑戰產物
 
 **挑戰公司**:
 專案展示的五選一委託情境識別：`edupulse`／`vitalrisk`／`airsense`／`churnlab`／`flowcast`；決定 Challenge 起點資料、資料說明書與倫理加碼。
@@ -25,28 +41,40 @@ _Avoid_: 把公司 id 與側欄頁名混稱；混用其他公司的 CSV
 _Avoid_: Original 原始資料（未加 Challenge 前綴）、起點檔（未鎖定挑戰語境時）
 
 **Challenge 工作資料**:
-學生清理後的工作副本（`workspace/challenge/working.csv`）。訓練／預測優先使用；與雙表線根目錄的 Working 工作資料不是同一份。第一版不強制走 Ready／資料切分產物，亦不強制 cleaning_log。更換挑戰公司時清除或封存此工作副本，但不還原已改過的專案展示 UI 程式。
-_Avoid_: Working、working.csv（未指明 challenge 軌道）；暗示挑戰線要先建立 Ready；假設換公司會自動還原白板程式內容
+學生清理後的工作副本（`workspace/challenge/working.csv`）。從不覆寫 Challenge 起點資料。切出 Challenge 訓練資料／Challenge 測試資料的來源；模型不直接吃這份。任何寫回本檔都會刪除已有的訓練／測試檔（切分作廢）。與雙表線根目錄的 Working 工作資料不是同一份。不走 Ready，亦不強制 cleaning_log。更換挑戰公司時清除此工作副本、切分產物與 Challenge 模型產物，並還原專案展示空殼。
+_Avoid_: Working、working.csv（未指明 challenge 軌道）；暗示挑戰線要先建立 Ready；把切分寫到根目錄 train／val／test；換公司只清資料卻留下上一組模型 UI
+
+**Challenge 訓練資料**:
+從 Challenge 工作資料切出的訓練 CSV（`workspace/challenge/train.csv`）。由學生與 Agent 討論後寫出，頁上無套用按鈕。預設 80／20；有類別目標則分層，否則隨機。模型訓練吃這份。不是側欄「資料切分」的產物，也不是根目錄 `train.csv`。更換挑戰公司或寫回 Challenge 工作資料時一併清除。
+_Avoid_: 資料切分（側欄頁）、Ready、workspace/train.csv、Challenge 工作資料（當訓練輸入）；挑戰線 val
+
+**Challenge 測試資料**:
+與 Challenge 訓練資料同一次切分寫出的測試 CSV（`workspace/challenge/test.csv`）。模型評估／演示吃這份。不是根目錄 `test.csv`；挑戰線第一版不做 val。更換挑戰公司或寫回 Challenge 工作資料時一併清除。
+_Avoid_: workspace/test.csv、Challenge 驗證資料（第一版不做）、側欄「資料切分」的 test.csv
 
 **Challenge 資料說明書**:
-各挑戰公司給學生的欄位與委託說明（`workspace/challenge/{company}_資料說明書.md`）。解釋欄位與目標前應先讀；教師用缺陷說明不進學生專案。
-_Avoid_: 教師用缺陷說明、劇透缺陷清單
+各挑戰公司給學生的欄位與委託說明（`workspace/challenge/{company}_資料說明書.md`）。解釋欄位與目標前應先讀；教師用缺陷說明不進學生專案。不印在專案展示頁上。
+_Avoid_: 教師用缺陷說明、劇透缺陷清單；把說明書全文貼進主教學欄
+
+**Challenge 資料檢視**:
+專案展示上半切換目前查看哪一份挑戰 CSV 的控制。標籤為起點／工作／訓練／測試；有檔才可選。有 Challenge 工作資料時預設工作，否則起點。起點只讀。
+_Avoid_: 一次並排四份表；預設改成訓練資料；把根目錄 train／test 算進來
 
 **Challenge host context**:
-專案展示頁專用的 Agent `host_context`：定角色、挑戰軌道檔案邊界、白板三塊完成樣貌，並串上當前挑戰公司的倫理／資料加碼片段；不叠加雙表線的 `dataset_base_context`（含 NN fragment）。加碼只強化必講紅線與檢查方向，不剧透教師缺陷清單。
-_Avoid_: 挑戰頁直接叠 Titanic／Ready／NN 的 dataset_base_context；靠「衝突以挑戰為準」口頭覆寫卻仍灌入根目錄 working 規則；在 host 列出老師埋的缺陷清單
+專案展示頁專用的 Agent `host_context`：定角色、挑戰軌道檔案邊界（起點只讀、工作副本可清、訓練／測試由工作副本切出、改 working 即作廢切分）、模型區／成果區完成樣貌，並串上當前挑戰公司的倫理／資料加碼片段；不叠加雙表線的 `dataset_base_context`（含 NN fragment）。加碼只強化必講紅線與檢查方向，不剧透教師缺陷清單。倫理紅線只在對話與口頭 Gate，不上頁。禁止拆掉專案展示空殼「無檔則顯示輪廓」的判斷。
+_Avoid_: 挑戰頁直接叠 Titanic／Ready／NN 的 dataset_base_context；靠「衝突以挑戰為準」口頭覆寫卻仍灌入根目錄 working 規則；在 host 列出老師埋的缺陷清單；引導去改根目錄 train／val／test；把紅線寫成頁上第三塊
 
 **Challenge Agent session**:
 專案展示頁專用的對話 session；與雙表整理線的 Agent session 分開。進頁或更換挑戰公司時，以 Challenge host context 重建 Agent。
 _Avoid_: 與全站整理頁共用同一條 session 卻不換 host；只靠每輪 snapshot 提醒卻不重建
 
 **Challenge 允許改動範圍**:
-專案展示軌道上 Agent／學生預設可改：`ui/startup_challenge_ui.py`、`workspace/challenge/*`（含 Challenge 工作資料）、必要時 `scripts/`。不改其他 ML 教學頁；頁入口薄包裝與側欄導覽由老師預放。
-_Avoid_: 為挑戰去改邏輯回歸等教學頁；把挑戰成果寫進根目錄 working／ready
+專案展示軌道上 Agent／學生預設可改：`ui/startup_challenge_ui.py`、`workspace/challenge/*`（含 Challenge 工作資料、Challenge 訓練資料、Challenge 測試資料）、必要時 `scripts/`。不改其他 ML 教學頁；頁入口薄包裝與側欄導覽由老師預放。
+_Avoid_: 為挑戰去改邏輯回歸等教學頁；把挑戰成果寫進根目錄 working／ready／train／val／test
 
 **Challenge 上台 Gate**:
-人審／自評的最小可上台規準（白板三塊可講、有處理過資料並用 Challenge 工作資料訓練或能說明等價流程、含該公司必講紅線、分得清 Agent 與人類決策）。第一版不做機器硬檢查；每組自選獨特畫面為軟規則。頁上可放簡短 checklist 文案，僅提示用。
-_Avoid_: 第一版就做 Gate 自動驗收；把獨特畫面做成硬檢查
+人審／自評的最小可上台規準（能講委託問題、有 Challenge 訓練資料／測試資料並用它們訓練、成果區可演示、含該公司必講紅線、分得清 Agent 與人類決策）。第一版不做機器硬檢查；每組自選獨特畫面為軟規則。不印在專案展示頁上。
+_Avoid_: 第一版就做 Gate 自動驗收；把獨特畫面做成硬檢查；頁上長 checklist；仍以白板三塊當規準文案
 
 **主教學欄**:
 內容區左側的教學主體區；承載頁標題、學習階段與演算法互動。與 Streamlit 左側導覽側欄不同。

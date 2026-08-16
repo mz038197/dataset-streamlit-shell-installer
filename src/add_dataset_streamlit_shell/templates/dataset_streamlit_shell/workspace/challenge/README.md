@@ -2,7 +2,8 @@
 
 - 起點 CSV：`{company}.csv`（只讀，勿覆寫）
 - 說明書：`{company}_資料說明書.md`
-- 工作副本：`working.csv`（學生清理後）
+- 工作副本：`working.csv`（學生清理後；模型不直接吃這份）
+- 訓練／測試：`train.csv`、`test.csv`（從 working 切出；模型吃這兩份）
 
 挑戰公司：edupulse／vitalrisk／airsense／churnlab／flowcast。
 

@@ -990,8 +990,9 @@ def render_chat_panel(
 
     if keys["chat_history"] not in st.session_state:
         greeting = (
-            "請先按「啟用資料 Agent」。啟用後，我會以專案展示（Challenge）規則協助你："
-            "先讀說明書、檢查 Challenge 起點資料，再用 AI coding 補齊白板三塊。"
+            "請先按「啟用資料 Agent」。啟用後，我會以專案展示規則協助你："
+            "先讀說明書、檢查 Challenge 起點資料，清理 Challenge 工作資料，再切成訓練／測試資料；"
+            "討論後用 AI coding 補齊模型區與成果區。"
             if agent_scope == "challenge"
             else (
                 "請先按「啟用資料 Agent」。啟用後，我可以協助你理解資料整理流程；"
