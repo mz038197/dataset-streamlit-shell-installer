@@ -7,4 +7,4 @@
 
 挑戰公司：edupulse／vitalrisk／airsense／churnlab／flowcast。
 
-目前模板內建：edupulse、vitalrisk。其餘公司請老師備課時放入對應起點檔與說明書（勿放入教師用缺陷說明）。
+目前模板內建五間公司的起點 CSV 與說明書。勿放入教師用缺陷說明、Raw 原檔或 logo。

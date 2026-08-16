@@ -51,6 +51,20 @@ def test_challenge_companies_are_five() -> None:
     )
 
 
+def test_all_companies_ship_start_csv_and_handbook() -> None:
+    challenge = SHELL / "workspace" / "challenge"
+    for company in CHALLENGE_COMPANIES:
+        csv_path = challenge / f"{company}.csv"
+        handbook = challenge / f"{company}_資料說明書.md"
+        assert csv_path.is_file(), csv_path.name
+        assert csv_path.stat().st_size > 0
+        assert handbook.is_file(), handbook.name
+        text = handbook.read_text(encoding="utf-8")
+        assert company in text.lower()
+    assert list(challenge.glob("*教師用*")) == []
+    assert list(challenge.glob("**/Raw/**")) == []
+
+
 def test_challenge_paths_include_train_and_test(tmp_path: Path) -> None:
     paths = challenge_paths(tmp_path, "edupulse")
     assert paths.start_csv == tmp_path / "challenge" / "edupulse.csv"
