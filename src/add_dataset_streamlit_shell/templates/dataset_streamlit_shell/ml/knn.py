@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
@@ -41,6 +41,11 @@ def odd_k_values(*, k_min: int = K_MIN, k_max: int = K_MAX, step: int = K_STEP) 
 
 
 DEMO_QUERY_COUNT = 3
+BEAT_APPEAR = 1
+BEAT_RANK = 2
+BEAT_LINES = 3
+BEAT_VOTE = 4
+RANK_TABLE_LIMIT = 10
 
 
 def demo_query_points(
@@ -255,17 +260,13 @@ def build_knn_agent_context(
         "目前 features：" + "、".join(features) + "。",
         f"目前 target：{target}（二元 0/1）。",
         "距離：歐氏；投票：多數決（uniform）。",
+        f"目前 k：{k}。",
+        "特徵標準化（Z-score）固定開啟。",
     ]
-    if expose_k:
-        parts.append(f"目前 k：{k}。")
-        parts.append(f"特徵標準化（Z-score）：{'開' if standardize else '關'}。")
-    else:
-        parts.append("本階段聚焦鄰居與多數決；k 固定且不在 UI 調整。")
-        parts.append("特徵已做標準化後再算距離。")
     if artifact is None:
         if prompt_train:
             parts.append(
-                "尚未完成本組預測演示；引導學生按「開始預測演示」觀察決策邊界與預測過程演進。"
+                "尚未完成本組預測演示；引導學生按「開始預測演示」後用「下一步」走四拍預測過程演進。"
             )
         else:
             parts.append(
@@ -273,11 +274,9 @@ def build_knn_agent_context(
             )
     else:
         parts.append(
-            f"已建立鄰居池 k={artifact.k}，訓練集正確率 {artifact.training_accuracy:.2f}%。"
+            f"已鎖定鄰居池 k={artifact.k}，訓練集正確率 {artifact.training_accuracy:.2f}%。"
         )
-        parts.append(
-            f"鄰居池標準化：{'有' if artifact.scaler is not None else '無'}。"
-        )
+        parts.append("用「下一步」推進：查詢點出現 → 距離排序 → k 條連線 → 多數決。")
     if note:
         parts.append(note)
     return "\n".join(parts)
@@ -285,3 +284,200 @@ def build_knn_agent_context(
 
 def artifact_as_dict(artifact: KnnArtifact) -> dict[str, Any]:
     return asdict(artifact)
+
+
+@dataclass(frozen=True)
+class RankRow:
+    rank: int
+    index: int
+    distance: float
+    label: int
+
+
+@dataclass(frozen=True)
+class KnnEvolution:
+    locked_k: int
+    demo_remaining: tuple[tuple[float, float], ...]
+    labeled: tuple[tuple[float, float, int], ...]
+    active_xy: tuple[float, float] | None
+    beat: int | None
+    distances_by_index: tuple[float, ...] | None
+    order_near_to_far: tuple[int, ...] | None
+
+
+def new_evolution(
+    demos: list[tuple[float, float]] | tuple[tuple[float, float], ...],
+    locked_k: int,
+) -> KnnEvolution:
+    return KnnEvolution(
+        locked_k=int(locked_k),
+        demo_remaining=tuple((float(x), float(y)) for x, y in demos),
+        labeled=(),
+        active_xy=None,
+        beat=None,
+        distances_by_index=None,
+        order_near_to_far=None,
+    )
+
+
+def shows_boundary(evo: KnnEvolution) -> bool:
+    return len(evo.labeled) >= DEMO_QUERY_COUNT
+
+
+def can_click(evo: KnnEvolution) -> bool:
+    return shows_boundary(evo) and evo.beat in (None, BEAT_VOTE)
+
+
+def can_advance(evo: KnnEvolution) -> bool:
+    if evo.beat is None:
+        return bool(evo.demo_remaining)
+    if evo.beat in (BEAT_APPEAR, BEAT_RANK, BEAT_LINES):
+        return True
+    if evo.beat == BEAT_VOTE:
+        return bool(evo.demo_remaining)
+    return False
+
+
+def neighbor_indices_for_view(evo: KnnEvolution) -> list[int] | None:
+    if evo.beat not in (BEAT_LINES, BEAT_VOTE) or evo.order_near_to_far is None:
+        return None
+    return list(evo.order_near_to_far[: evo.locked_k])
+
+
+def _query_vector(artifact: KnnArtifact, query_xy: tuple[float, float]) -> np.ndarray:
+    query = pd.DataFrame(
+        [{artifact.features[0]: query_xy[0], artifact.features[1]: query_xy[1]}]
+    )
+    numeric = query[artifact.features].apply(pd.to_numeric, errors="coerce")
+    if artifact.scaler is not None:
+        numeric = apply_standard_scaler(numeric, artifact.scaler)
+    return numeric.to_numpy(dtype=float).reshape(-1)
+
+
+def query_distance_profile(
+    artifact: KnnArtifact, query_xy: tuple[float, float]
+) -> tuple[np.ndarray, np.ndarray]:
+    train = np.asarray(artifact.train_x, dtype=float)
+    query = _query_vector(artifact, query_xy)
+    distances = np.linalg.norm(train - query, axis=1)
+    order = np.argsort(distances, kind="mergesort")
+    return distances, order
+
+
+def distance_marker_styles(distances: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    values = np.asarray(distances, dtype=float).reshape(-1)
+    lo = float(np.min(values)) if values.size else 0.0
+    hi = float(np.max(values)) if values.size else 0.0
+    if values.size == 0 or hi - lo < 1e-12:
+        n = int(values.size)
+        return np.full(n, 10.0), np.full(n, 0.8)
+    t = (values - lo) / (hi - lo)
+    sizes = 16.0 - t * 10.0
+    opacities = 1.0 - t * 0.75
+    return sizes, opacities
+
+
+def rank_table_rows(
+    evo: KnnEvolution,
+    train_y: list[int] | np.ndarray,
+    *,
+    limit: int = RANK_TABLE_LIMIT,
+) -> tuple[RankRow, ...]:
+    if evo.order_near_to_far is None or evo.distances_by_index is None:
+        return ()
+    labels = np.asarray(train_y, dtype=int).reshape(-1)
+    rows: list[RankRow] = []
+    for rank, idx in enumerate(evo.order_near_to_far[: int(limit)], start=1):
+        rows.append(
+            RankRow(
+                rank=rank,
+                index=int(idx),
+                distance=float(evo.distances_by_index[idx]),
+                label=int(labels[idx]),
+            )
+        )
+    return tuple(rows)
+
+
+def advance_evolution(evo: KnnEvolution, artifact: KnnArtifact) -> KnnEvolution:
+    if not can_advance(evo):
+        return evo
+    if evo.beat is None or evo.beat == BEAT_VOTE:
+        nxt = evo.demo_remaining[0]
+        return replace(
+            evo,
+            demo_remaining=evo.demo_remaining[1:],
+            active_xy=nxt,
+            beat=BEAT_APPEAR,
+            distances_by_index=None,
+            order_near_to_far=None,
+        )
+    if evo.beat == BEAT_APPEAR:
+        if evo.active_xy is None:
+            return evo
+        distances, order = query_distance_profile(artifact, evo.active_xy)
+        return replace(
+            evo,
+            beat=BEAT_RANK,
+            distances_by_index=tuple(float(v) for v in distances),
+            order_near_to_far=tuple(int(i) for i in order),
+        )
+    if evo.beat == BEAT_RANK:
+        return replace(evo, beat=BEAT_LINES)
+    if evo.active_xy is None:
+        return evo
+    qx, qy = evo.active_xy
+    pred = int(
+        predict_class_from_artifact(
+            artifact, pd.DataFrame([{artifact.features[0]: qx, artifact.features[1]: qy}])
+        )[0]
+    )
+    return replace(
+        evo,
+        beat=BEAT_VOTE,
+        labeled=evo.labeled + ((qx, qy, pred),),
+    )
+
+
+def click_query(evo: KnnEvolution, xy: tuple[float, float]) -> KnnEvolution:
+    if not can_click(evo):
+        return evo
+    return replace(
+        evo,
+        active_xy=(float(xy[0]), float(xy[1])),
+        beat=BEAT_APPEAR,
+        distances_by_index=None,
+        order_near_to_far=None,
+    )
+
+
+def accepted_chart_click(
+    *,
+    click_enabled: bool,
+    selected_xy: tuple[float, float] | None,
+    active_xy: tuple[float, float] | None,
+) -> tuple[float, float] | None:
+    """儀式進行中或重複同一點的 selection 不當作新查詢。"""
+    if not click_enabled or selected_xy is None:
+        return None
+    if active_xy is not None:
+        if abs(active_xy[0] - selected_xy[0]) < 1e-9 and abs(active_xy[1] - selected_xy[1]) < 1e-9:
+            return None
+    return (float(selected_xy[0]), float(selected_xy[1]))
+
+
+def evolution_status_caption(evo: KnnEvolution) -> str:
+    if evo.beat is None:
+        return "鄰居池已就緒。按「下一步」讓第 1 個查詢點進來。"
+    labels = {
+        BEAT_APPEAR: "① 新查詢點進來",
+        BEAT_RANK: "② 依距離排序（越近越大／越實）",
+        BEAT_LINES: "③ 取最近 k 個鄰居",
+        BEAT_VOTE: "④ 多數決分類",
+    }
+    text = labels.get(evo.beat, "")
+    if evo.beat == BEAT_VOTE and can_advance(evo):
+        return f"{text}。再按「下一步」進入下一筆。"
+    if evo.beat == BEAT_VOTE and can_click(evo):
+        return f"{text}。示範 3 筆已完成，可在圖上點一下加演。"
+    return text

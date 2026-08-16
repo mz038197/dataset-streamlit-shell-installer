@@ -120,3 +120,16 @@ def test_agent_context_uses_prediction_demo_wording() -> None:
     )
     assert "開始預測演示" in locked
     assert "開始訓練" not in locked
+    unlocked = build_knn_agent_context(
+        page_name="K-近鄰分類",
+        data_source="test",
+        features=["特徵1", "特徵2"],
+        target="類別",
+        k=5,
+        standardize=True,
+        row_count=80,
+        artifact=None,
+        prompt_train=True,
+    )
+    assert "下一步" in unlocked
+    assert "開始訓練" not in unlocked

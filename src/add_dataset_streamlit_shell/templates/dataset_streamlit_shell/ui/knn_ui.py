@@ -1,9 +1,8 @@
-"""K-近鄰分類頁：雙階段＋訓練前預測＋預測過程演進（Plotly）。"""
+"""K-近鄰分類頁：單頁訓練前預測＋下一步預測過程演進（Plotly）。"""
 
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -11,19 +10,30 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dataset_streamlit_shell.ml.knn import (
+    BEAT_LINES,
+    BEAT_RANK,
+    BEAT_VOTE,
     DEFAULT_K,
-    DEMO_QUERY_COUNT,
     KnnArtifact,
+    KnnEvolution,
+    accepted_chart_click,
+    advance_evolution,
     build_knn_agent_context,
     build_knn_artifact,
+    can_advance,
+    can_click,
+    click_query,
     decision_mesh_predictions,
     demo_query_points,
+    distance_marker_styles,
+    evolution_status_caption,
     fit_knn_classifier,
-    majority_label,
-    nearest_neighbor_indices,
+    neighbor_indices_for_view,
+    new_evolution,
     odd_k_values,
-    predict_class_from_artifact,
     prepare_feature_matrix,
+    rank_table_rows,
+    shows_boundary,
     vote_tally,
 )
 from dataset_streamlit_shell.ui import knn_quiz as quiz
@@ -37,18 +47,13 @@ from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 CLASSIFICATION_DEMO_DIR = SHELL_ROOT / "built-in-data" / "classification"
 KNN_BLOBS_PATH = CLASSIFICATION_DEMO_DIR / "knn_blobs_80.csv"
-KNN_TRAP_PATH = CLASSIFICATION_DEMO_DIR / "knn_scale_trap_80.csv"
 
 KNN_FEATURES = ["特徵1", "特徵2"]
 KNN_TARGET = "類別"
 PAGE_TITLE = "K-近鄰分類"
 CONTEXT_KEY = f"{PAGE_TITLE}_agent_context"
-STAGE_NEIGHBORS_LABEL = "鄰居與投票"
-STAGE_K_LABEL = "選擇 k"
-
-# 預測過程演進：每一鄰居進場停頓
-_NEIGHBOR_STEP_SEC = 0.28
-_BETWEEN_QUERIES_SEC = 0.45
+RESULT_KEY = "knn_neighbors_last_artifact"
+EVO_KEY = "knn_neighbors_evolution"
 
 _CLASS_COLORS = {0: "#2563eb", 1: "#dc2626"}
 
@@ -57,20 +62,8 @@ def render_knn_page() -> None:
     teaching, agent = open_content_dual_pane()
     with teaching:
         st.title(PAGE_TITLE)
-        st.caption("先搞懂鄰居與多數決，再調 k（並看特徵尺度如何影響距離）。")
-
-        stage = st.radio(
-            "學習階段",
-            [STAGE_NEIGHBORS_LABEL, STAGE_K_LABEL],
-            horizontal=True,
-            key="knn_learning_stage",
-        )
-        if stage == STAGE_NEIGHBORS_LABEL:
-            st.session_state[quiz.SESSION_PAGE_FOCUS] = "neighbors"
-            _render_neighbors_stage()
-        else:
-            st.session_state[quiz.SESSION_PAGE_FOCUS] = "k"
-            _render_k_stage()
+        st.caption("先搞懂鄰居與多數決，解鎖後再調 k，用「下一步」看一個新點怎麼被分類。")
+        _render_page()
         _compose_agent_context()
 
     with agent:
@@ -80,15 +73,12 @@ def render_knn_page() -> None:
         )
 
 
-def _render_neighbors_stage() -> None:
-    st.markdown("##### 這一階段在問什麼")
+def _render_page() -> None:
+    st.markdown("##### 這一頁在問什麼")
     st.info(
         "K-近鄰是**實例型**學習：不先學一組權重 w，預測時找出距離最近的 k 個訓練點，再**多數決**。"
     )
-    prepared = _prepare_stage_data(
-        builtin_path=KNN_BLOBS_PATH,
-        builtin_label="內建範例資料：兩特徵二元分類（尺度相近，80 筆）",
-    )
+    prepared = _prepare_data()
     if prepared is None:
         return
     working, features, target, source_label = prepared
@@ -97,12 +87,25 @@ def _render_neighbors_stage() -> None:
     st.latex(r"\hat{y}=\mathrm{majority}\{y_{(1)},\ldots,y_{(k)}\}")
     st.caption(quiz.NEIGHBORS_FORMULA_CAPTION)
 
-    unlocked = _render_neighbors_pretrain_quiz(
+    unlocked = _render_pretrain_quiz(
         features=features, target=target, source_label=source_label, row_count=len(working)
     )
 
+    k_choices = odd_k_values()
+    k = DEFAULT_K
+    if unlocked:
+        k = int(
+            st.select_slider(
+                "鄰居數 k",
+                options=k_choices,
+                value=DEFAULT_K if DEFAULT_K in k_choices else k_choices[0],
+                key="knn_k_slider",
+                help="奇數步進。按「開始預測演示」當下的 k 會鎖定這一輪。",
+            )
+        )
+
     st.markdown("##### 預測演示")
-    train_clicked = st.button(
+    demo_clicked = st.button(
         "開始預測演示",
         type="primary",
         width="stretch",
@@ -112,29 +115,42 @@ def _render_neighbors_stage() -> None:
     if not unlocked:
         st.caption("兩題訓練前預測都答對後，才能開始預測演示。卡住時可按各題「Agent 提示」。")
 
-    k = DEFAULT_K
-    standardize = True
-    result_key = "knn_neighbors_last_artifact"
-    labeled_key = "knn_neighbors_labeled"
-    anim_key = "knn_neighbors_anim_queue"
-    signature = (source_label, tuple(features), target, k, standardize, len(working), "neighbors")
-
-    artifact = _resolve_or_train_artifact(
-        demo_clicked=train_clicked and unlocked,
+    signature = (source_label, tuple(features), target, True, len(working), "single")
+    artifact = _resolve_artifact(
+        demo_clicked=demo_clicked and unlocked,
         working=working,
         features=features,
         target=target,
         source_label=source_label,
         k=k,
-        standardize=standardize,
-        result_key=result_key,
-        labeled_key=labeled_key,
-        anim_key=anim_key,
         signature=signature,
-        stale_caption="顯示最近一次預測演示結果；換階段或資料後請重新演示。",
-        chart_key="knn_neighbors_plotly",
-        expose_k=False,
     )
+
+    if artifact is not None:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("鎖定的 k", str(artifact.k))
+        c2.metric("標準化", "開")
+        c3.metric("訓練集正確率", f"{artifact.training_accuracy:.2f}%")
+        if unlocked and k != artifact.k:
+            st.caption("slider 的 k 與這一輪鎖定值不同；要套用新 k 請重新按「開始預測演示」。")
+
+        st.markdown("##### 預測過程演進")
+        st.caption(quiz.result_chart_caption())
+        evo = st.session_state.get(EVO_KEY)
+        if isinstance(evo, KnnEvolution):
+            next_clicked = st.button(
+                "下一步",
+                type="primary",
+                width="stretch",
+                key="knn_next_step",
+                disabled=not can_advance(evo),
+            )
+            if next_clicked and can_advance(evo):
+                evo = advance_evolution(evo, artifact)
+                st.session_state[EVO_KEY] = evo
+            _render_evolution_chart(working, artifact, evo)
+        else:
+            st.caption("請按「開始預測演示」準備鄰居池。")
 
     focus = st.session_state.get(quiz.SESSION_NEIGHBORS_FOCUS)
     inst_choice = str(st.session_state.get(quiz.SESSION_INST, quiz.PLEASE_SELECT))
@@ -147,145 +163,26 @@ def _render_neighbors_stage() -> None:
         target=target,
         unlocked=unlocked,
     )
-    _merge_agent_context(
-        tab="neighbors",
-        source_label=source_label,
+    st.session_state["_knn_ctx_frag"] = build_knn_agent_context(
+        page_name=PAGE_TITLE,
+        data_source=source_label,
         features=features,
         target=target,
-        k=k,
-        standardize=standardize,
+        k=int(artifact.k) if artifact is not None else k,
+        standardize=True,
         row_count=len(working),
         artifact=artifact,
-        expose_k=False,
+        expose_k=True,
         prompt_train=unlocked,
-        note="目前階段：鄰居與投票。\n" + appendix,
+        note=appendix,
     )
 
     with st.expander("完整 sklearn 範例程式", expanded=False):
         st.code(quiz.SKLEARN_NEIGHBORS_EXAMPLE, language="python")
 
 
-def _render_k_stage() -> None:
-    st.markdown("##### 這一階段在問什麼")
-    st.info(
-        "同一套鄰居投票，**k** 會改變邊界平滑程度；"
-        "若某一軸數值範圍特別大又**沒標準化**，距離會被那一軸主導。"
-    )
-    prepared = _prepare_stage_data(
-        builtin_path=KNN_TRAP_PATH,
-        builtin_label="內建範例資料：刻意拉大特徵2尺度（80 筆，用來對照標準化）",
-    )
-    if prepared is None:
-        return
-    working, features, target, source_label = prepared
-
-    st.markdown("##### 預測設定")
-    k_choices = odd_k_values()
-    k = st.select_slider(
-        "鄰居數 k",
-        options=k_choices,
-        value=DEFAULT_K if DEFAULT_K in k_choices else k_choices[0],
-        key="knn_k_slider",
-        help="奇數步進，減少平票。k 變大通常邊界更平滑。",
-    )
-    standardize = st.toggle(
-        "特徵標準化（Z-score）",
-        value=True,
-        key="knn_k_standardize",
-        help="關閉後可觀察大尺度特徵如何主導歐氏距離。",
-    )
-
-    unlocked = _render_k_pretrain_quiz(
-        features=features,
-        target=target,
-        source_label=source_label,
-        k=int(k),
-        standardize=bool(standardize),
-        row_count=len(working),
-    )
-
-    st.markdown("##### 預測演示")
-    train_clicked = st.button(
-        "開始預測演示",
-        type="primary",
-        width="stretch",
-        key="train_knn_k",
-        disabled=not unlocked,
-    )
-    if not unlocked:
-        st.caption("兩題訓練前預測都答對後，才能開始預測演示。卡住時可按各題「Agent 提示」。")
-    else:
-        st.caption("解鎖後可改 k／標準化再演示，對照邊界與鄰居投票。")
-
-    result_key = "knn_k_last_artifact"
-    labeled_key = "knn_k_labeled"
-    anim_key = "knn_k_anim_queue"
-    signature = (
-        source_label,
-        tuple(features),
-        target,
-        int(k),
-        bool(standardize),
-        len(working),
-        "k",
-    )
-
-    artifact = _resolve_or_train_artifact(
-        demo_clicked=train_clicked and unlocked,
-        working=working,
-        features=features,
-        target=target,
-        source_label=source_label,
-        k=int(k),
-        standardize=bool(standardize),
-        result_key=result_key,
-        labeled_key=labeled_key,
-        anim_key=anim_key,
-        signature=signature,
-        stale_caption="顯示最近一次預測演示結果；調整 k／標準化後請重新按「開始預測演示」。",
-        chart_key="knn_k_plotly",
-        expose_k=True,
-    )
-
-    focus = st.session_state.get(quiz.SESSION_K_FOCUS)
-    k_choice = str(st.session_state.get(quiz.SESSION_K, quiz.PLEASE_SELECT))
-    scale_choice = str(st.session_state.get(quiz.SESSION_SCALE, quiz.PLEASE_SELECT))
-    appendix = quiz.build_k_quiz_agent_appendix(
-        k_status=quiz.quiz_choice_status(k_choice, correct=quiz.is_k_correct(k_choice)),
-        scale_status=quiz.quiz_choice_status(
-            scale_choice, correct=quiz.is_scale_correct(scale_choice)
-        ),
-        focus_qid=focus,
-        features=features,
-        target=target,
-        k=int(k),
-        standardize=bool(standardize),
-        unlocked=unlocked,
-    )
-    _merge_agent_context(
-        tab="k",
-        source_label=source_label,
-        features=features,
-        target=target,
-        k=int(k),
-        standardize=bool(standardize),
-        row_count=len(working),
-        artifact=artifact,
-        expose_k=True,
-        prompt_train=unlocked,
-        note="目前階段：選擇 k。\n" + appendix,
-    )
-
-    with st.expander("完整 sklearn 範例程式", expanded=False):
-        st.code(quiz.SKLEARN_K_EXAMPLE, language="python")
-
-
-def _prepare_stage_data(
-    *,
-    builtin_path: Path,
-    builtin_label: str,
-) -> tuple[pd.DataFrame, list[str], str, str] | None:
-    df = pd.read_csv(builtin_path)
+def _prepare_data() -> tuple[pd.DataFrame, list[str], str, str] | None:
+    df = pd.read_csv(KNN_BLOBS_PATH)
     render_dataset_metrics(df)
     features = list(KNN_FEATURES)
     target = KNN_TARGET
@@ -294,11 +191,11 @@ def _prepare_stage_data(
     if len(working) < 2:
         st.warning("可用樣本少於 2 筆，無法進行預測演示。")
         return None
-    st.caption(builtin_label)
-    return working, features, target, builtin_label
+    st.caption("內建範例資料：兩特徵二元分類（尺度相近，80 筆）")
+    return working, features, target, "內建範例資料：兩特徵二元分類（尺度相近，80 筆）"
 
 
-def _resolve_or_train_artifact(
+def _resolve_artifact(
     *,
     demo_clicked: bool,
     working: pd.DataFrame,
@@ -306,20 +203,12 @@ def _resolve_or_train_artifact(
     target: str,
     source_label: str,
     k: int,
-    standardize: bool,
-    result_key: str,
-    labeled_key: str,
-    anim_key: str,
     signature: tuple,
-    stale_caption: str,
-    chart_key: str,
-    expose_k: bool,
 ) -> KnnArtifact | None:
-    artifact: KnnArtifact | None = None
     if demo_clicked:
         try:
             feature_matrix, scaler = prepare_feature_matrix(
-                working, features, standardize=standardize
+                working, features, standardize=True
             )
             clf = fit_knn_classifier(feature_matrix, working[target], k=k)
         except ValueError as exc:
@@ -330,224 +219,140 @@ def _resolve_or_train_artifact(
             features=list(features),
             target=target,
             k=k,
-            standardize=standardize,
+            standardize=True,
             scaler=scaler,
             data_source=source_label,
             feature_frame=feature_matrix,
             target_series=working[target],
         )
-        st.session_state[result_key] = {"signature": signature, "artifact": artifact}
+        st.session_state[RESULT_KEY] = {"signature": signature, "artifact": artifact}
         f0, f1 = features[0], features[1]
         demos = demo_query_points(
             working[f0].to_numpy(dtype=float),
             working[f1].to_numpy(dtype=float),
-            count=DEMO_QUERY_COUNT,
         )
-        st.session_state[labeled_key] = []
-        st.session_state[anim_key] = demos
-    else:
-        stored = st.session_state.get(result_key)
-        if isinstance(stored, dict) and stored.get("signature") == signature:
-            artifact = stored["artifact"]
-            st.caption(stale_caption)
-        else:
-            st.session_state.pop(labeled_key, None)
-            st.session_state.pop(anim_key, None)
+        st.session_state[EVO_KEY] = new_evolution(demos, locked_k=artifact.k)
+        return artifact
 
-    if artifact is None:
-        return None
-
-    if expose_k:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("k", str(artifact.k))
-        c2.metric("標準化", "開" if artifact.scaler is not None else "關")
-        c3.metric("訓練集正確率", f"{artifact.training_accuracy:.2f}%")
-    else:
-        c1, c2 = st.columns(2)
-        c1.metric("標準化", "開" if artifact.scaler is not None else "關")
-        c2.metric("訓練集正確率", f"{artifact.training_accuracy:.2f}%")
-
-    st.markdown("##### 決策邊界與預測過程演進")
-    st.caption(quiz.result_chart_caption(expose_k=expose_k))
-
-    labeled = list(st.session_state.get(labeled_key) or [])
-    anim_queue = list(st.session_state.get(anim_key) or [])
-
-    chart_ph = st.empty()
-    status_ph = st.empty()
-
-    if anim_queue:
-        labeled = _play_prediction_evolution(
-            working,
-            artifact,
-            queue=anim_queue,
-            labeled=labeled,
-            chart_placeholder=chart_ph,
-            status_placeholder=status_ph,
-        )
-        st.session_state[labeled_key] = labeled
-        st.session_state[anim_key] = []
-
-    _render_knn_plotly_interactive(
-        working,
-        artifact,
-        labeled=labeled,
-        labeled_key=labeled_key,
-        anim_key=anim_key,
-        chart_key=chart_key,
-        chart_placeholder=chart_ph,
-        status_placeholder=status_ph,
-        expose_k=expose_k,
-    )
-    return artifact
+    stored = st.session_state.get(RESULT_KEY)
+    if isinstance(stored, dict) and stored.get("signature") == signature:
+        return stored["artifact"]
+    st.session_state.pop(EVO_KEY, None)
+    return None
 
 
-def _play_prediction_evolution(
-    working: pd.DataFrame,
-    artifact: KnnArtifact,
-    *,
-    queue: list[tuple[float, float]],
-    labeled: list[dict],
-    chart_placeholder,
-    status_placeholder,
-) -> list[dict]:
-    labeled = list(labeled)
-    train_y = np.asarray(artifact.train_y, dtype=int)
-    f0, f1 = artifact.features
-
-    for qi, (qx, qy) in enumerate(queue):
-        try:
-            neighbor_idx, _dist = nearest_neighbor_indices(artifact, (qx, qy))
-        except Exception as exc:  # noqa: BLE001
-            status_placeholder.caption(f"查詢點鄰居暫無法計算：{exc}")
-            continue
-        neighbor_idx = [int(i) for i in neighbor_idx]
-        running: list[int] = []
-        for step_i in range(len(neighbor_idx)):
-            running = [int(train_y[i]) for i in neighbor_idx[: step_i + 1]]
-            tally = vote_tally(running)
-            # 累票過程：查詢點先跟「目前多數」變色；最後一幀再用模型預測色
-            if step_i + 1 == len(neighbor_idx):
-                pred = int(
-                    predict_class_from_artifact(
-                        artifact, pd.DataFrame([{f0: qx, f1: qy}])
-                    )[0]
-                )
-                active_pred = pred
-                status = quiz.vote_progress_caption(tally, finalized_pred=pred)
-            else:
-                active_pred = majority_label(running)
-                status = quiz.vote_progress_caption(tally)
-            fig = _build_knn_figure(
-                working,
-                artifact,
-                labeled=labeled,
-                active_xy=(qx, qy),
-                active_pred=active_pred,
-                neighbor_indices=neighbor_idx[: step_i + 1],
-                show_click_layer=False,
-            )
-            chart_placeholder.plotly_chart(fig, width="stretch")
-            status_placeholder.caption(f"新查詢點 {qi + 1}/{len(queue)} · {status}")
-            time.sleep(_NEIGHBOR_STEP_SEC)
-
-        if not running:
-            pred = int(
-                predict_class_from_artifact(
-                    artifact, pd.DataFrame([{f0: qx, f1: qy}])
-                )[0]
-            )
-            tally = {}
-        labeled.append({"x": float(qx), "y": float(qy), "pred": int(pred)})
-        fig = _build_knn_figure(
-            working,
-            artifact,
-            labeled=labeled,
-            active_xy=None,
-            active_pred=None,
-            neighbor_indices=None,
-            show_click_layer=False,
-        )
-        chart_placeholder.plotly_chart(fig, width="stretch")
-        status_placeholder.caption(
-            f"新查詢點 {qi + 1}/{len(queue)} · "
-            + quiz.vote_progress_caption(tally, finalized_pred=pred)
-        )
-        time.sleep(_BETWEEN_QUERIES_SEC)
-
-    return labeled
-
-
-def _render_knn_plotly_interactive(
-    working: pd.DataFrame,
-    artifact: KnnArtifact,
-    *,
-    labeled: list[dict],
-    labeled_key: str,
-    anim_key: str,
-    chart_key: str,
-    chart_placeholder,
-    status_placeholder,
-    expose_k: bool,
+def _render_evolution_chart(
+    working: pd.DataFrame, artifact: KnnArtifact, evo: KnnEvolution
 ) -> None:
+    status_ph = st.empty()
+    chart_ph = st.empty()
+    table_ph = st.empty()
+
+    sizes = opacities = None
+    if evo.beat is not None and evo.beat >= BEAT_RANK and evo.distances_by_index is not None:
+        sizes, opacities = distance_marker_styles(np.asarray(evo.distances_by_index, dtype=float))
+
+    active_pred = None
+    if evo.beat == BEAT_VOTE and evo.labeled:
+        active_pred = int(evo.labeled[-1][2])
+
     fig = _build_knn_figure(
         working,
         artifact,
-        labeled=labeled,
-        active_xy=None,
-        active_pred=None,
-        neighbor_indices=None,
-        show_click_layer=True,
-        chart_key=chart_key,
+        labeled=evo.labeled,
+        active_xy=evo.active_xy,
+        active_pred=active_pred,
+        neighbor_indices=neighbor_indices_for_view(evo),
+        show_boundary=shows_boundary(evo),
+        show_click_layer=can_click(evo),
+        marker_sizes=sizes,
+        marker_opacities=opacities,
+        distances_by_index=evo.distances_by_index,
+        chart_key="knn_neighbors_plotly",
     )
-    if labeled:
-        last = labeled[-1]
-        status_placeholder.caption(
-            quiz.query_prediction_caption(
-                float(last["x"]),
-                float(last["y"]),
-                int(last["pred"]),
-                k=artifact.k,
-                expose_k=expose_k,
-            )
-            + f"（已累積 {len(labeled)} 個新查詢點；點圖可再加演）"
+    # 可點與逐步用不同 widget key，避免儀式中的 selection 在第 3 點 ④ 後被當成新查詢。
+    if can_click(evo):
+        event = chart_ph.plotly_chart(
+            fig,
+            width="stretch",
+            key="knn_neighbors_plotly",
+            on_select="rerun",
+            selection_mode="points",
         )
     else:
-        status_placeholder.caption("尚無已標示的新查詢點。")
+        event = None
+        chart_ph.plotly_chart(
+            fig,
+            width="stretch",
+            key="knn_neighbors_plotly_step",
+        )
+    status_ph.caption(evolution_status_caption(evo) + _labeled_suffix(evo, artifact))
 
-    event = chart_placeholder.plotly_chart(
-        fig,
-        width="stretch",
-        key=chart_key,
-        on_select="rerun",
-        selection_mode="points",
-    )
+    if evo.beat is not None and evo.beat >= BEAT_RANK:
+        rows = rank_table_rows(evo, artifact.train_y)
+        if rows:
+            table_ph.dataframe(
+                _rank_frame(rows, k=artifact.k, beat=int(evo.beat)),
+                hide_index=True,
+                width="stretch",
+            )
+
+    if event is None:
+        return
     points = getattr(getattr(event, "selection", None), "points", None) or []
     if not points:
         return
     pt = points[0]
     if "x" not in pt or "y" not in pt:
         return
-    new_q = (float(pt["x"]), float(pt["y"]))
-    # 避免與剛標完的最後一點完全相同時重複觸發
-    if labeled:
-        last = labeled[-1]
-        if abs(float(last["x"]) - new_q[0]) < 1e-9 and abs(float(last["y"]) - new_q[1]) < 1e-9:
-            return
-    st.session_state[labeled_key] = list(labeled)
-    st.session_state[anim_key] = [new_q]
+    accepted = accepted_chart_click(
+        click_enabled=True,
+        selected_xy=(float(pt["x"]), float(pt["y"])),
+        active_xy=evo.active_xy,
+    )
+    if accepted is None:
+        return
+    st.session_state[EVO_KEY] = click_query(evo, accepted)
     st.rerun()
+
+
+def _labeled_suffix(evo: KnnEvolution, artifact: KnnArtifact) -> str:
+    if evo.beat != BEAT_VOTE or not evo.labeled:
+        tally_bit = ""
+        idx = neighbor_indices_for_view(evo)
+        if idx:
+            labels = [int(artifact.train_y[i]) for i in idx]
+            tally_bit = " · " + quiz.vote_progress_caption(vote_tally(labels))
+        return tally_bit
+    qx, qy, pred = evo.labeled[-1]
+    return " · " + quiz.query_prediction_caption(qx, qy, pred, k=artifact.k)
+
+
+def _rank_frame(rows, *, k: int, beat: int) -> pd.DataFrame:
+    taken = beat >= BEAT_LINES
+    return pd.DataFrame(
+        {
+            "名次": [row.rank for row in rows],
+            "距離": [round(row.distance, 4) for row in rows],
+            "類別": [row.label for row in rows],
+            "進入 k 鄰居": [("是" if row.rank <= k else "否") if taken else "尚未取 k" for row in rows],
+        }
+    )
 
 
 def _build_knn_figure(
     working: pd.DataFrame,
     artifact: KnnArtifact,
     *,
-    labeled: list[dict],
+    labeled: tuple[tuple[float, float, int], ...],
     active_xy: tuple[float, float] | None,
     active_pred: int | None,
     neighbor_indices: list[int] | None,
+    show_boundary: bool,
     show_click_layer: bool,
+    marker_sizes: np.ndarray | None,
+    marker_opacities: np.ndarray | None,
+    distances_by_index: tuple[float, ...] | None,
     chart_key: str = "knn_chart",
 ) -> go.Figure:
     f0, f1 = artifact.features
@@ -561,26 +366,30 @@ def _build_knn_figure(
     x_min, x_max = float(x.min() - pad_x), float(x.max() + pad_x)
     y_min, y_max = float(y.min() - pad_y), float(y.max() + pad_y)
 
-    xx, yy, zz = decision_mesh_predictions(
-        artifact, x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, grid_size=70
-    )
-
     fig = go.Figure()
-    fig.add_trace(
-        go.Contour(
-            x=xx[0],
-            y=yy[:, 0],
-            z=zz,
-            colorscale=[[0, "#dbeafe"], [1, "#fee2e2"]],
-            opacity=0.55,
-            showscale=False,
-            contours_coloring="fill",
-            line_width=0,
-            hoverinfo="skip",
-            name="邊界",
+    if show_boundary:
+        xx, yy, zz = decision_mesh_predictions(
+            artifact, x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, grid_size=70
         )
-    )
+        fig.add_trace(
+            go.Contour(
+                x=xx[0],
+                y=yy[:, 0],
+                z=zz,
+                colorscale=[[0, "#dbeafe"], [1, "#fee2e2"]],
+                opacity=0.55,
+                showscale=False,
+                contours_coloring="fill",
+                line_width=0,
+                hoverinfo="skip",
+                name="邊界",
+            )
+        )
 
+    sizes = np.full(len(x), 9.0) if marker_sizes is None else np.asarray(marker_sizes, dtype=float)
+    opacities = (
+        np.full(len(x), 0.9) if marker_opacities is None else np.asarray(marker_opacities, dtype=float)
+    )
     for cls, color, name in ((0, _CLASS_COLORS[0], "類別 0"), (1, _CLASS_COLORS[1], "類別 1")):
         mask = labels == cls
         fig.add_trace(
@@ -588,7 +397,12 @@ def _build_knn_figure(
                 x=x[mask],
                 y=y[mask],
                 mode="markers",
-                marker=dict(size=9, color=color, line=dict(width=0.5, color="white")),
+                marker=dict(
+                    size=sizes[mask],
+                    color=color,
+                    opacity=opacities[mask],
+                    line=dict(width=0.5, color="white"),
+                ),
                 name=name,
             )
         )
@@ -610,14 +424,14 @@ def _build_knn_figure(
             )
         )
 
-    # 已標示的新查詢點（累積）
-    for i, item in enumerate(labeled):
-        pred = int(item["pred"])
-        color = _CLASS_COLORS.get(pred, "#111827")
+    for i, (lx, ly, pred) in enumerate(labeled):
+        if active_xy is not None and abs(lx - active_xy[0]) < 1e-12 and abs(ly - active_xy[1]) < 1e-12:
+            continue
+        color = _CLASS_COLORS.get(int(pred), "#111827")
         fig.add_trace(
             go.Scatter(
-                x=[float(item["x"])],
-                y=[float(item["y"])],
+                x=[float(lx)],
+                y=[float(ly)],
                 mode="markers",
                 marker=dict(size=14, color=color, symbol="x", line=dict(width=2, color="white")),
                 name="已預測新點" if i == 0 else None,
@@ -653,7 +467,12 @@ def _build_knn_figure(
                         ),
                         showlegend=False,
                         hovertemplate=(
-                            "鄰居<br>" + f0 + "=%{x:.3f}<br>" + f1 + "=%{y:.3f}<extra></extra>"
+                            "鄰居<br>" + f0 + "=%{x:.3f}<br>" + f1 + "=%{y:.3f}"
+                            + (
+                                f"<br>距離={float(distances_by_index[i]):.3f}<extra></extra>"
+                                if distances_by_index is not None
+                                else "<extra></extra>"
+                            )
                         ),
                     )
                 )
@@ -686,7 +505,7 @@ def _build_knn_figure(
     return fig
 
 
-def _render_neighbors_pretrain_quiz(
+def _render_pretrain_quiz(
     *, features: list[str], target: str, source_label: str, row_count: int
 ) -> bool:
     if quiz.needs_quiz_reset(
@@ -722,7 +541,7 @@ def _render_neighbors_pretrain_quiz(
     with h1_col:
         st.write("")
         if st.button("Agent 提示", key="knn_hint_inst", disabled=not agent_ready, width="stretch"):
-            _send_neighbors_hint(
+            _send_hint(
                 quiz.QID_INST,
                 features=features,
                 target=target,
@@ -752,7 +571,7 @@ def _render_neighbors_pretrain_quiz(
     with h2_col:
         st.write("")
         if st.button("Agent 提示", key="knn_hint_vote", disabled=not agent_ready, width="stretch"):
-            _send_neighbors_hint(
+            _send_hint(
                 quiz.QID_VOTE,
                 features=features,
                 target=target,
@@ -781,112 +600,7 @@ def _render_neighbors_pretrain_quiz(
     return unlocked
 
 
-def _render_k_pretrain_quiz(
-    *,
-    features: list[str],
-    target: str,
-    source_label: str,
-    k: int,
-    standardize: bool,
-    row_count: int,
-) -> bool:
-    if quiz.needs_quiz_reset(
-        st.session_state.get(quiz.SESSION_K_PAIR),
-        features,
-        target,
-        source_label=source_label,
-        tab="k",
-    ):
-        st.session_state[quiz.SESSION_K] = quiz.PLEASE_SELECT
-        st.session_state[quiz.SESSION_SCALE] = quiz.PLEASE_SELECT
-        st.session_state[quiz.SESSION_K_FOCUS] = quiz.QID_K
-    st.session_state[quiz.SESSION_K_PAIR] = quiz.pair_key(
-        features, target, source_label=source_label, tab="k"
-    )
-    st.session_state.setdefault(quiz.SESSION_K, quiz.PLEASE_SELECT)
-    st.session_state.setdefault(quiz.SESSION_SCALE, quiz.PLEASE_SELECT)
-    st.session_state.setdefault(quiz.SESSION_K_FOCUS, quiz.QID_K)
-
-    st.markdown("##### 訓練前先猜一下")
-    st.caption(
-        "兩題都答對後，「開始預測演示」才會啟用。卡住時可按「Agent 提示」問線索（不會直接給正解）。"
-    )
-    agent_ready = bool(st.session_state.get("data_agent_connected"))
-
-    q1_col, h1_col = st.columns([4, 1])
-    with q1_col:
-        k_choice = st.radio(
-            "題1：k 變得很接近訓練筆數時，邊界／預測通常會？",
-            [quiz.PLEASE_SELECT, *quiz.K_OPTIONS],
-            key=quiz.SESSION_K,
-        )
-    with h1_col:
-        st.write("")
-        if st.button("Agent 提示", key="knn_hint_k", disabled=not agent_ready, width="stretch"):
-            _send_k_hint(
-                quiz.QID_K,
-                features=features,
-                target=target,
-                source_label=source_label,
-                k=k,
-                standardize=standardize,
-                row_count=row_count,
-            )
-        elif not agent_ready:
-            st.caption("先啟用 Agent")
-
-    k_ok = quiz.is_k_correct(str(k_choice))
-    if str(k_choice) == quiz.PLEASE_SELECT:
-        st.caption("請先選擇題1。")
-        st.session_state[quiz.SESSION_K_FOCUS] = quiz.QID_K
-    elif k_ok:
-        st.caption("題1 OK。")
-    else:
-        st.caption("題1 再想想「幾乎全班來投票」會怎樣，可按「Agent 提示」。")
-        st.session_state[quiz.SESSION_K_FOCUS] = quiz.QID_K
-
-    q2_col, h2_col = st.columns([4, 1])
-    with q2_col:
-        scale_choice = st.radio(
-            "題2：某一特徵數值範圍遠大於另一個、又沒做標準化時，歐氏距離主要被誰主導？",
-            [quiz.PLEASE_SELECT, *quiz.SCALE_OPTIONS],
-            key=quiz.SESSION_SCALE,
-        )
-    with h2_col:
-        st.write("")
-        if st.button("Agent 提示", key="knn_hint_scale", disabled=not agent_ready, width="stretch"):
-            _send_k_hint(
-                quiz.QID_SCALE,
-                features=features,
-                target=target,
-                source_label=source_label,
-                k=k,
-                standardize=standardize,
-                row_count=row_count,
-            )
-        elif not agent_ready:
-            st.caption("先啟用 Agent")
-
-    scale_ok = quiz.is_scale_correct(str(scale_choice))
-    if str(scale_choice) == quiz.PLEASE_SELECT:
-        st.caption("請先選擇題2。")
-        if k_ok:
-            st.session_state[quiz.SESSION_K_FOCUS] = quiz.QID_SCALE
-    elif scale_ok:
-        st.caption("題2 OK。")
-    else:
-        st.caption("題2 再想想平方差誰比較大，可按「Agent 提示」。")
-        st.session_state[quiz.SESSION_K_FOCUS] = quiz.QID_SCALE
-
-    unlocked = quiz.both_k_quiz_correct(str(k_choice), str(scale_choice))
-    if unlocked:
-        st.success("2／2 題已準備好預測演示。")
-    else:
-        st.info(f"進度：{int(k_ok) + int(scale_ok)}／2 題答對（需全部正確才解鎖預測演示）。")
-    return unlocked
-
-
-def _send_neighbors_hint(
+def _send_hint(
     qid: str,
     *,
     features: list[str],
@@ -903,7 +617,6 @@ def _send_neighbors_hint(
         st.warning("請先在右側啟用資料 Agent，再按「Agent 提示」。")
         return
     st.session_state[quiz.SESSION_NEIGHBORS_FOCUS] = qid
-    st.session_state[quiz.SESSION_PAGE_FOCUS] = "neighbors"
     st.session_state[ts_key] = now
     inst_choice = str(st.session_state.get(quiz.SESSION_INST, quiz.PLEASE_SELECT))
     vote_choice = str(st.session_state.get(quiz.SESSION_VOTE, quiz.PLEASE_SELECT))
@@ -917,7 +630,7 @@ def _send_neighbors_hint(
         standardize=True,
         row_count=row_count,
         artifact=None,
-        expose_k=False,
+        expose_k=True,
         prompt_train=unlocked,
         note=quiz.build_neighbors_quiz_agent_appendix(
             inst_status=quiz.quiz_choice_status(inst_choice, correct=quiz.is_inst_correct(inst_choice)),
@@ -937,117 +650,17 @@ def _send_neighbors_hint(
     st.rerun()
 
 
-def _send_k_hint(
-    qid: str,
-    *,
-    features: list[str],
-    target: str,
-    source_label: str,
-    k: int,
-    standardize: bool,
-    row_count: int,
-) -> None:
-    ts_key = f"knn_k_hint_ts_{qid}"
-    now = time.time()
-    if not quiz.can_send_hint(st.session_state.get(ts_key), now):
-        st.caption("提示發送中，請稍候再按。")
-        return
-    if not st.session_state.get("data_agent_connected"):
-        st.warning("請先在右側啟用資料 Agent，再按「Agent 提示」。")
-        return
-    st.session_state[quiz.SESSION_K_FOCUS] = qid
-    st.session_state[quiz.SESSION_PAGE_FOCUS] = "k"
-    st.session_state[ts_key] = now
-    k_choice = str(st.session_state.get(quiz.SESSION_K, quiz.PLEASE_SELECT))
-    scale_choice = str(st.session_state.get(quiz.SESSION_SCALE, quiz.PLEASE_SELECT))
-    unlocked = quiz.both_k_quiz_correct(k_choice, scale_choice)
-    extra = build_knn_agent_context(
-        page_name=PAGE_TITLE,
-        data_source=source_label,
-        features=features,
-        target=target,
-        k=k,
-        standardize=standardize,
-        row_count=row_count,
-        artifact=None,
-        expose_k=True,
-        prompt_train=unlocked,
-        note=quiz.build_k_quiz_agent_appendix(
-            k_status=quiz.quiz_choice_status(k_choice, correct=quiz.is_k_correct(k_choice)),
-            scale_status=quiz.quiz_choice_status(
-                scale_choice, correct=quiz.is_scale_correct(scale_choice)
-            ),
-            focus_qid=qid,
-            features=features,
-            target=target,
-            k=k,
-            standardize=standardize,
-            unlocked=unlocked,
-        ),
-    )
-    with st.spinner("正在詢問 Agent…"):
-        invoke_data_agent(
-            quiz.k_hint_user_text(
-                qid, features=features, target=target, k=k, standardize=standardize
-            ),
-            extra_context=extra,
-            display_user_text=quiz.k_hint_display_text(qid),
-        )
-    st.rerun()
-
-
-def _merge_agent_context(
-    *,
-    tab: str,
-    source_label: str,
-    features: list[str],
-    target: str,
-    k: int,
-    standardize: bool,
-    row_count: int,
-    artifact: KnnArtifact | None,
-    expose_k: bool,
-    prompt_train: bool,
-    note: str,
-) -> None:
-    st.session_state[f"_knn_ctx_frag_{tab}"] = build_knn_agent_context(
-        page_name=PAGE_TITLE,
-        data_source=source_label,
-        features=features,
-        target=target,
-        k=k,
-        standardize=standardize,
-        row_count=row_count,
-        artifact=artifact,
-        note=note,
-        expose_k=expose_k,
-        prompt_train=prompt_train,
-    )
-
-
 def _compose_agent_context() -> None:
-    neighbors = str(st.session_state.get("_knn_ctx_frag_neighbors", ""))
-    k_frag = str(st.session_state.get("_knn_ctx_frag_k", ""))
-    neighbors_unlocked = quiz.both_neighbors_quiz_correct(
+    frag = str(st.session_state.get("_knn_ctx_frag", ""))
+    unlocked = quiz.both_neighbors_quiz_correct(
         str(st.session_state.get(quiz.SESSION_INST, quiz.PLEASE_SELECT)),
         str(st.session_state.get(quiz.SESSION_VOTE, quiz.PLEASE_SELECT)),
     )
-    k_unlocked = quiz.both_k_quiz_correct(
-        str(st.session_state.get(quiz.SESSION_K, quiz.PLEASE_SELECT)),
-        str(st.session_state.get(quiz.SESSION_SCALE, quiz.PLEASE_SELECT)),
-    )
-    focus = st.session_state.get(quiz.SESSION_PAGE_FOCUS, "neighbors")
     parts = [
-        f"目前頁面：{PAGE_TITLE}（雙階段：鄰居與投票 → 選擇 k）。",
-        f"目前學習階段焦點：{focus}。",
-        f"階段1訓練前預測是否解鎖：{'是' if neighbors_unlocked else '否'}。",
-        f"階段2訓練前預測是否解鎖：{'是' if k_unlocked else '否'}。",
+        f"目前頁面：{PAGE_TITLE}（單頁：鄰居與投票，解鎖後可調 k）。",
+        f"訓練前預測是否解鎖：{'是' if unlocked else '否'}。",
         "未解鎖前請勿直接告訴學生訓練前預測的正解選項。",
     ]
-    if focus == "k" and k_frag:
-        parts.append(k_frag)
-    elif neighbors:
-        parts.append(neighbors)
-    elif k_frag:
-        parts.append(k_frag)
+    if frag:
+        parts.append(frag)
     st.session_state[CONTEXT_KEY] = "\n".join(parts)

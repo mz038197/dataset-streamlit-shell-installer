@@ -159,26 +159,20 @@ Agent 多半是可選裝飾；建議問句是可忽略的 `st.code`。
 
 ---
 
-## 6. 已實作：K-近鄰分類（雙階段＋訓練前預測＋Plotly click）
+## 6. 已實作：K-近鄰分類（單頁＋下一步四拍）
 
 ### 決策
 
-- 側欄標題 **「K-近鄰分類」**；插在線性支持向量機與決策樹概念之間。
-- **雙階段** radio：**鄰居與投票** → **選擇 k**（非 tabs）。
-- 階段1：k=5 固定不露；歐氏＋多數決；資料已標準化；`knn_blobs_80.csv`。
-- 階段2：k slider（奇數 1～15）、標準化開關預設開；`knn_scale_trap_80.csv`（特徵2 刻意放大）。
-- **訓練前預測**：各階段兩題＋Agent 提示；不做 NN 實驗迴圈。
-- **視覺**：Plotly 決策邊界＋散點；圖上 click 設查詢點並畫 k 鄰居連線（見 ADR `docs/adr/0001-knn-page-uses-plotly-for-click.md`）。第一版不露 weights／metric。
+- 側欄標題 **「K-近鄰分類」**；插在線性支持向量機與決策樹與集成之間。
+- **不再分學習階段**。關卡兩題解鎖後才出現奇數 k slider。
+- 資料：`knn_blobs_80.csv`；標準化固定開。尺度陷阱／標準化開關不做主路徑（見 ADR `docs/adr/0012-knn-stepper-single-page.md`）。
+- **訓練前預測**：實例型（無 w）、多數決；Agent 提示；主按鈕「開始預測演示」。
+- **預測過程演進**：「開始預測演示」只 fit 鄰居池；「下一步」每點四拍（出現 → 距離排序 → k 連線 → 多數決）。3 筆示範後才畫決策邊界並開放 Plotly click 加演（ADR 0001 仍成立）。無自動播放。
 
-### 階段1 兩題
+### 兩題
 
 1. 預測時沒有先學 \(w\)；是查 k 個最近訓練點再投票。  
 2. 鄰居 A、A、B → 多數決為 A。
-
-### 階段2 兩題
-
-1. k 接近訓練筆數 → 過度平滑、常偏多數類。  
-2. 未標準化且一軸尺度很大 → 距離被大尺度特徵主導。
 
 ### 關鍵路徑
 
@@ -188,7 +182,7 @@ Agent 多半是可選裝飾；建議問句是可忽略的 `st.code`。
 | Quiz helpers | `ui/knn_quiz.py` |
 | 模型 | `ml/knn.py` |
 | 頁面 | `pages/19_KNN_Classification.py` |
-| 測試 | `tests/test_knn_quiz.py`、`tests/test_knn_model.py` |
+| 測試 | `tests/test_knn_quiz.py`、`tests/test_knn_model.py`、`tests/test_knn_evolution.py` |
 
 ---
 
