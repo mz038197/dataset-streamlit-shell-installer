@@ -213,7 +213,7 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "Challenge 工作資料" in text
     assert "只作為重置來源" not in text
     assert "不要改根目錄的 original.csv" in text
-    assert "無檔則顯示輪廓" in text or "不要拆掉" in text
+    assert "challenge_model_artifact" in text
 
 
 def test_host_context_vitalrisk_fragment() -> None:
