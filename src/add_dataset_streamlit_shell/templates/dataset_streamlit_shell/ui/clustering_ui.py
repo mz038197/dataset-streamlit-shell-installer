@@ -1,4 +1,4 @@
-"""非監督式分群頁：K-Means 與 Ward's Method（內建範例、開箱探索）。"""
+"""非監督式分群頁：K-Means 分群過程演進與 Ward's Method（內建範例）。"""
 
 from __future__ import annotations
 
@@ -14,9 +14,15 @@ from dataset_streamlit_shell.ml.clustering import (
     N_CLUSTERS_MAX,
     N_CLUSTERS_MIN,
     SOURCE_LABEL,
+    KMeansEvolution,
+    advance_kmeans_evolution,
+    can_advance_kmeans,
     cut_ward_clusters,
-    fit_kmeans,
+    feature_matrix,
+    kmeans_evolution_status,
     load_builtin_clustering_frame,
+    new_kmeans_evolution,
+    sample_initial_centers,
     ward_linkage,
 )
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
@@ -27,14 +33,16 @@ configure_matplotlib_for_traditional_chinese()
 
 KMEANS_TITLE = "K-Means 分群"
 WARDS_TITLE = "Ward's Method（階層分群）"
+KMEANS_EVO_KEY = "kmeans_evolution"
 _CLUSTER_COLORS = ("#2563eb", "#dc2626", "#16a34a", "#ca8a04", "#7c3aed", "#0891b2", "#ea580c", "#4b5563")
+_UNASSIGNED_COLOR = "#9ca3af"
 
 
 def render_kmeans_page() -> None:
     teaching, agent = open_content_dual_pane()
     with teaching:
         st.title(KMEANS_TITLE)
-        st.caption("用內建範例走通指定 K 的分群；不依賴 ready.csv。")
+        st.caption("用內建範例走通指定 K 的分群；按「下一步」走分群過程演進。不依賴 ready.csv。")
 
         frame = load_builtin_clustering_frame()
         render_dataset_metrics(frame)
@@ -55,21 +63,49 @@ def render_kmeans_page() -> None:
             key="kmeans_show_truth",
         )
 
-        result = fit_kmeans(frame, n_clusters=n_clusters)
-        st.markdown("##### 分群結果")
-        _plot_cluster_scatter(
-            frame,
-            labels=result.labels,
-            centers=result.centers,
-            show_truth=show_truth,
-            title=f"K-Means（K={n_clusters}）",
-        )
+        st.markdown("##### 分群過程演進")
+        if st.button(
+            "開始分群演示",
+            type="primary",
+            width="stretch",
+            key="kmeans_start_demo",
+        ):
+            points = feature_matrix(frame)
+            st.session_state[KMEANS_EVO_KEY] = new_kmeans_evolution(
+                locked_k=int(n_clusters),
+                initial_centers=sample_initial_centers(points, n_clusters=int(n_clusters)),
+            )
+
+        evo = st.session_state.get(KMEANS_EVO_KEY)
+        if isinstance(evo, KMeansEvolution):
+            if int(n_clusters) != evo.locked_k:
+                st.caption("slider 的 K 與這一輪鎖定值不同；要套用新 K 請重新按「開始分群演示」。")
+            st.metric("鎖定的 K", str(evo.locked_k))
+            if st.button(
+                "下一步",
+                type="primary",
+                width="stretch",
+                key="kmeans_next_step",
+                disabled=not can_advance_kmeans(evo),
+            ):
+                evo = advance_kmeans_evolution(evo, feature_matrix(frame))
+                st.session_state[KMEANS_EVO_KEY] = evo
+            st.caption(kmeans_evolution_status(evo))
+            _plot_kmeans_evolution(frame, evo, show_truth=show_truth, n_clusters=int(n_clusters))
+        else:
+            st.caption("請按「開始分群演示」鎖定 K，再按「下一步」放出初始群中心。")
+            _plot_kmeans_evolution(frame, None, show_truth=show_truth, n_clusters=int(n_clusters))
 
     with agent:
+        evo = st.session_state.get(KMEANS_EVO_KEY)
+        locked = evo.locked_k if isinstance(evo, KMeansEvolution) else "尚未開始"
+        status = kmeans_evolution_status(evo) if isinstance(evo, KMeansEvolution) else "尚未開始分群演示"
         render_chat_panel(
             extra_context=(
                 f"目前頁面：{KMEANS_TITLE}。資料來源：{SOURCE_LABEL}。"
-                f"固定特徵 {CLUSTERING_FEATURES}；目前 K={st.session_state.get('kmeans_n_clusters', DEFAULT_N_CLUSTERS)}。"
+                f"固定特徵 {CLUSTERING_FEATURES}；slider K="
+                f"{st.session_state.get('kmeans_n_clusters', DEFAULT_N_CLUSTERS)}；鎖定的 K={locked}。"
+                f"分群過程演進：{status}。"
                 "演算法不使用教學用真實群標籤；該欄僅供對照。"
             ),
             page_name=KMEANS_TITLE,
@@ -137,22 +173,46 @@ def _draw_labeled_scatter(
     *,
     x: np.ndarray,
     y: np.ndarray,
-    labels: np.ndarray,
+    labels: np.ndarray | None,
     centers: np.ndarray | None,
     title: str,
     legend_prefix: str,
+    ghost_centers: np.ndarray | None = None,
 ) -> None:
-    for lab in sorted(np.unique(labels).tolist()):
-        mask = labels == lab
+    if labels is None:
         ax.scatter(
-            x[mask],
-            y[mask],
+            x,
+            y,
             s=36,
-            c=_cluster_color(lab),
+            c=_UNASSIGNED_COLOR,
             edgecolors="#111827",
             linewidths=0.4,
             alpha=0.9,
-            label=f"{legend_prefix} {lab}",
+            label="未分群",
+        )
+    else:
+        for lab in sorted(np.unique(labels).tolist()):
+            mask = labels == lab
+            ax.scatter(
+                x[mask],
+                y[mask],
+                s=36,
+                c=_cluster_color(lab),
+                edgecolors="#111827",
+                linewidths=0.4,
+                alpha=0.9,
+                label=f"{legend_prefix} {lab}",
+            )
+    if ghost_centers is not None:
+        ax.scatter(
+            ghost_centers[:, 0],
+            ghost_centers[:, 1],
+            s=160,
+            c="#111827",
+            marker="X",
+            alpha=0.28,
+            label="上一拍中心",
+            zorder=4,
         )
     if centers is not None:
         ax.scatter(
@@ -170,13 +230,37 @@ def _draw_labeled_scatter(
     ax.legend(loc="best", fontsize=8, frameon=True)
 
 
+def _plot_kmeans_evolution(
+    frame,
+    evo: KMeansEvolution | None,
+    *,
+    show_truth: bool,
+    n_clusters: int,
+) -> None:
+    labels = None if evo is None or evo.labels is None else np.asarray(evo.labels, dtype=int)
+    centers = None if evo is None or evo.centers is None else np.asarray(evo.centers, dtype=float)
+    ghost = None
+    if evo is not None and evo.previous_centers is not None:
+        ghost = np.asarray(evo.previous_centers, dtype=float)
+    k = evo.locked_k if evo is not None else n_clusters
+    _plot_cluster_scatter(
+        frame,
+        labels=labels,
+        centers=centers,
+        show_truth=show_truth,
+        title=f"K-Means（K={k}）",
+        ghost_centers=ghost,
+    )
+
+
 def _plot_cluster_scatter(
     frame,
     *,
-    labels: np.ndarray,
+    labels: np.ndarray | None,
     centers: np.ndarray | None,
     show_truth: bool,
     title: str,
+    ghost_centers: np.ndarray | None = None,
 ) -> None:
     x = frame[CLUSTERING_FEATURES[0]].to_numpy(dtype=float)
     y = frame[CLUSTERING_FEATURES[1]].to_numpy(dtype=float)
@@ -193,6 +277,7 @@ def _plot_cluster_scatter(
             centers=centers,
             title=title,
             legend_prefix="演算法群",
+            ghost_centers=ghost_centers,
         )
         _draw_labeled_scatter(
             axes[1],
@@ -218,6 +303,7 @@ def _plot_cluster_scatter(
         centers=centers,
         title=title,
         legend_prefix="演算法群",
+        ghost_centers=ghost_centers,
     )
     fig.tight_layout()
     st.pyplot(fig, clear_figure=True)
