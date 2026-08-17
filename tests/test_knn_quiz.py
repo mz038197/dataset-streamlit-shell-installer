@@ -127,3 +127,6 @@ def test_knn_page_is_single_stage_stepper() -> None:
     assert "預測過程演進" in src
     assert 'key="train_knn_neighbors"' in src
     assert "knn_neighbors_plotly_step" in src
+    assert 'else "#7c3aed"' in src
+    assert "size=18" in src
+    assert 'else "#111827"' not in src

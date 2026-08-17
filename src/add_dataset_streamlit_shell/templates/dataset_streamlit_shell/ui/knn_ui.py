@@ -479,14 +479,19 @@ def _build_knn_figure(
         marker_color = (
             _CLASS_COLORS.get(int(active_pred), "#111827")
             if active_pred is not None
-            else "#111827"
+            else "#7c3aed"
         )
         fig.add_trace(
             go.Scatter(
                 x=[qx],
                 y=[qy],
                 mode="markers",
-                marker=dict(size=14, color=marker_color, symbol="x"),
+                marker=dict(
+                    size=18,
+                    color=marker_color,
+                    symbol="x",
+                    line=dict(width=2, color="white"),
+                ),
                 name="查詢中",
                 hovertemplate="查詢點<br>" + f0 + "=%{x:.3f}<br>" + f1 + "=%{y:.3f}<extra></extra>",
             )
