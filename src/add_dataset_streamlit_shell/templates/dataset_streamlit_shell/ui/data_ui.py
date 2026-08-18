@@ -6,6 +6,7 @@ import io
 import json
 import sys
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -974,6 +975,7 @@ def invoke_data_agent(
     return answer
 
 
+@st.fragment
 def render_chat_panel(
     extra_context: str = "",
     page_name: str = "",
@@ -981,6 +983,7 @@ def render_chat_panel(
     host_context: str | None = None,
     agent_scope: str = "data",
     skip_working_snapshot: bool = False,
+    after_reply: Callable[[], None] | None = None,
 ) -> None:
     keys = _agent_keys(agent_scope)
     # 從其他頁回到本 scope 時丟掉 Agent 實例（保留對話），以當前 host_context 重建
@@ -1039,7 +1042,7 @@ def render_chat_panel(
     resolved_pick = _resolve_session_relpath(picked_id, labels)
     if resolved_pick and resolved_pick != current_session:
         _set_current_session(PROJECT_ROOT / resolved_pick, scope=agent_scope)
-        st.rerun()
+        st.rerun(scope="fragment")
     if new_col.button(
         "",
         icon=":material/add:",
@@ -1049,7 +1052,7 @@ def render_chat_panel(
     ):
         _set_current_session(_new_session_path(), scope=agent_scope)
         _reset_session_picker_widget(scope=agent_scope)
-        st.rerun()
+        st.rerun(scope="fragment")
     if del_col.button(
         "",
         icon=":material/delete:",
@@ -1070,7 +1073,7 @@ def render_chat_panel(
             if remaining:
                 _set_current_session(remaining[0], scope=agent_scope)
             _reset_session_picker_widget(scope=agent_scope)
-            st.rerun()
+            st.rerun(scope="fragment")
 
     _ensure_user_settings_file()
 
@@ -1259,3 +1262,5 @@ def render_chat_panel(
                     ("assistant", answer, reasoning_text)
                 )
                 st.session_state[keys["chat_just_replied"]] = True
+                if after_reply is not None:
+                    after_reply()

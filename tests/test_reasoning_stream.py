@@ -33,7 +33,15 @@ class _FakeSettings:
 
 
 def _load_data_ui_module(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    fake_streamlit = types.SimpleNamespace(session_state={})
+    def _identity_fragment(func=None, **_kwargs):
+        if func is not None:
+            return func
+        return lambda fn: fn
+
+    fake_streamlit = types.SimpleNamespace(
+        session_state={},
+        fragment=_identity_fragment,
+    )
     fake_dotenv = types.SimpleNamespace(load_dotenv=lambda *_args, **_kwargs: None)
     fake_pandas = types.SimpleNamespace(DataFrame=object)
     fake_openai_tts = types.SimpleNamespace(

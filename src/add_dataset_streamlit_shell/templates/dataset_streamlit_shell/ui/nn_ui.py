@@ -137,8 +137,7 @@ def render_neural_network_page() -> None:
             # 下一輪會在 widget 建立前同步 Agent 可能更新的 form。
             st.rerun()
 
-        render_chat_panel(extra_context=extra_context, page_name="類神經網路")
-        if st.session_state.pop("data_chat_just_replied", False):
+        def after_nn_chat_reply() -> None:
             requested = consume_train_request(WORKSPACE_DIR, st.session_state)
             # 僅在 Agent 寫入訓練請求或改過 form 時重跑；純文字回覆不要整頁 RELOAD。
             # 不可在本輪 widget 建立後寫回其 session_state；交由下一輪開頭同步。
@@ -149,6 +148,12 @@ def render_neural_network_page() -> None:
                 applied_mtime=applied,
             ):
                 st.rerun()
+
+        render_chat_panel(
+            extra_context=extra_context,
+            page_name="類神經網路",
+            after_reply=after_nn_chat_reply,
+        )
 
 
 def _render_activation_tab() -> None:

@@ -236,3 +236,17 @@ def test_nn_host_context_fragment_mentions_paths() -> None:
     assert "nn_train_request.json" in text
     assert "requested" in text
     assert "max_runs" in text
+
+
+def test_nn_page_handles_chat_reply_inside_fragment() -> None:
+    src = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "add_dataset_streamlit_shell"
+        / "templates"
+        / "dataset_streamlit_shell"
+        / "ui"
+        / "nn_ui.py"
+    ).read_text(encoding="utf-8")
+    assert "after_reply=" in src
+    assert 'st.session_state.pop("data_chat_just_replied"' not in src

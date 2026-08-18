@@ -124,6 +124,28 @@ def test_sidebar_brand_uses_classroom_logo_and_wordmark() -> None:
     assert "**側欄品牌列**:" in context
 
 
+def test_chat_panel_send_reruns_fragment_not_teaching_pane() -> None:
+    """送出對話只重跑資料 Agent 欄，避免主教學欄整頁變暗等待。"""
+    src = (UI / "data_ui.py").read_text(encoding="utf-8")
+    before, rest = src.split("def render_chat_panel(", 1)
+    assert before.rstrip().splitlines()[-1].strip() == "@st.fragment"
+    panel = rest.split("\ndef ", 1)[0]
+    assert 'st.rerun(scope="fragment")' in panel
+    activate = panel.split('key=f"{agent_scope}_activate_agent"', 1)[1]
+    activate = activate.split("st.chat_input", 1)[0]
+    assert "st.rerun()" in activate
+    assert 'st.rerun(scope="fragment")' not in activate
+    flow = panel.split(
+        'if user_text := st.chat_input("詢問資料 Agent...", key=f"{agent_scope}_chat"):',
+        1,
+    )[1]
+    assert "after_reply" in flow
+    context = (ROOT / "CONTEXT.md").read_text(encoding="utf-8")
+    shell = context.split("**內容區雙欄殼**:", 1)[1].split("**", 1)[0]
+    assert "只重跑資料 Agent 欄" in shell
+    assert "不重跑主教學欄" in shell
+
+
 def test_agent_chat_pins_input_and_scrolls_messages() -> None:
     """資料 Agent 欄：訊息自捲、chat_input 釘欄底（對齊 waku dock）。"""
     chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")
