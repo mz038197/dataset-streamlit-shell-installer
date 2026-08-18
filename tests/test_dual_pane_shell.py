@@ -176,6 +176,25 @@ def test_agent_chat_pins_input_and_scrolls_messages() -> None:
     assert "topEl" not in chrome.split("function layoutAgentChat", 1)[1].split(
         "function applyLayout", 1
     )[0]
+    # @st.fragment wraps the panel in extra blocks; flex the VB that
+    # actually contains chat_input, then stretch ancestors to the column.
+    layout_fn = chrome.split("function layoutAgentChat", 1)[1].split(
+        "function applyLayout", 1
+    )[0]
+    assert "closest('[data-testid=\"stVerticalBlock\"]')" in layout_fn
+    assert "stretchChatFlexRoot" in chrome
+    assert 'setProperty("height", "100%"' in chrome.split(
+        "function stretchChatFlexRoot", 1
+    )[1].split("function layoutAgentChat", 1)[0]
+    # If flexRoot ever is the column, still apply flex — but never height:100%
+    # (that would override pinColumn's pixel lock and clip chat_input).
+    stretch = chrome.split("function stretchChatFlexRoot", 1)[1].split(
+        "function layoutAgentChat", 1
+    )[0]
+    assert "flexRoot === agentCol" in stretch
+    eq_block = stretch.split("flexRoot === agentCol", 1)[1].split("let node", 1)[0]
+    assert "height\", \"100%\"" not in eq_block
+    assert "display" in eq_block and "flex" in eq_block
 
 
 def test_chat_panel_has_no_image_attachment_path() -> None:

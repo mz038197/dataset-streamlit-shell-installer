@@ -312,6 +312,30 @@ def inject_dual_pane_chrome() -> None:
     return true;
   }}
 
+  function stretchChatFlexRoot(flexRoot, agentCol) {{
+    /* @st.fragment adds wrappers; height:100% on the column's first VB
+       leaves the inner panel content-sized, so overflow:hidden clips chat_input.
+       flexRoot is stVerticalBlock, agentCol is stColumn — usually distinct.
+       If they coincide, still flex the column but do not set height:100%
+       (pinColumn already locked pixel height). */
+    if (!flexRoot) return;
+    if (flexRoot === agentCol) {{
+      agentCol.style.setProperty("min-height", "0", "important");
+      agentCol.style.setProperty("display", "flex", "important");
+      agentCol.style.setProperty("flex-direction", "column", "important");
+      return;
+    }}
+    let node = flexRoot;
+    while (node && node !== agentCol) {{
+      node.style.setProperty("height", "100%", "important");
+      node.style.setProperty("max-height", "100%", "important");
+      node.style.setProperty("min-height", "0", "important");
+      node.style.setProperty("display", "flex", "important");
+      node.style.setProperty("flex-direction", "column", "important");
+      node = node.parentElement;
+    }}
+  }}
+
   function layoutAgentChat(agentCol) {{
     /*
      * Keep chat_input in normal flow (absolute + nested position:relative parents
@@ -321,8 +345,11 @@ def inject_dual_pane_chrome() -> None:
     const colRect = agentCol.getBoundingClientRect();
     const input = findChatInput(agentCol);
     const pinnedBottom = input ? pinBottomChatToAgent(agentCol, input) : false;
-    const inputH = input
-      ? Math.max(56, Math.ceil(input.getBoundingClientRect().height))
+    const inputWrap = input
+      ? (input.closest('[data-testid="stElementContainer"]') || input.parentElement)
+      : null;
+    const inputH = inputWrap
+      ? Math.max(56, Math.ceil(inputWrap.getBoundingClientRect().height))
       : 72;
     const pad = 8;
     const target = findChatScrollTarget(agentCol);
@@ -332,21 +359,17 @@ def inject_dual_pane_chrome() -> None:
       input.style.removeProperty("left");
       input.style.removeProperty("right");
       input.style.removeProperty("bottom");
-      const wrap =
-        input.closest('[data-testid="stElementContainer"]') || input.parentElement;
+      const wrap = inputWrap || input.parentElement;
       if (wrap) {{
         wrap.style.setProperty("margin-top", "auto", "important");
         wrap.style.setProperty("flex-shrink", "0", "important");
         wrap.style.setProperty("position", "relative", "important");
         wrap.style.setProperty("z-index", "6", "important");
       }}
-      const rootVb = agentCol.querySelector('[data-testid="stVerticalBlock"]');
-      if (rootVb) {{
-        rootVb.style.setProperty("display", "flex", "important");
-        rootVb.style.setProperty("flex-direction", "column", "important");
-        rootVb.style.setProperty("height", "100%", "important");
-        rootVb.style.setProperty("min-height", "0", "important");
-      }}
+      const flexRoot =
+        input.closest('[data-testid="stVerticalBlock"]')
+        || agentCol.querySelector('[data-testid="stVerticalBlock"]');
+      if (flexRoot) stretchChatFlexRoot(flexRoot, agentCol);
     }}
 
     if (!target) return;

@@ -29,3 +29,4 @@ The script prints either:
 - Streamlit 1.61 的 `stLogo` 常掛在 `<img>` 上；對 img 寫 `::after` 瀏覽器不會畫。側欄品牌列字樣要掛在 `stSidebarHeader`（div）的 `::after`，不要掛在 `stLogo`。
 - 側欄收合控制的 flex 兄弟是 `stSidebarCollapseButton`（div），裡面才有 `button`。`order`／`margin-left: auto` 必須打在 wrapper，打在巢狀 `button` 不會把收合鈕釘到右邊。
 - Streamlit 1.61 `layout="wide"` 時 `.block-container` 左右是 `wideSidePadding`（5rem）。只覆寫 `padding-top` 會留下側欄與主教學欄之間的大空白；要縮這段距離須連 `padding-left`／`padding-right` 一起用 `!important` 蓋掉（本殼契約為左右各 1rem、對稱）。不要把側欄變窄當成解法。
+- `@st.fragment` 會在資料 Agent 欄多包 VerticalBlock。雙欄殼若只把欄內「第一個」`stVerticalBlock` 設成 `height:100%` flex，內層仍依內容長，`.dss-agent-pane` 的 `overflow:hidden` 會裁掉 `stChatInput` 下半。要對 **含輸入框的那層** VB（`input.closest('[data-testid="stVerticalBlock"]')`）設 flex，並把祖先一路撐到欄高。
