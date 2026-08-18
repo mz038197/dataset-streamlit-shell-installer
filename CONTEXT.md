@@ -36,6 +36,10 @@ _Avoid_: BOARD_METRIC_LINE 寫死分數；把教學頁 artifact 當挑戰產物
 專案展示的五選一委託情境識別：`edupulse`／`vitalrisk`／`airsense`／`churnlab`／`flowcast`；決定 Challenge 起點資料、資料說明書與倫理加碼。
 _Avoid_: 把公司 id 與側欄頁名混稱；混用其他公司的 CSV
 
+**更換挑戰公司確認**:
+更換挑戰公司生效前的模態確認；選到另一間挑戰公司就必須通過，進頁第一次或選同一間不跳。通過後才做既有的清除與還原空殼；取消或關閉則維持原公司。
+_Avoid_: 防呆、alert、window.confirm；只在有工作資料時才跳
+
 **Challenge 起點資料**:
 各挑戰公司內建的只讀起點 CSV（`workspace/challenge/{company}.csv`）。可髒、供診斷與複製清理；不得覆寫此檔。與雙表線的 Original 原始資料不是同一概念。
 _Avoid_: Original 原始資料（未加 Challenge 前綴）、起點檔（未鎖定挑戰語境時）

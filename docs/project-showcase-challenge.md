@@ -21,7 +21,7 @@
 - 不走 Ready；不寫根目錄 train／val／test
 - 挑戰公司：`edupulse`／`vitalrisk`／`airsense`／`churnlab`／`flowcast`（模板內建五間起點 CSV 與說明書；教師用缺陷說明不進學生專案）
 - 改 working：刪除 train／test，模型產物失效
-- 換公司：清除 working、train、test、模型產物，重建 Challenge Agent session，**還原專案展示空殼**
+- 換公司：先經過更換挑戰公司確認；確認後清除 working、train、test、模型產物，重建 Challenge Agent session，**還原專案展示空殼**
 
 ## 空殼與成果
 

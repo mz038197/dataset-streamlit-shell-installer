@@ -18,15 +18,20 @@ from dataset_streamlit_shell.ui.startup_challenge_context import (
     CHALLENGE_ARTIFACT_KEY,
     CHALLENGE_COMPANIES,
     CHALLENGE_SPLIT_SIGNATURE_KEY,
+    COMPANY_SWITCH_CANCEL_LABEL,
+    COMPANY_SWITCH_CONFIRM_LABEL,
+    COMPANY_SWITCH_DIALOG_TITLE,
     available_data_views,
     challenge_host_context,
     challenge_page_snapshot,
     challenge_paths,
     clear_challenge_runtime,
     company_changed_should_reset,
+    company_switch_dialog_body,
     csv_for_view,
     default_data_view,
     model_zone_unlocked,
+    resolve_company_switch,
     restore_startup_challenge_ui,
     result_zone_unlocked,
     split_signature,
@@ -35,6 +40,10 @@ from dataset_streamlit_shell.ui.startup_challenge_context import (
 
 EMPTY_SHELL_PATH = SHELL_ROOT / "ui" / "startup_challenge_empty_shell.py"
 LIVE_UI_PATH = SHELL_ROOT / "ui" / "startup_challenge_ui.py"
+COMMITTED_COMPANY_KEY = "challenge_selected_company"
+SELECT_COMPANY_KEY = "challenge_company_select"
+PENDING_COMPANY_KEY = "challenge_pending_company"
+APPLY_COMPANY_KEY = "challenge_apply_company"
 
 
 def render_model_zone() -> None:
@@ -71,6 +80,32 @@ def _on_company_change(previous: str | None, company: str, paths) -> None:
     st.session_state["challenge_company_cleared_notice"] = (
         f"已切換為 **{company}**：工作資料與切分已清除，頁面已還原空殼。"
     )
+
+
+def _clear_pending_company() -> None:
+    st.session_state.pop(PENDING_COMPANY_KEY, None)
+
+
+def _on_company_select_change() -> None:
+    selected = str(st.session_state[SELECT_COMPANY_KEY])
+    committed = st.session_state.get(COMMITTED_COMPANY_KEY)
+    _, pending = resolve_company_switch(committed, selected)
+    if pending:
+        st.session_state[PENDING_COMPANY_KEY] = pending
+        st.session_state[SELECT_COMPANY_KEY] = committed
+
+
+@st.dialog(COMPANY_SWITCH_DIALOG_TITLE, on_dismiss=_clear_pending_company)
+def _confirm_company_switch(pending: str) -> None:
+    st.markdown(company_switch_dialog_body(pending))
+    with st.container(horizontal=True):
+        if st.button(COMPANY_SWITCH_CONFIRM_LABEL, key="challenge_confirm_switch"):
+            st.session_state[APPLY_COMPANY_KEY] = pending
+            _clear_pending_company()
+            st.rerun()
+        if st.button(COMPANY_SWITCH_CANCEL_LABEL, key="challenge_cancel_switch"):
+            _clear_pending_company()
+            st.rerun()
 
 
 def _render_data_view(paths) -> None:
@@ -111,26 +146,45 @@ def render_startup_challenge_page() -> None:
     paths_probe = challenge_paths(WORKSPACE_DIR, CHALLENGE_COMPANIES[0])
     paths_probe.challenge_dir.mkdir(parents=True, exist_ok=True)
 
-    previous = st.session_state.get("challenge_selected_company")
-    company = st.session_state.get("challenge_selected_company", CHALLENGE_COMPANIES[0])
+    previous = st.session_state.get(COMMITTED_COMPANY_KEY)
+    apply_company = st.session_state.pop(APPLY_COMPANY_KEY, None)
+    if apply_company in CHALLENGE_COMPANIES:
+        paths = challenge_paths(WORKSPACE_DIR, apply_company)
+        _on_company_change(previous, apply_company, paths)
+        st.session_state[COMMITTED_COMPANY_KEY] = apply_company
+        st.session_state[SELECT_COMPANY_KEY] = apply_company
+
+    company = st.session_state.get(COMMITTED_COMPANY_KEY, CHALLENGE_COMPANIES[0])
     if company not in CHALLENGE_COMPANIES:
         company = CHALLENGE_COMPANIES[0]
+        st.session_state[COMMITTED_COMPANY_KEY] = company
 
     teaching, agent = open_content_dual_pane()
 
     with teaching:
         st.title("專案展示")
-        company = str(
+        pending = st.session_state.get(PENDING_COMPANY_KEY)
+        if pending:
+            _confirm_company_switch(str(pending))
+        selected = str(
             st.selectbox(
                 "挑戰公司",
                 options=list(CHALLENGE_COMPANIES),
-                index=list(CHALLENGE_COMPANIES).index(company),
-                key="challenge_company_select",
+                key=SELECT_COMPANY_KEY,
+                on_change=_on_company_select_change,
             )
         )
+        company, pending = resolve_company_switch(
+            st.session_state.get(COMMITTED_COMPANY_KEY),
+            selected,
+            st.session_state.get(PENDING_COMPANY_KEY),
+        )
+        if pending:
+            st.session_state[PENDING_COMPANY_KEY] = pending
+        else:
+            st.session_state.pop(PENDING_COMPANY_KEY, None)
+        st.session_state[COMMITTED_COMPANY_KEY] = company
         paths = challenge_paths(WORKSPACE_DIR, company)
-        _on_company_change(previous, company, paths)
-        st.session_state["challenge_selected_company"] = company
 
         notice = st.session_state.pop("challenge_company_cleared_notice", None)
         if notice:

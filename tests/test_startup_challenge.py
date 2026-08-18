@@ -29,6 +29,11 @@ from dataset_streamlit_shell.ui.startup_challenge_context import (  # noqa: E402
     artifact_matches_current_split,
     invalidate_challenge_split,
     model_zone_unlocked,
+    resolve_company_switch,
+    COMPANY_SWITCH_CANCEL_LABEL,
+    COMPANY_SWITCH_CONFIRM_LABEL,
+    COMPANY_SWITCH_DIALOG_TITLE,
+    company_switch_dialog_body,
     restore_startup_challenge_ui,
     result_zone_unlocked,
     split_files_ready,
@@ -194,6 +199,30 @@ def test_company_change_resets_when_previous_differs() -> None:
     assert company_changed_should_reset("edupulse", "vitalrisk") is True
 
 
+def test_resolve_company_switch_prompts_until_confirmed() -> None:
+    assert resolve_company_switch(None, "edupulse") == ("edupulse", None)
+    assert resolve_company_switch("edupulse", "edupulse") == ("edupulse", None)
+    assert resolve_company_switch("edupulse", "vitalrisk") == ("edupulse", "vitalrisk")
+    assert resolve_company_switch("edupulse", "edupulse", "vitalrisk") == (
+        "edupulse",
+        "vitalrisk",
+    )
+    assert resolve_company_switch("edupulse", "airsense", "vitalrisk") == (
+        "edupulse",
+        "airsense",
+    )
+
+
+def test_company_switch_confirm_copy() -> None:
+    assert COMPANY_SWITCH_DIALOG_TITLE == "確定更換挑戰公司？"
+    assert COMPANY_SWITCH_CONFIRM_LABEL == "確認更換"
+    assert COMPANY_SWITCH_CANCEL_LABEL == "取消"
+    assert company_switch_dialog_body("vitalrisk") == (
+        "切換後會清除 Challenge 工作資料與切分，Challenge 模型產物會失效，"
+        "並還原專案展示空殼、重建對話。確定改為 **vitalrisk**？"
+    )
+
+
 def test_restore_empty_shell_overwrites_live_ui(tmp_path: Path) -> None:
     source = tmp_path / "startup_challenge_empty_shell.py"
     dest = tmp_path / "startup_challenge_ui.py"
@@ -295,6 +324,9 @@ def test_empty_shell_is_workflow_page_without_pitch_chrome() -> None:
     assert "我們在解決什麼" not in ui
     assert "challenge_host_context" in ui
     assert "agent_scope" in ui or "host_context=" in ui
+    assert "st.dialog" in ui
+    assert "resolve_company_switch" in ui
+    assert "COMPANY_SWITCH_DIALOG_TITLE" in ui
     greeting = (
         SHELL / "ui" / "data_ui.py"
     ).read_text(encoding="utf-8")

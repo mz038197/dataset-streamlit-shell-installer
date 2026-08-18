@@ -28,6 +28,17 @@ DATA_VIEW_LABELS: tuple[str, ...] = (
 CHALLENGE_ARTIFACT_KEY = "challenge_model_artifact"
 CHALLENGE_SPLIT_SIGNATURE_KEY = "challenge_split_signature"
 
+COMPANY_SWITCH_DIALOG_TITLE = "確定更換挑戰公司？"
+COMPANY_SWITCH_CONFIRM_LABEL = "確認更換"
+COMPANY_SWITCH_CANCEL_LABEL = "取消"
+
+
+def company_switch_dialog_body(new_company: str) -> str:
+    return (
+        "切換後會清除 Challenge 工作資料與切分，Challenge 模型產物會失效，"
+        f"並還原專案展示空殼、重建對話。確定改為 **{new_company}**？"
+    )
+
 _COMPANY_FRAGMENTS: dict[str, str] = {
     "edupulse": (
         "【EduPulse 加碼】\n"
@@ -86,6 +97,19 @@ def company_changed_should_reset(
     if previous is None:
         return False
     return previous != current
+
+
+def resolve_company_switch(
+    committed: str | None,
+    selected: str,
+    pending: str | None = None,
+) -> tuple[str, str | None]:
+    """回傳（頁面要顯示的公司, 待確認的新公司）。待確認為 None 表示不跳更換挑戰公司確認。"""
+    if committed is None:
+        return selected, None
+    if selected != committed:
+        return committed, selected
+    return committed, pending
 
 
 def split_files_ready(paths: ChallengePaths) -> bool:
