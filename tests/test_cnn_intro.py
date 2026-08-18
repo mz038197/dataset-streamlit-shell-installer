@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import torch
+import pytest
 
 TEMPLATE_ROOT = (
     Path(__file__).resolve().parents[1]
@@ -24,10 +24,6 @@ from dataset_streamlit_shell.ml.cnn_intro import (
     conv2d_valid,
     max_pool2x2,
     patch_response,
-)
-from dataset_streamlit_shell.ml.cnn_pytorch import (
-    SimpleCNN,
-    load_digits_tensors,
 )
 
 
@@ -50,6 +46,9 @@ def test_max_pool2x2_matches_notebook() -> None:
 
 
 def test_simple_cnn_forward_shape() -> None:
+    torch = pytest.importorskip("torch")
+    from dataset_streamlit_shell.ml.cnn_pytorch import SimpleCNN
+
     model = SimpleCNN()
     sample = torch.zeros(1, 1, 8, 8)
     logits = model(sample)
@@ -57,6 +56,9 @@ def test_simple_cnn_forward_shape() -> None:
 
 
 def test_load_digits_tensors_shapes() -> None:
+    pytest.importorskip("torch")
+    from dataset_streamlit_shell.ml.cnn_pytorch import load_digits_tensors
+
     images, labels, train_ds, test_ds = load_digits_tensors()
     assert images.shape == (1797, 8, 8)
     assert labels.shape == (1797,)

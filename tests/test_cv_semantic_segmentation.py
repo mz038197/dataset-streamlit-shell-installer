@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 TEMPLATE_ROOT = (
     Path(__file__).resolve().parents[1]
@@ -15,6 +16,8 @@ if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
 from dataset_streamlit_shell.cv.image_io import semantic_demo_specs, semantic_examples_ready
+
+pytest.importorskip("torch")
 from dataset_streamlit_shell.cv.semantic_segmentation import (
     DEFAULT_MODEL,
     ClassCoverage,

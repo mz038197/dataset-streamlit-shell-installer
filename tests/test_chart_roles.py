@@ -23,8 +23,12 @@ def _load_charts_module():
         sys.path.insert(0, str(TEMPLATE_ROOT))
     os.environ["DATASET_CHARTS_SKIP_RUN"] = "1"
     sys.modules.setdefault("streamlit", MagicMock())
-    sys.modules.setdefault("dataset_streamlit_shell.ui.data_ui", MagicMock())
+    data_ui = sys.modules.setdefault("dataset_streamlit_shell.ui.data_ui", MagicMock())
     sys.modules.setdefault("dataset_streamlit_shell.plotting", MagicMock())
+    # Full-suite: real streamlit may already be imported (setdefault leaves it).
+    # A MagicMock icon then blows up in set_page_config's image loader.
+    if isinstance(data_ui, MagicMock):
+        data_ui.brand_page_icon.return_value = "📊"
 
     page_path = TEMPLATE_ROOT / "dataset_streamlit_shell" / "pages" / "2_Charts.py"
     module_name = "charts_page_under_test"
