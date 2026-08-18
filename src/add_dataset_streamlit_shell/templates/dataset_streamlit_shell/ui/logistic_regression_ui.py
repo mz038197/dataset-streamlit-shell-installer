@@ -62,6 +62,7 @@ from dataset_streamlit_shell.ui.teaching_flow import (
     MICRO_GRAD,
     MICRO_PREDICT,
     MICRO_STEP_LABELS,
+    MICRO_UPDATE,
     SAMPLE_OPS_HEAD,
     SAMPLE_OPS_POLY_NOTE,
     SAMPLE_OPS_SCALE_NOTE,

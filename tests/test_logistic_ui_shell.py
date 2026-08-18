@@ -42,6 +42,11 @@ def test_logistic_model_formula_splits_z_and_sigmoid() -> None:
     assert "MODEL_FORMULA_LATEX" not in ui_src
 
 
+def test_logistic_ui_imports_micro_update() -> None:
+    ui_src = UI_PATH.read_text(encoding="utf-8")
+    assert "    MICRO_UPDATE," in ui_src
+
+
 def test_logistic_ui_uses_classification_teaching_shell() -> None:
     ui_src = UI_PATH.read_text(encoding="utf-8")
     assert "classification_flow_svg" in ui_src
