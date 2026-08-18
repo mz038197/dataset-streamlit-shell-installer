@@ -59,6 +59,8 @@ def inject_dual_pane_chrome() -> None:
     overflow: hidden !important;
     padding-top: 4rem !important;
     padding-bottom: 0.5rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
   }}
   /* Chrome 的 st.html 列不要把雙欄往下推。 */
   [data-testid="stElementContainer"]:has([data-testid="stHtml"] style) {{
@@ -197,6 +199,8 @@ def inject_dual_pane_chrome() -> None:
       bc.style.setProperty("max-height", "100%", "important");
       bc.style.setProperty("padding-top", "4rem", "important");
       bc.style.setProperty("padding-bottom", "0.5rem", "important");
+      bc.style.setProperty("padding-left", "1rem", "important");
+      bc.style.setProperty("padding-right", "1rem", "important");
     }});
   }}
 

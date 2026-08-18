@@ -121,10 +121,13 @@ def inject_style() -> None:
         """
 <style>
     /* 4rem 讓開固定 header（Deploy／選單）；勿再用 0.5rem，標題會被裁切 */
+    /* 左右 1rem：蓋掉 Streamlit wide 的 5rem，讓主教學欄貼近導覽側欄 */
     .block-container,
     .stMainBlockContainer,
     [data-testid="stMainBlockContainer"] {
         padding-top: 4rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
     }
     /* CSS 注入列不要佔導航列底下的垂直空間 */
     [data-testid="stElementContainer"]:has([data-testid="stMarkdownContainer"] > style:only-child) {

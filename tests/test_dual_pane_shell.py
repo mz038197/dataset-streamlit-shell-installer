@@ -74,11 +74,21 @@ def test_dual_pane_chrome_clears_overlay_header() -> None:
     assert "padding-top: 4rem !important" in chrome
     assert 'setProperty("padding-top", "4rem"' in chrome
     assert "padding-top: 4rem !important" in styles
+    assert "padding-left: 1rem !important" in styles
+    assert "padding-right: 1rem !important" in styles
+    assert "padding-left: 1rem !important" in chrome
+    assert "padding-right: 1rem !important" in chrome
+    assert 'setProperty("padding-left", "1rem"' in chrome
+    assert 'setProperty("padding-right", "1rem"' in chrome
     assert "0.5rem" not in styles.split("padding-top", 1)[1][:40]
     assert '[data-testid="stHtml"] style' in chrome
     assert '[data-testid="stElementContainer"]:has([data-dss-pane])' in chrome
     assert ".dss-main-pane [data-testid=\"stHeading\"]" in chrome
     assert "data-agent-title-spacer" not in styles
+    context = (ROOT / "CONTEXT.md").read_text(encoding="utf-8")
+    shell = context.split("**內容區雙欄殼**:", 1)[1].split("**", 1)[0]
+    assert "1rem" in shell
+    assert "只縮一邊內邊距" in shell
 
 
 def test_sidebar_brand_uses_classroom_logo_and_wordmark() -> None:
