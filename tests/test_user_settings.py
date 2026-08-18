@@ -277,7 +277,7 @@ def test_data_ui_sync_tts_preferences_persists_pending_widget_changes_before_rel
     assert session_state["data_tts_speed"] == 1.25
 
 
-def test_data_ui_assistant_reply_is_saved_before_tts_playback() -> None:
+def test_data_ui_chat_input_flow_does_not_play_tts() -> None:
     source = (
         Path(__file__).parents[1]
         / "src"
@@ -292,9 +292,5 @@ def test_data_ui_assistant_reply_is_saved_before_tts_playback() -> None:
         1,
     )[1]
 
-    save_index = user_message_flow.index(
-        'st.session_state[keys["chat_history"]].append(("assistant", answer))'
-    )
-    tts_index = user_message_flow.index("stream_tts_play(answer, tts_settings)")
-
-    assert save_index < tts_index
+    assert "stream_tts_play" not in user_message_flow
+    assert '("assistant", answer, reasoning_text)' in user_message_flow

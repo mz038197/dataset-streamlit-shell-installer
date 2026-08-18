@@ -165,9 +165,10 @@ def test_chat_panel_has_no_image_attachment_path() -> None:
     assert "image_path=" not in src or "image_path=None" in src
 
 
-def test_chat_panel_tts_stays_collapsed_expander() -> None:
+def test_chat_panel_hides_tts_expander() -> None:
     src = (UI / "data_ui.py").read_text(encoding="utf-8")
-    assert 'st.expander("語音播放", expanded=False)' in src
+    assert 'st.expander("語音播放"' not in src
+    assert "_render_tts_settings_ui" not in src
 
 
 def test_content_dual_pane_glossary_pins_agent_input() -> None:

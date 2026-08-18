@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import io
 import json
 import sys
 import uuid
-from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -13,7 +13,7 @@ from typing import Any, Iterable
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-from openai_tts import Settings, stream_tts_play
+from openai_tts import Settings
 from openai_tts.settings import MAX_TTS_SPEED, MIN_TTS_SPEED
 
 SHELL_ROOT = Path(__file__).resolve().parent.parent
@@ -82,25 +82,6 @@ TTS_VOICE_OPTIONS = [
     "sage",
     "shimmer",
 ]
-TTS_VOICE_LABELS: dict[str, str] = {
-    "alloy": "中性 · 音色均衡",
-    "ash": "男聲 · 偏低沉、語速平穩",
-    "ballad": "男聲 · 柔和、節奏偏慢",
-    "coral": "女聲 · 溫暖、親切",
-    "echo": "男聲 · 清晰、標準",
-    "fable": "男聲 · 英式口音、適合旁白",
-    "nova": "女聲 · 明亮、有活力",
-    "onyx": "男聲 · 低沉、穩重",
-    "sage": "女聲 · 沉穩、較內斂",
-    "shimmer": "女聲 · 輕快、偏年輕",
-}
-
-
-def _tts_voice_label(voice_id: str) -> str:
-    label = TTS_VOICE_LABELS.get(voice_id)
-    if label:
-        return f"{label}（{voice_id}）"
-    return voice_id
 
 
 def _display_path(path: Path) -> str:
@@ -334,56 +315,6 @@ def _persist_tts_preferences_if_changed() -> str | None:
         return error
     st.session_state["_data_user_settings_snapshot"] = dict(normalized)
     return None
-
-
-def _prepare_tts_preferences(page_name: str) -> str | None:
-    return _sync_tts_preferences_for_page(page_name)
-
-
-def _render_tts_settings_ui(*, settings_error: str | None = None) -> None:
-    if settings_error:
-        st.warning(settings_error)
-
-    voice_options = list(TTS_VOICE_OPTIONS)
-    current_voice = str(st.session_state.get("data_tts_voice", Settings().voice))
-    if current_voice not in voice_options:
-        voice_options.insert(0, current_voice)
-
-    with st.expander("語音播放", expanded=False):
-        st.checkbox(
-            "語音播放",
-            key="data_tts_enabled",
-            help="開啟後，Agent 文字回答完成後會播放語音。",
-        )
-        st.selectbox(
-            "聲音",
-            voice_options,
-            format_func=_tts_voice_label,
-            key="data_tts_voice",
-            disabled=not st.session_state.get("data_tts_enabled", False),
-            help="先標示男／女／中性，後接客觀音色描述；實際送 API 的仍是英文 voice id。",
-        )
-        st.text_area(
-            "語氣指示 (TTS_INSTRUCTIONS)",
-            key="data_tts_instructions",
-            height=100,
-            disabled=not st.session_state.get("data_tts_enabled", False),
-            help="控制 TTS 語氣、情感與說話風格。",
-        )
-        st.number_input(
-            "語速 (TTS_SPEED)",
-            min_value=MIN_TTS_SPEED,
-            max_value=MAX_TTS_SPEED,
-            step=0.05,
-            format="%.2f",
-            key="data_tts_speed",
-            disabled=not st.session_state.get("data_tts_enabled", False),
-            help=f"1.0 為正常速度；範圍 {MIN_TTS_SPEED}～{MAX_TTS_SPEED}。",
-        )
-        st.caption("文字回答完成後才開始 TTS；語音錯誤不會影響文字顯示。")
-        persist_error = _persist_tts_preferences_if_changed()
-        if persist_error:
-            st.warning(persist_error)
 
 
 def _ensure_session_dir() -> None:
@@ -780,8 +711,88 @@ def _extract_display_user_text(text: str) -> str:
     return text
 
 
-def _load_session_history(path: Path) -> list[tuple[str, str]]:
-    history: list[tuple[str, str]] = []
+REASONING_ROUND_SEPARATOR = "\n\n---\n\n"
+TOOL_RUN_PLACEHOLDER = "（執行工具中…）"
+
+
+def _commit_reasoning_round(segments: list[str], current_parts: list[str]) -> None:
+    text = "".join(current_parts).strip()
+    if text:
+        segments.append(text)
+    current_parts.clear()
+
+
+def _merged_reasoning_text(segments: list[str], current_parts: list[str]) -> str:
+    parts = [segment for segment in segments if segment.strip()]
+    current = "".join(current_parts).strip()
+    if current:
+        parts.append(current)
+    return REASONING_ROUND_SEPARATOR.join(parts)
+
+
+def _render_reasoning_expander(
+    reasoning_slot: Any,
+    text: str,
+    *,
+    expanded: bool,
+    stream_ui: dict[str, Any],
+) -> None:
+    if not text.strip():
+        return
+    stream_ui["visible"] = True
+    stream_ui["expanded"] = expanded
+    with reasoning_slot.container():
+        with st.expander("思考過程", expanded=expanded):
+            if expanded:
+                stream_ui["reasoning_ph"] = st.empty()
+                stream_ui["reasoning_ph"].markdown(text)
+            else:
+                stream_ui["reasoning_ph"] = None
+                st.markdown(text)
+
+
+def _parse_history_entry(entry: tuple[str, ...]) -> tuple[str, str, str]:
+    role = entry[0]
+    text = entry[1] if len(entry) > 1 else ""
+    reasoning = entry[2] if len(entry) > 2 else ""
+    return role, text, reasoning
+
+
+def _render_history_message(role: str, text: str, *, reasoning: str = "") -> None:
+    with st.chat_message(role):
+        if role == "assistant" and reasoning.strip():
+            with st.expander("思考過程", expanded=False):
+                st.markdown(reasoning)
+        st.markdown(text)
+
+
+def _accepts_chat_keyword(chat_fn: Any, name: str) -> bool:
+    try:
+        sig = inspect.signature(chat_fn)
+    except (TypeError, ValueError):
+        return False
+    if name in sig.parameters:
+        return True
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+
+
+def _chat_callback_kwargs(
+    chat_fn: Any,
+    *,
+    on_token: Any,
+    on_reasoning: Any,
+    on_stream_reset: Any,
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"image_path": None, "on_token": on_token}
+    if _accepts_chat_keyword(chat_fn, "on_reasoning"):
+        kwargs["on_reasoning"] = on_reasoning
+    if _accepts_chat_keyword(chat_fn, "on_stream_reset"):
+        kwargs["on_stream_reset"] = on_stream_reset
+    return kwargs
+
+
+def _load_session_history(path: Path) -> list[tuple[str, ...]]:
+    history: list[tuple[str, ...]] = []
     if not path.exists():
         return history
 
@@ -803,7 +814,7 @@ def _load_session_history(path: Path) -> list[tuple[str, str]]:
                 if role == "user" and content:
                     history.append(("user", _extract_display_user_text(content)))
                 elif role == "assistant" and content:
-                    history.append(("assistant", content))
+                    history.append(("assistant", content, ""))
     except OSError:
         return history
     return history
@@ -959,7 +970,7 @@ def invoke_data_agent(
     except Exception as exc:  # keep classroom UI alive
         answer = f"Agent 執行時發生錯誤：`{exc}`"
 
-    st.session_state["data_chat_history"].append(("assistant", answer))
+    st.session_state["data_chat_history"].append(("assistant", answer, ""))
     return answer
 
 
@@ -1061,12 +1072,11 @@ def render_chat_panel(
             _reset_session_picker_widget(scope=agent_scope)
             st.rerun()
 
-    settings_error = _prepare_tts_preferences(page_name)
+    _ensure_user_settings_file()
 
     current_session = st.session_state.get(keys["session_path"])
     if not current_session:
         st.caption("尚無對話紀錄，請按 **+** 新增對話。")
-        _render_tts_settings_ui(settings_error=settings_error)
         st.chat_input("詢問...", disabled=True, key=f"{agent_scope}_chat_no_session")
         return
 
@@ -1104,15 +1114,12 @@ def render_chat_panel(
                 st.rerun()
             else:
                 st.error(message)
-        _render_tts_settings_ui(settings_error=settings_error)
         st.chat_input(
             "請先啟用資料 Agent...",
             disabled=True,
             key=f"{agent_scope}_chat_not_activated",
         )
         return
-
-    _render_tts_settings_ui(settings_error=settings_error)
 
     try:
         agent = _get_agent_for_session(
@@ -1142,9 +1149,9 @@ def render_chat_panel(
     # A tall default (e.g. 720) clips in-flow chat_input under Agent overflow:hidden.
     chat = st.container(height=240, border=False)
     with chat:
-        for role, text in st.session_state[keys["chat_history"]]:
-            with st.chat_message(role):
-                st.markdown(text)
+        for entry in st.session_state[keys["chat_history"]]:
+            role, text, reasoning = _parse_history_entry(entry)
+            _render_history_message(role, text, reasoning=reasoning)
 
     if user_text := st.chat_input("詢問資料 Agent...", key=f"{agent_scope}_chat"):
         st.session_state[keys["chat_history"]].append(("user", user_text))
@@ -1159,22 +1166,72 @@ def render_chat_panel(
             with st.chat_message("user"):
                 st.markdown(user_text)
             with st.chat_message("assistant"):
+                reasoning_slot = st.empty()
                 placeholder = st.empty()
                 answer_parts: list[str] = []
-                tts_settings = (
-                    replace(
-                        Settings.from_env(),
-                        voice=str(st.session_state["data_tts_voice"]),
-                        instructions=str(st.session_state["data_tts_instructions"]).strip(),
-                        speed=float(st.session_state["data_tts_speed"]),
-                    )
-                    if st.session_state["data_tts_enabled"]
-                    else None
-                )
+                reasoning_segments: list[str] = []
+                reasoning_parts: list[str] = []
+                stream_ui: dict[str, Any] = {
+                    "reasoning_ph": None,
+                    "visible": False,
+                    "expanded": False,
+                    "answer_started": False,
+                }
+
+                def _sync_reasoning_ui() -> None:
+                    text = _merged_reasoning_text(reasoning_segments, reasoning_parts)
+                    if not text:
+                        return
+                    expanded = not stream_ui["answer_started"]
+                    if expanded:
+                        if not stream_ui["visible"] or not stream_ui["expanded"]:
+                            _render_reasoning_expander(
+                                reasoning_slot,
+                                text,
+                                expanded=True,
+                                stream_ui=stream_ui,
+                            )
+                        elif stream_ui["reasoning_ph"] is not None:
+                            stream_ui["reasoning_ph"].markdown(text)
+                        else:
+                            _render_reasoning_expander(
+                                reasoning_slot,
+                                text,
+                                expanded=True,
+                                stream_ui=stream_ui,
+                            )
+                    else:
+                        _render_reasoning_expander(
+                            reasoning_slot,
+                            text,
+                            expanded=False,
+                            stream_ui=stream_ui,
+                        )
+
+                def on_reasoning(token: str) -> None:
+                    reasoning_parts.append(token)
+                    _sync_reasoning_ui()
 
                 def on_token(token: str) -> None:
+                    if not stream_ui["answer_started"]:
+                        stream_ui["answer_started"] = True
+                        _sync_reasoning_ui()
                     answer_parts.append(token)
                     placeholder.markdown("".join(answer_parts))
+
+                def on_stream_reset() -> None:
+                    _commit_reasoning_round(reasoning_segments, reasoning_parts)
+                    answer_parts.clear()
+                    stream_ui["answer_started"] = False
+                    placeholder.markdown(TOOL_RUN_PLACEHOLDER)
+                    merged = _merged_reasoning_text(reasoning_segments, reasoning_parts)
+                    if merged:
+                        _render_reasoning_expander(
+                            reasoning_slot,
+                            merged,
+                            expanded=True,
+                            stream_ui=stream_ui,
+                        )
 
                 try:
                     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
@@ -1182,8 +1239,12 @@ def render_chat_panel(
                     ):
                         final_text = agent.chat(
                             prompt,
-                            image_path=None,
-                            on_token=on_token,
+                            **_chat_callback_kwargs(
+                                agent.chat,
+                                on_token=on_token,
+                                on_reasoning=on_reasoning,
+                                on_stream_reset=on_stream_reset,
+                            ),
                         )
                 except Exception as exc:  # keep classroom UI alive during agent debugging
                     final_text = f"Agent 執行時發生錯誤：`{exc}`"
@@ -1192,10 +1253,9 @@ def render_chat_panel(
                 else:
                     answer = "".join(answer_parts).strip() or final_text.strip()
 
-                st.session_state[keys["chat_history"]].append(("assistant", answer))
-                if st.session_state["data_tts_enabled"] and tts_settings is not None and answer:
-                    try:
-                        stream_tts_play(answer, tts_settings)
-                    except Exception as exc:
-                        st.warning(f"語音播放發生錯誤，文字回答已保留：`{exc}`")
+                _commit_reasoning_round(reasoning_segments, reasoning_parts)
+                reasoning_text = _merged_reasoning_text(reasoning_segments, [])
+                st.session_state[keys["chat_history"]].append(
+                    ("assistant", answer, reasoning_text)
+                )
                 st.session_state[keys["chat_just_replied"]] = True

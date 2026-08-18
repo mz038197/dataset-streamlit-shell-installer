@@ -57,15 +57,13 @@ After installation:
 uv run streamlit run dataset_streamlit_shell/app.py
 ```
 
+## Agent reasoning
+
+The data Agent column shows a collapsible **思考過程** expander while the student `create_agent` streams reasoning (Responses API). It is kept in the Streamlit session until refresh, not in `sessions/*.jsonl`. Agents that only accept `on_token` still work; they just show the answer.
+
 ## TTS settings
 
-The right-side Agent panel reads and writes TTS preferences at:
-
-```text
-dataset_streamlit_shell/workspace/user_settings.json
-```
-
-The file is created automatically with defaults when the panel opens. It uses these keys:
+The data Agent column **does not show or play TTS**. `dataset_streamlit_shell/workspace/user_settings.json` may still contain `tts_*` keys from older installs; the shell creates the file if missing but does not drive UI or playback from it.
 
 ```json
 {
@@ -75,19 +73,6 @@ The file is created automatically with defaults when the panel opens. It uses th
   "tts_speed": 1.0
 }
 ```
-
-Student-facing TTS settings are loaded in this order:
-
-1. `dataset_streamlit_shell/workspace/user_settings.json`
-2. `openai-tts` built-in defaults
-
-The visible UI defaults do not use `.env` values, so students only need to understand
-the settings file and the right-side panel. `.env` can still hold API keys or advanced
-runtime settings.
-
-Switching Streamlit pages reloads TTS preferences from `user_settings.json`.
-After manually editing that file, switch to another page and back, or restart the Streamlit session.
-The TTS panel is available even before Agent Core is connected.
 
 ## Machine learning pages (shell template)
 
@@ -116,7 +101,7 @@ Requires stable network, ~3.4 GB free disk space, and `gdown` (installed with sh
 - Copies `dataset_streamlit_shell/` into the current project.
 - Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
 - Installs required project dependencies with `uv add "streamlit>=1.50" pandas matplotlib plotly numpy scikit-learn xgboost` and `openai-tts` by default.
-- Persists TTS preferences to `dataset_streamlit_shell/workspace/user_settings.json` across page changes and browser restarts.
+- Keeps `user_settings.json` on disk; the data Agent column does not show or play TTS.
 - Refuses to overwrite an existing shell unless `--force` is used.
 - Supports `--update` to refresh shell code while preserving runtime data.
 - Prints the Streamlit launch command.
