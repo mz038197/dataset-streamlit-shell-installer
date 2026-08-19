@@ -67,10 +67,20 @@ _AGENT_SCOPE_KEYS: dict[str, dict[str, str]] = {
 
 
 def _agent_keys(scope: str) -> dict[str, str]:
-    try:
+    if scope in _AGENT_SCOPE_KEYS:
         return _AGENT_SCOPE_KEYS[scope]
-    except KeyError as exc:
-        raise ValueError(f"未知 Agent scope：{scope!r}") from exc
+    if scope.startswith("challenge_"):
+        return {
+            "session_path": f"{scope}_session_path",
+            "chat_history": f"{scope}_chat_history",
+            "agent": f"{scope}_agent",
+            "agent_session_path": f"{scope}_agent_session_path",
+            "agent_factory_ref": f"{scope}_agent_factory_ref",
+            "agent_connected": f"{scope}_agent_connected",
+            "picker_version": f"{scope}_session_picker_version",
+            "chat_just_replied": f"{scope}_chat_just_replied",
+        }
+    raise ValueError(f"未知 Agent scope：{scope!r}")
 TTS_VOICE_OPTIONS = [
     "alloy",
     "ash",
@@ -1002,7 +1012,10 @@ def render_chat_panel(
 
     sessions = _list_sessions()
     if keys["session_path"] not in st.session_state and sessions:
-        _set_current_session(sessions[0], scope=agent_scope)
+        if agent_scope.startswith("challenge"):
+            _set_current_session(_new_session_path(), scope=agent_scope)
+        else:
+            _set_current_session(sessions[0], scope=agent_scope)
     current_session = _ensure_valid_current_session(sessions, scope=agent_scope)
 
     if keys["chat_history"] not in st.session_state:
@@ -1010,7 +1023,7 @@ def render_chat_panel(
             "請先按「啟用資料 Agent」。啟用後，我會以專案展示規則協助你："
             "先讀說明書、檢查 Challenge 起點資料，清理 Challenge 工作資料，再切成訓練／測試資料；"
             "討論後用 AI coding 補齊模型區與成果區。"
-            if agent_scope == "challenge"
+            if agent_scope.startswith("challenge")
             else (
                 "請先按「啟用資料 Agent」。啟用後，我可以協助你理解資料整理流程；"
                 "雙表合併建立工作資料後，也能一起分析 Working。"

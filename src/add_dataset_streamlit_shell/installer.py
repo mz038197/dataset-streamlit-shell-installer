@@ -15,6 +15,16 @@ SHELL_DIR_NAME = "dataset_streamlit_shell"
 PRESERVE_ON_UPDATE = frozenset(
     {"workspace", "sessions", "scripts", "uploads", "memory"}
 )
+_CHALLENGE_RUNTIME_FILE_NAMES = frozenset(
+    {
+        "working.csv",
+        "train.csv",
+        "test.csv",
+        "startup_challenge_ui.py",
+        "model_artifact.json",
+        "committed_company",
+    }
+)
 PROJECT_DEPENDENCIES = (
     "streamlit>=1.61",
     "pandas",
@@ -110,6 +120,8 @@ def install_shell(
 
     with resources.as_file(template) as template_path:
         shutil.copytree(template_path, target)
+    if backup is not None:
+        _restore_challenge_runtime(backup, target)
     _ensure_project_sessions_dir(project_root)
 
     installed = (
@@ -286,6 +298,22 @@ def _update_existing(target: Path, template_path: Path) -> None:
         for weight_file in models_backup.glob("*.pt"):
             shutil.copy2(weight_file, restored / weight_file.name)
         shutil.rmtree(models_backup)
+
+
+def _restore_challenge_runtime(backup: Path, target: Path) -> None:
+    src_root = backup / "workspace" / "challenge"
+    dest_root = target / "workspace" / "challenge"
+    if not src_root.is_dir():
+        return
+    dest_root.mkdir(parents=True, exist_ok=True)
+    for src_file in src_root.rglob("*"):
+        if not src_file.is_file():
+            continue
+        if src_file.name not in _CHALLENGE_RUNTIME_FILE_NAMES:
+            continue
+        dest_file = dest_root / src_file.relative_to(src_root)
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_file, dest_file)
 
 
 def _backup_existing(target: Path) -> Path:

@@ -59,7 +59,7 @@ Agent 可解釋選項與利弊，但清理、建模與上台決策仍由學生�
 
 `dataset_streamlit_shell/workspace/challenge/edupulse.csv`
 
-起點檔視為只讀；清理請寫到工作副本（例如 `challenge/working.csv`），不要覆寫起點檔。
+起點檔視為只讀；清理請寫到工作副本（例如 `challenge/edupulse/working.csv`），不要覆寫起點檔。
 
 ---
 

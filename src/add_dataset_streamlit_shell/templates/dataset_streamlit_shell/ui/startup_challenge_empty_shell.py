@@ -11,7 +11,6 @@ from dataset_streamlit_shell.ui.data_ui import (
     _display_path,
     render_chat_panel,
     render_dataset_metrics,
-    reset_agent_scope_session,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.startup_challenge_context import (
@@ -21,21 +20,26 @@ from dataset_streamlit_shell.ui.startup_challenge_context import (
     COMPANY_SWITCH_CANCEL_LABEL,
     COMPANY_SWITCH_CONFIRM_LABEL,
     COMPANY_SWITCH_DIALOG_TITLE,
+    apply_confirmed_company,
+    artifact_session_key,
     available_data_views,
+    challenge_agent_scope,
     challenge_host_context,
     challenge_page_snapshot,
     challenge_paths,
-    clear_challenge_runtime,
-    company_changed_should_reset,
     company_switch_dialog_body,
     csv_for_view,
     default_data_view,
     model_zone_unlocked,
+    read_artifact_present,
     resolve_company_switch,
-    restore_startup_challenge_ui,
+    resolve_startup_company,
     result_zone_unlocked,
+    split_files_ready,
     split_signature,
     sync_split_if_working_stale,
+    write_artifact_present,
+    write_committed_company,
 )
 
 EMPTY_SHELL_PATH = SHELL_ROOT / "ui" / "startup_challenge_empty_shell.py"
@@ -68,18 +72,19 @@ def _column_overview_frame(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _on_company_change(previous: str | None, company: str, paths) -> None:
-    if not company_changed_should_reset(previous, company):
-        return
-    clear_challenge_runtime(paths)
-    st.session_state.pop(CHALLENGE_ARTIFACT_KEY, None)
-    st.session_state.pop(CHALLENGE_SPLIT_SIGNATURE_KEY, None)
-    restore_startup_challenge_ui(EMPTY_SHELL_PATH, LIVE_UI_PATH)
-    reset_agent_scope_session(scope="challenge")
-    st.session_state["challenge_data_view"] = default_data_view(paths)
-    st.session_state["challenge_company_cleared_notice"] = (
-        f"已切換為 **{company}**：工作資料與切分已清除，頁面已還原空殼。"
+def _on_company_change(previous: str | None, company: str) -> None:
+    paths = apply_confirmed_company(
+        previous=previous,
+        company=company,
+        workspace_dir=WORKSPACE_DIR,
+        live_ui=LIVE_UI_PATH,
+        empty_shell=EMPTY_SHELL_PATH,
     )
+    if previous and previous != company:
+        st.session_state["challenge_company_cleared_notice"] = (
+            f"已切換為 **{company}**：該公司的資料、畫面與對話還在，沒有刪檔。"
+        )
+    st.session_state["challenge_data_view"] = default_data_view(paths)
 
 
 def _clear_pending_company() -> None:
@@ -89,10 +94,15 @@ def _clear_pending_company() -> None:
 def _on_company_select_change() -> None:
     selected = str(st.session_state[SELECT_COMPANY_KEY])
     committed = st.session_state.get(COMMITTED_COMPANY_KEY)
-    _, pending = resolve_company_switch(committed, selected)
+    _, pending = resolve_company_switch(
+        committed,
+        selected,
+        require_first_confirm=committed is None,
+    )
     if pending:
         st.session_state[PENDING_COMPANY_KEY] = pending
-        st.session_state[SELECT_COMPANY_KEY] = committed
+        if committed:
+            st.session_state[SELECT_COMPANY_KEY] = committed
 
 
 @st.dialog(COMPANY_SWITCH_DIALOG_TITLE, on_dismiss=_clear_pending_company)
@@ -145,19 +155,39 @@ def _render_zone(title: str, caption: str, *, unlocked: bool, renderer) -> None:
 def render_startup_challenge_page() -> None:
     paths_probe = challenge_paths(WORKSPACE_DIR, CHALLENGE_COMPANIES[0])
     paths_probe.challenge_dir.mkdir(parents=True, exist_ok=True)
+    challenge_dir = paths_probe.challenge_dir
 
-    previous = st.session_state.get(COMMITTED_COMPANY_KEY)
+    session_company = st.session_state.get(COMMITTED_COMPANY_KEY)
+    if session_company not in CHALLENGE_COMPANIES:
+        session_company = None
+    previous, require_first_confirm = resolve_startup_company(
+        session_company=session_company,
+        challenge_dir=challenge_dir,
+    )
+
     apply_company = st.session_state.pop(APPLY_COMPANY_KEY, None)
     if apply_company in CHALLENGE_COMPANIES:
-        paths = challenge_paths(WORKSPACE_DIR, apply_company)
-        _on_company_change(previous, apply_company, paths)
+        _on_company_change(previous, apply_company)
         st.session_state[COMMITTED_COMPANY_KEY] = apply_company
         st.session_state[SELECT_COMPANY_KEY] = apply_company
+        previous = apply_company
+        require_first_confirm = False
 
-    company = st.session_state.get(COMMITTED_COMPANY_KEY, CHALLENGE_COMPANIES[0])
-    if company not in CHALLENGE_COMPANIES:
-        company = CHALLENGE_COMPANIES[0]
-        st.session_state[COMMITTED_COMPANY_KEY] = company
+    if require_first_confirm:
+        st.session_state.pop(COMMITTED_COMPANY_KEY, None)
+        company = None
+    else:
+        company = st.session_state.get(COMMITTED_COMPANY_KEY) or previous
+        if company is None:
+            company = CHALLENGE_COMPANIES[0]
+            write_committed_company(challenge_dir, company)
+            st.session_state[COMMITTED_COMPANY_KEY] = company
+        elif company in CHALLENGE_COMPANIES:
+            st.session_state[COMMITTED_COMPANY_KEY] = company
+            write_committed_company(challenge_dir, company)
+
+    if SELECT_COMPANY_KEY not in st.session_state:
+        st.session_state[SELECT_COMPANY_KEY] = company or CHALLENGE_COMPANIES[0]
 
     teaching, agent = open_content_dual_pane()
 
@@ -178,19 +208,24 @@ def render_startup_challenge_page() -> None:
             st.session_state.get(COMMITTED_COMPANY_KEY),
             selected,
             st.session_state.get(PENDING_COMPANY_KEY),
+            require_first_confirm=require_first_confirm,
         )
         if pending:
             st.session_state[PENDING_COMPANY_KEY] = pending
         else:
             st.session_state.pop(PENDING_COMPANY_KEY, None)
-        st.session_state[COMMITTED_COMPANY_KEY] = company
-        paths = challenge_paths(WORKSPACE_DIR, company)
+        if company in CHALLENGE_COMPANIES:
+            st.session_state[COMMITTED_COMPANY_KEY] = company
+        display_company = company or selected
+        paths = challenge_paths(WORKSPACE_DIR, display_company)
 
         notice = st.session_state.pop("challenge_company_cleared_notice", None)
         if notice:
             st.warning(notice)
 
+        company_artifact_key = artifact_session_key(display_company)
         if sync_split_if_working_stale(paths):
+            st.session_state.pop(company_artifact_key, None)
             st.session_state.pop(CHALLENGE_ARTIFACT_KEY, None)
             st.session_state.pop(CHALLENGE_SPLIT_SIGNATURE_KEY, None)
 
@@ -199,12 +234,20 @@ def render_startup_challenge_page() -> None:
         if current_sig is None or (
             stored_sig is not None and stored_sig != current_sig
         ):
+            st.session_state.pop(company_artifact_key, None)
             st.session_state.pop(CHALLENGE_ARTIFACT_KEY, None)
         st.session_state[CHALLENGE_SPLIT_SIGNATURE_KEY] = current_sig
 
+        if st.session_state.pop(CHALLENGE_ARTIFACT_KEY, None):
+            st.session_state[company_artifact_key] = True
+        if read_artifact_present(paths) and split_files_ready(paths):
+            st.session_state[company_artifact_key] = True
+        elif st.session_state.get(company_artifact_key) and split_files_ready(paths):
+            write_artifact_present(paths, True)
+
         _render_data_view(paths)
 
-        artifact_present = bool(st.session_state.get(CHALLENGE_ARTIFACT_KEY))
+        artifact_present = bool(st.session_state.get(company_artifact_key))
         _render_zone(
             "模型區",
             "這裡之後放你們要展示的模型。",
@@ -218,9 +261,9 @@ def render_startup_challenge_page() -> None:
             renderer=render_result_zone,
         )
 
-    paths = challenge_paths(WORKSPACE_DIR, company)
+    paths = challenge_paths(WORKSPACE_DIR, display_company)
     host = challenge_host_context(
-        company=company,
+        company=display_company,
         start_csv=_display_path(paths.start_csv),
         handbook=_display_path(paths.handbook),
         working_csv=_display_path(paths.working_csv),
@@ -229,12 +272,12 @@ def render_startup_challenge_page() -> None:
         scripts_dir=_display_path(SHELL_ROOT / "scripts"),
     )
     snapshot = challenge_page_snapshot(
-        company=company,
+        company=display_company,
         start_exists=paths.start_csv.is_file(),
         working_exists=paths.working_csv.is_file(),
         train_exists=paths.train_csv.is_file(),
         test_exists=paths.test_csv.is_file(),
-        artifact_present=bool(st.session_state.get(CHALLENGE_ARTIFACT_KEY)),
+        artifact_present=bool(st.session_state.get(artifact_session_key(display_company))),
     )
 
     with agent:
@@ -242,6 +285,6 @@ def render_startup_challenge_page() -> None:
             extra_context=snapshot,
             page_name="專案展示",
             host_context=host,
-            agent_scope="challenge",
+            agent_scope=challenge_agent_scope(display_company),
             skip_working_snapshot=True,
         )

@@ -112,6 +112,37 @@ def test_install_shell_update_preserves_runtime_data(tmp_path: Path) -> None:
     assert (scripts_dir / "student_cleanup.py").read_text(encoding="utf-8") == "# keep me\n"
     assert (upload_dir / "image.png").read_bytes() == b"png"
 
+    challenge = target / "workspace" / "challenge"
+    company_dir = challenge / "vitalrisk"
+    company_dir.mkdir(parents=True, exist_ok=True)
+    (company_dir / "working.csv").write_text("challenge-keep\n", encoding="utf-8")
+    (challenge / "working.csv").write_text("legacy-keep\n", encoding="utf-8")
+    (target / "app.py").write_text("# stale again\n", encoding="utf-8")
+    install_shell(tmp_path, update=True, install_dependencies=False)
+    assert (company_dir / "working.csv").read_text(encoding="utf-8") == "challenge-keep\n"
+    assert (challenge / "working.csv").read_text(encoding="utf-8") == "legacy-keep\n"
+
+
+def test_install_shell_force_restores_challenge_working(tmp_path: Path) -> None:
+    install_shell(tmp_path, install_dependencies=False)
+    target = tmp_path / "dataset_streamlit_shell"
+    challenge = target / "workspace" / "challenge"
+    company_dir = challenge / "vitalrisk"
+    company_dir.mkdir(parents=True, exist_ok=True)
+    (company_dir / "working.csv").write_text("student-working\n", encoding="utf-8")
+    (company_dir / "train.csv").write_text("student-train\n", encoding="utf-8")
+    (company_dir / "test.csv").write_text("student-test\n", encoding="utf-8")
+    (challenge / "working.csv").write_text("legacy-working\n", encoding="utf-8")
+    (challenge / "committed_company").write_text("vitalrisk\n", encoding="utf-8")
+
+    install_shell(tmp_path, force=True, install_dependencies=False)
+
+    assert (company_dir / "working.csv").read_text(encoding="utf-8") == "student-working\n"
+    assert (company_dir / "train.csv").read_text(encoding="utf-8") == "student-train\n"
+    assert (company_dir / "test.csv").read_text(encoding="utf-8") == "student-test\n"
+    assert (challenge / "working.csv").read_text(encoding="utf-8") == "legacy-working\n"
+    assert (challenge / "committed_company").read_text(encoding="utf-8") == "vitalrisk\n"
+
 
 def test_install_shell_update_preserves_sam3_weights(tmp_path: Path) -> None:
     install_shell(tmp_path, install_dependencies=False)

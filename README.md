@@ -102,6 +102,6 @@ Requires stable network, ~3.4 GB free disk space, and `gdown` (installed with sh
 - Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
 - Installs required project dependencies with `uv add "streamlit>=1.50" pandas matplotlib plotly numpy scikit-learn xgboost` and `openai-tts` by default.
 - Keeps `user_settings.json` on disk; the data Agent column does not show or play TTS.
-- Refuses to overwrite an existing shell unless `--force` is used.
-- Supports `--update` to refresh shell code while preserving runtime data.
+- Refuses to overwrite an existing shell unless `--force` is used. `--force` still restores Challenge 工作資料／訓練／測試（含各公司資料夾與舊共用檔），不會只留在 `.bak`。
+- Supports `--update` to refresh shell code while preserving runtime data（含 `workspace/challenge/` 學生進度）。
 - Prints the Streamlit launch command.

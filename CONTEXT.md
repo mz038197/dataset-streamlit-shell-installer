@@ -25,36 +25,40 @@ _Avoid_: 白板②、我們做出來的結果；把指標圖／混淆矩陣放�
 _Avoid_: 以「成果展示」作側欄名、白板③、我們不能亂承諾什麼（不當本區標題）；寫死分數常數；沒檔就隱藏下半
 
 **專案展示空殼**:
-老師發佈時的 `ui/startup_challenge_ui.py`：上半 Challenge 資料檢視，下半模型區／成果區空輪廓，並依「有無訓練／測試檔、有無 Challenge 模型產物」決定顯示輪廓或填入內容。更換挑戰公司時還原為此檔；不還原其他教學頁。
-_Avoid_: 還原整份學生專案；只清資料卻留下上一組模型 UI；讓 Agent 拆掉無檔則顯示輪廓的判斷
+老師發佈時的 `ui/startup_challenge_ui.py`：上半 Challenge 資料檢視，下半模型區／成果區空輪廓，並依「有無訓練／測試檔、有無 Challenge 模型產物」決定顯示輪廓或填入內容。某挑戰公司尚無 Challenge UI 快照時才載入此檔；不還原其他教學頁。
+_Avoid_: 還原整份學生專案；有快照仍蓋成空殼；讓 Agent 拆掉無檔則顯示輪廓的判斷
+
+**Challenge UI 快照**:
+該挑戰公司上次的專案展示 live UI 副本（`workspace/challenge/{company}/startup_challenge_ui.py`）。更換挑戰公司時先把目前 `ui/startup_challenge_ui.py` 存成原公司快照，再載入新公司快照；沒有則用專案展示空殼。重整頁面不改 live UI。Agent 只改 live UI，不直接改各公司快照。
+_Avoid_: 換公司一律還原空殼；五間公司共用一份已填模型區的 UI 去配另一間的資料；把快照當學生主編檔
 
 **Challenge 模型產物**:
-模型區訓練成功後、成果區用來判斷可以渲染的產物。沒有產物時成果區維持空輪廓。更換挑戰公司、或 Challenge 訓練資料／測試資料被刪除時一併失效。
-_Avoid_: BOARD_METRIC_LINE 寫死分數；把教學頁 artifact 當挑戰產物
+模型區訓練成功後、成果區用來判斷可以渲染的產物。各挑戰公司各自一份，寫在該公司資料夾；重整頁面與更換挑戰公司後仍有效。沒有產物時成果區維持空輪廓。該公司的 Challenge 訓練資料／測試資料被刪除時一併失效。
+_Avoid_: BOARD_METRIC_LINE 寫死分數；把教學頁 artifact 當挑戰產物；五間公司共用一個產物標記
 
 **挑戰公司**:
-專案展示的五選一委託情境識別：`edupulse`／`vitalrisk`／`airsense`／`churnlab`／`flowcast`；決定 Challenge 起點資料、資料說明書與倫理加碼。
-_Avoid_: 把公司 id 與側欄頁名混稱；混用其他公司的 CSV
+專案展示的五選一委託情境識別：`edupulse`／`vitalrisk`／`airsense`／`churnlab`／`flowcast`；決定 Challenge 起點資料、資料說明書與倫理加碼。頁上已確認的那一間在重整頁面後仍有效，不回到清單第一間。
+_Avoid_: 把公司 id 與側欄頁名混稱；混用其他公司的 CSV；重整後當成沒選過而跳回 edupulse
 
 **更換挑戰公司確認**:
-更換挑戰公司生效前的模態確認；選到另一間挑戰公司就必須通過，進頁第一次或選同一間不跳。通過後才做既有的清除與還原空殼；取消或關閉則維持原公司。
-_Avoid_: 防呆、alert、window.confirm；只在有工作資料時才跳
+更換挑戰公司生效前的模態確認。選到另一間必須通過；進頁第一次或選同一間不跳。例外：磁碟上還沒有已確認的挑戰公司、卻仍有舊的共用 working／train／test 時，第一次也要確認（即使選清單第一間），確認後才把舊檔搬進該公司資料夾。取消或關閉則維持原公司。確認後切到該公司的資料、Challenge UI 快照與 Challenge Agent session；不會刪除各公司已分開存放的檔。再切回來進度仍在。
+_Avoid_: 防呆、alert、window.confirm；只在有工作資料時才跳；確認更換就刪掉工作副本；文案仍寫會清除工作資料；有舊共用檔時默默搬進清單第一間
 
 **Challenge 起點資料**:
 各挑戰公司內建的只讀起點 CSV（`workspace/challenge/{company}.csv`）。可髒、供診斷與複製清理；不得覆寫此檔。與雙表線的 Original 原始資料不是同一概念。
 _Avoid_: Original 原始資料（未加 Challenge 前綴）、起點檔（未鎖定挑戰語境時）
 
 **Challenge 工作資料**:
-學生清理後的工作副本（`workspace/challenge/working.csv`）。從不覆寫 Challenge 起點資料。切出 Challenge 訓練資料／Challenge 測試資料的來源；模型不直接吃這份。任何寫回本檔都會刪除已有的訓練／測試檔（切分作廢）。與雙表線根目錄的 Working 工作資料不是同一份。不走 Ready，亦不強制 cleaning_log。更換挑戰公司時清除此工作副本、切分產物與 Challenge 模型產物，並還原專案展示空殼。
-_Avoid_: Working、working.csv（未指明 challenge 軌道）；暗示挑戰線要先建立 Ready；把切分寫到根目錄 train／val／test；換公司只清資料卻留下上一組模型 UI
+學生清理後的工作副本；各挑戰公司各自一份（`workspace/challenge/{company}/working.csv`），從不覆寫該公司的 Challenge 起點資料。切出該公司 Challenge 訓練資料／Challenge 測試資料的來源；模型不直接吃這份。任何寫回該公司本檔都會刪除該公司已有的訓練／測試檔（切分作廢）。與雙表線根目錄的 Working 工作資料不是同一份。不走 Ready，亦不強制 cleaning_log。重整頁面與更換挑戰公司時保留。安裝或更新殼層時不得覆蓋或刪除各公司工作資料、訓練資料、測試資料，以及舊的共用 working／train／test。
+_Avoid_: Working、working.csv（未指明挑戰公司與軌道）；五間公司共用一份工作副本；更換挑戰公司或重整時刪掉工作副本；安裝／--force 蓋掉學生已清的 Challenge 工作資料；暗示挑戰線要先建立 Ready；把切分寫到根目錄 train／val／test
 
 **Challenge 訓練資料**:
-從 Challenge 工作資料切出的訓練 CSV（`workspace/challenge/train.csv`）。由學生與 Agent 討論後寫出，頁上無套用按鈕。預設 80／20；有類別目標則分層，否則隨機。模型訓練吃這份。不是側欄「資料切分」的產物，也不是根目錄 `train.csv`。更換挑戰公司或寫回 Challenge 工作資料時一併清除。
-_Avoid_: 資料切分（側欄頁）、Ready、workspace/train.csv、Challenge 工作資料（當訓練輸入）；挑戰線 val
+從該公司 Challenge 工作資料切出的訓練 CSV（`workspace/challenge/{company}/train.csv`）。由學生與 Agent 討論後寫出，頁上無套用按鈕。預設 80／20；有類別目標則分層，否則隨機。模型訓練吃這份。不是側欄「資料切分」的產物，也不是根目錄 `train.csv`。更換挑戰公司時保留；寫回該公司 Challenge 工作資料時一併清除。
+_Avoid_: 資料切分（側欄頁）、Ready、workspace/train.csv、Challenge 工作資料（當訓練輸入）；挑戰線 val；五間公司共用一份 train.csv
 
 **Challenge 測試資料**:
-與 Challenge 訓練資料同一次切分寫出的測試 CSV（`workspace/challenge/test.csv`）。模型評估／演示吃這份。不是根目錄 `test.csv`；挑戰線第一版不做 val。更換挑戰公司或寫回 Challenge 工作資料時一併清除。
-_Avoid_: workspace/test.csv、Challenge 驗證資料（第一版不做）、側欄「資料切分」的 test.csv
+與該公司 Challenge 訓練資料同一次切分寫出的測試 CSV（`workspace/challenge/{company}/test.csv`）。模型評估／演示吃這份。不是根目錄 `test.csv`；挑戰線第一版不做 val。更換挑戰公司時保留；寫回該公司 Challenge 工作資料時一併清除。
+_Avoid_: workspace/test.csv、Challenge 驗證資料（第一版不做）、側欄「資料切分」的 test.csv；五間公司共用一份 test.csv
 
 **Challenge 資料說明書**:
 各挑戰公司給學生的欄位與委託說明（`workspace/challenge/{company}_資料說明書.md`）。解釋欄位與目標前應先讀；教師用缺陷說明不進學生專案。不印在專案展示頁上。
@@ -65,16 +69,16 @@ _Avoid_: 教師用缺陷說明、劇透缺陷清單；把說明書全文貼進�
 _Avoid_: 一次並排四份表；預設改成訓練資料；把根目錄 train／test 算進來
 
 **Challenge host context**:
-專案展示頁專用的 Agent `host_context`：定角色、挑戰軌道檔案邊界（起點只讀、工作副本可清、訓練／測試由工作副本切出、改 working 即作廢切分）、模型區／成果區完成樣貌，並串上當前挑戰公司的倫理／資料加碼片段；不叠加雙表線的 `dataset_base_context`（含 NN fragment）。加碼只強化必講紅線與檢查方向，不剧透教師缺陷清單。倫理紅線只在對話與口頭 Gate，不上頁。禁止拆掉專案展示空殼「無檔則顯示輪廓」的判斷。
-_Avoid_: 挑戰頁直接叠 Titanic／Ready／NN 的 dataset_base_context；靠「衝突以挑戰為準」口頭覆寫卻仍灌入根目錄 working 規則；在 host 列出老師埋的缺陷清單；引導去改根目錄 train／val／test；把紅線寫成頁上第三塊
+專案展示頁專用的 Agent `host_context`：定角色、挑戰軌道檔案邊界（起點只讀、目前公司的工作副本可寫、訓練／測試由該公司工作副本切出、改該公司 working 即作廢該公司切分）、模型區／成果區完成樣貌，並串上當前挑戰公司的倫理／資料加碼片段；不叠加雙表線的 `dataset_base_context`（含 NN fragment）。加碼只強化必講紅線與檢查方向，不剧透教師缺陷清單。倫理紅線只在對話與口頭 Gate，不上頁。禁止拆掉專案展示空殼「無檔則顯示輪廓」的判斷。
+_Avoid_: 挑戰頁直接叠 Titanic／Ready／NN 的 dataset_base_context；靠「衝突以挑戰為準」口頭覆寫卻仍灌入根目錄 working 規則；在 host 列出老師埋的缺陷清單；引導去改根目錄 train／val／test；把紅線寫成頁上第三塊；引導改其他公司資料夾或 Challenge UI 快照
 
 **Challenge Agent session**:
-專案展示頁專用的對話 session；與雙表整理線的 Agent session 分開。進頁或更換挑戰公司時，以 Challenge host context 重建 Agent。
-_Avoid_: 與全站整理頁共用同一條 session 卻不換 host；只靠每輪 snapshot 提醒卻不重建
+專案展示頁專用的對話 session；與雙表整理線的 Agent session 分開。各挑戰公司各一條；更換挑戰公司時切換 session、不清空對話。重整頁面後不保留（不寫盤）。進頁或換公司時以該公司的 Challenge host context 對應該條 session。
+_Avoid_: 與全站整理頁共用同一條 session 卻不換 host；換公司就重建而砍掉該公司對話；只靠每輪 snapshot 提醒卻不換 host；為挑戰頁單獨做 F5 對話存盤
 
 **Challenge 允許改動範圍**:
-專案展示軌道上 Agent／學生預設可改：`ui/startup_challenge_ui.py`、`workspace/challenge/*`（含 Challenge 工作資料、Challenge 訓練資料、Challenge 測試資料）、必要時 `scripts/`。不改其他 ML 教學頁；頁入口薄包裝與側欄導覽由老師預放。
-_Avoid_: 為挑戰去改邏輯回歸等教學頁；把挑戰成果寫進根目錄 working／ready／train／val／test
+專案展示軌道上 Agent／學生預設可改：`ui/startup_challenge_ui.py`、目前挑戰公司資料夾內的 Challenge 工作資料／訓練資料／測試資料、必要時 `scripts/`。不改其他 ML 教學頁、不改專案展示空殼、不直接改各公司 Challenge UI 快照；頁入口薄包裝與側欄導覽由老師預放。
+_Avoid_: 為挑戰去改邏輯回歸等教學頁；把挑戰成果寫進根目錄 working／ready／train／val／test；改其他公司資料夾或 empty_shell
 
 **Challenge 上台 Gate**:
 人審／自評的最小可上台規準（能講委託問題、有 Challenge 訓練資料／測試資料並用它們訓練、成果區可演示、含該公司必講紅線、分得清 Agent 與人類決策）。第一版不做機器硬檢查；每組自選獨特畫面為軟規則。不印在專案展示頁上。

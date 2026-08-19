@@ -31,13 +31,25 @@ CHALLENGE_SPLIT_SIGNATURE_KEY = "challenge_split_signature"
 COMPANY_SWITCH_DIALOG_TITLE = "確定更換挑戰公司？"
 COMPANY_SWITCH_CONFIRM_LABEL = "確認更換"
 COMPANY_SWITCH_CANCEL_LABEL = "取消"
+COMMITTED_COMPANY_FILENAME = "committed_company"
+LEGACY_RUNTIME_NAMES: tuple[str, ...] = ("working.csv", "train.csv", "test.csv")
+UI_SNAPSHOT_FILENAME = "startup_challenge_ui.py"
+ARTIFACT_FILENAME = "model_artifact.json"
 
 
 def company_switch_dialog_body(new_company: str) -> str:
     return (
-        "切換後會清除 Challenge 工作資料與切分，Challenge 模型產物會失效，"
-        f"並還原專案展示空殼、重建對話。確定改為 **{new_company}**？"
+        "切換後會改看該公司的資料、畫面與對話，不會刪檔。再切回來進度還在。"
+        f"確定改為 **{new_company}**？"
     )
+
+
+def challenge_agent_scope(company: str) -> str:
+    return f"challenge_{company}"
+
+
+def artifact_session_key(company: str) -> str:
+    return f"{CHALLENGE_ARTIFACT_KEY}_{company}"
 
 _COMPANY_FRAGMENTS: dict[str, str] = {
     "edupulse": (
@@ -83,9 +95,9 @@ def challenge_paths(workspace_dir: Path, company: str) -> ChallengePaths:
     return ChallengePaths(
         start_csv=challenge_dir / f"{company}.csv",
         handbook=challenge_dir / f"{company}_資料說明書.md",
-        working_csv=challenge_dir / "working.csv",
-        train_csv=challenge_dir / "train.csv",
-        test_csv=challenge_dir / "test.csv",
+        working_csv=challenge_dir / company / "working.csv",
+        train_csv=challenge_dir / company / "train.csv",
+        test_csv=challenge_dir / company / "test.csv",
         challenge_dir=challenge_dir,
     )
 
@@ -103,13 +115,129 @@ def resolve_company_switch(
     committed: str | None,
     selected: str,
     pending: str | None = None,
-) -> tuple[str, str | None]:
+    *,
+    require_first_confirm: bool = False,
+) -> tuple[str | None, str | None]:
     """回傳（頁面要顯示的公司, 待確認的新公司）。待確認為 None 表示不跳更換挑戰公司確認。"""
     if committed is None:
+        if require_first_confirm:
+            return None, selected
         return selected, None
     if selected != committed:
         return committed, selected
     return committed, pending
+
+
+def committed_company_path(challenge_dir: Path) -> Path:
+    return challenge_dir / COMMITTED_COMPANY_FILENAME
+
+
+def read_committed_company(challenge_dir: Path) -> str | None:
+    path = committed_company_path(challenge_dir)
+    if not path.is_file():
+        return None
+    value = path.read_text(encoding="utf-8").strip()
+    if value not in CHALLENGE_COMPANIES:
+        return None
+    return value
+
+
+def resolve_startup_company(
+    *,
+    session_company: str | None,
+    challenge_dir: Path,
+) -> tuple[str | None, bool]:
+    """回傳（已確認公司, 是否因舊共用檔而必須先確認）。有舊檔且磁碟尚未記住公司時，不採信 session。"""
+    disk_company = read_committed_company(challenge_dir)
+    if disk_company is None and legacy_shared_runtime_exists(challenge_dir):
+        return None, True
+    if disk_company is not None:
+        return disk_company, False
+    if session_company in CHALLENGE_COMPANIES:
+        return session_company, False
+    return None, False
+
+
+def write_committed_company(challenge_dir: Path, company: str) -> None:
+    challenge_dir.mkdir(parents=True, exist_ok=True)
+    committed_company_path(challenge_dir).write_text(f"{company}\n", encoding="utf-8")
+
+
+def legacy_shared_runtime_exists(challenge_dir: Path) -> bool:
+    return any((challenge_dir / name).is_file() for name in LEGACY_RUNTIME_NAMES)
+
+
+def migrate_legacy_runtime(challenge_dir: Path, company: str) -> bool:
+    dest = challenge_dir / company
+    dest.mkdir(parents=True, exist_ok=True)
+    moved = False
+    for name in LEGACY_RUNTIME_NAMES:
+        src = challenge_dir / name
+        target = dest / name
+        if src.is_file() and not target.is_file():
+            shutil.move(str(src), str(target))
+            moved = True
+    return moved
+
+
+def artifact_path(paths: ChallengePaths) -> Path:
+    return paths.working_csv.with_name(ARTIFACT_FILENAME)
+
+
+def ui_snapshot_path(paths: ChallengePaths) -> Path:
+    return paths.working_csv.with_name(UI_SNAPSHOT_FILENAME)
+
+
+def invalidate_challenge_artifact(paths: ChallengePaths) -> None:
+    path = artifact_path(paths)
+    if path.is_file():
+        path.unlink()
+
+
+def read_artifact_present(paths: ChallengePaths) -> bool:
+    return artifact_path(paths).is_file()
+
+
+def write_artifact_present(paths: ChallengePaths, present: bool) -> None:
+    path = artifact_path(paths)
+    if present:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}\n", encoding="utf-8")
+        return
+    invalidate_challenge_artifact(paths)
+
+
+def save_ui_snapshot(live_ui: Path, snapshot: Path) -> None:
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(live_ui, snapshot)
+
+
+def load_company_ui(live_ui: Path, snapshot: Path, empty_shell: Path) -> None:
+    source = snapshot if snapshot.is_file() else empty_shell
+    shutil.copyfile(source, live_ui)
+
+
+def apply_confirmed_company(
+    *,
+    previous: str | None,
+    company: str,
+    workspace_dir: Path,
+    live_ui: Path,
+    empty_shell: Path,
+) -> ChallengePaths:
+    challenge_dir = workspace_dir / "challenge"
+    if previous and previous != company and live_ui.is_file():
+        save_ui_snapshot(live_ui, ui_snapshot_path(challenge_paths(workspace_dir, previous)))
+        load_company_ui(
+            live_ui,
+            ui_snapshot_path(challenge_paths(workspace_dir, company)),
+            empty_shell,
+        )
+    elif previous is None and live_ui.is_file():
+        save_ui_snapshot(live_ui, ui_snapshot_path(challenge_paths(workspace_dir, company)))
+    write_committed_company(challenge_dir, company)
+    migrate_legacy_runtime(challenge_dir, company)
+    return challenge_paths(workspace_dir, company)
 
 
 def split_files_ready(paths: ChallengePaths) -> bool:
@@ -174,6 +302,7 @@ def invalidate_challenge_split(paths: ChallengePaths) -> None:
     for file_path in (paths.train_csv, paths.test_csv):
         if file_path.is_file():
             file_path.unlink()
+    invalidate_challenge_artifact(paths)
 
 
 def clear_challenge_working(working_csv: Path) -> bool:
@@ -235,7 +364,7 @@ def challenge_host_context(
    - 模型區：選型與訓練（名稱、必要旋鈕、開始訓練），不要放成果圖表。
    - 成果區：訓練後的指標、圖與一次演示；沒有 Challenge 模型產物時維持空輪廓。
    一次 coding 可以寫兩區程式，但成果區在尚未訓練前仍應顯示空輪廓。
-   訓練成功後請設定 st.session_state["challenge_model_artifact"]（任何非空值即可），成果區才會渲染。切分檔一變，這個產物會被清掉。
+   訓練成功後請設定 st.session_state["challenge_model_artifact"]（任何非空值即可），成果區才會渲染。切分檔一變，這個產物會被清掉。只改目前公司資料夾，不要改其他公司。
 5) 倫理紅線只在對話與口頭 Gate 處理，不要在頁上加第三塊標題。
 6) 不要拆掉專案展示空殼「無檔則顯示輪廓」的判斷。
 
@@ -248,23 +377,24 @@ def challenge_host_context(
   （若尚未建立，先從起點檔複製再清理）
 - Challenge 訓練資料：{train_csv}
 - Challenge 測試資料：{test_csv}
-- 改寫 working.csv 時必須刪除 train.csv 與 test.csv（切分作廢）。
+- 改寫目前公司的 working.csv 時必須刪除該公司的 train.csv 與 test.csv（切分作廢）。
 - 不要改根目錄的 original.csv／working.csv／ready.csv／train.csv／val.csv／test.csv；那些是雙表整理線，不是本挑戰軌道。
 - 不要上網下載替代資料集，不要改用其他公司的 CSV。
 - 不要修改其他教學頁（邏輯迴歸、決策樹等）的程式，除非學生明確只要修專案展示頁。
 - 若需寫檢查或整理腳本，只放在 {scripts_dir} 下。
-- 不要編輯 ui/startup_challenge_empty_shell.py；那是換公司時還原用的專案展示空殼。
+- 不要編輯 ui/startup_challenge_empty_shell.py；那是尚無 Challenge UI 快照時的專案展示空殼。
+- 不要直接改各公司 Challenge UI 快照。
 
 【允許改動範圍】
 - ui/startup_challenge_ui.py（可填模型區／成果區；不可拆無檔則顯示輪廓）
-- workspace/challenge/*（含 working.csv、train.csv、test.csv）
+- 目前挑戰公司資料夾內的 working.csv、train.csv、test.csv
 - 必要時 scripts/
 
 【回答與行動規則】
 1. 先理解問題：客戶是誰、目標欄是什麼、分類還是回歸。
 2. 先讀說明書，再用 read_file／exec 實際看 CSV，不要憑記憶捏造欄位意義。
 3. 發現缺失、異常、字串不一致時：先說明現象與選項利弊，再詢問學生要採哪一種；不要默默改完所有資料。
-4. 幫寫訓練程式時：讀 challenge/train.csv 訓練、用 challenge/test.csv 評估。只做最小可運行版本。不要做超參大掃描或完整 UI 重構。
+4. 幫寫訓練程式時：讀目前公司的 train.csv 訓練、用目前公司的 test.csv 評估。只做最小可運行版本。不要做超參大掃描或完整 UI 重構。
 5. 用繁體中文、短句協助；技術細節可保留，但最後要能對客戶說人話。
 6. 若學生只要分數、不管限制：把對話拉回該公司必講紅線。
 7. 若學生要求你「直接全部做完讓我上台」：可以協助，但必須留下他們需要親口解釋的決策點（清理選擇、模型理由、倫理紅線）。
