@@ -248,6 +248,34 @@ def test_invoke_data_agent_stores_empty_reasoning() -> None:
     assert "on_reasoning" not in block
 
 
+def test_session_pick_action_ignores_desync_on_full_page_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _load_data_ui_module(monkeypatch, tmp_path)
+
+    assert module._session_pick_action("a.jsonl", "a.jsonl", fragment_rerun=True) == "noop"
+    assert module._session_pick_action(None, "a.jsonl", fragment_rerun=True) == "noop"
+    assert module._session_pick_action("b.jsonl", "a.jsonl", fragment_rerun=True) == "apply"
+    assert (
+        module._session_pick_action("b.jsonl", "a.jsonl", fragment_rerun=False)
+        == "resync_widget"
+    )
+
+
+def test_in_fragment_rerun_follows_streamlit_queue(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _load_data_ui_module(monkeypatch, tmp_path)
+    fake_ctx = types.SimpleNamespace(fragment_ids_this_run=[])
+    fake_scriptrunner = types.SimpleNamespace(get_script_run_ctx=lambda: fake_ctx)
+    monkeypatch.setitem(sys.modules, "streamlit.runtime", types.ModuleType("streamlit.runtime"))
+    monkeypatch.setitem(sys.modules, "streamlit.runtime.scriptrunner", fake_scriptrunner)
+
+    assert module._in_fragment_rerun() is False
+    fake_ctx.fragment_ids_this_run = ["frag-1"]
+    assert module._in_fragment_rerun() is True
+
+
 def test_context_defines_reasoning_and_hidden_tts() -> None:
     context = (
         Path(__file__).parents[1] / "CONTEXT.md"

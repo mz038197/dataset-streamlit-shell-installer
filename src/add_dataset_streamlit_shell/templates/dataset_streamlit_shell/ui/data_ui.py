@@ -866,6 +866,36 @@ def _reset_session_picker_widget(*, scope: str = "data") -> None:
     )
 
 
+def _in_fragment_rerun() -> bool:
+    """整頁重跑時 fragment 函式也會跑，但 fragment_ids_this_run 是空的。"""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+    except ImportError:
+        return False
+    ctx = get_script_run_ctx()
+    return bool(ctx is not None and getattr(ctx, "fragment_ids_this_run", None))
+
+
+def _session_pick_action(
+    resolved_pick: str | None,
+    current_session: str | None,
+    *,
+    fragment_rerun: bool,
+) -> str:
+    """整頁重跑時 selectbox 殘值不算使用者改選。"""
+    if not resolved_pick or resolved_pick == current_session:
+        return "noop"
+    if fragment_rerun:
+        return "apply"
+    return "resync_widget"
+
+
+def _rerun_chat_panel() -> None:
+    if _in_fragment_rerun():
+        st.rerun(scope="fragment")
+    st.rerun()
+
+
 def _create_agent_for_session(
     session_path: str,
     *,
@@ -1062,9 +1092,16 @@ def render_chat_panel(
         key=picker_key,
     )
     resolved_pick = _resolve_session_relpath(picked_id, labels)
-    if resolved_pick and resolved_pick != current_session:
+    pick_action = _session_pick_action(
+        resolved_pick,
+        current_session,
+        fragment_rerun=_in_fragment_rerun(),
+    )
+    if pick_action == "apply":
         _set_current_session(PROJECT_ROOT / resolved_pick, scope=agent_scope)
-        st.rerun(scope="fragment")
+        _rerun_chat_panel()
+    elif pick_action == "resync_widget":
+        _reset_session_picker_widget(scope=agent_scope)
     if new_col.button(
         "",
         icon=":material/add:",
@@ -1074,7 +1111,7 @@ def render_chat_panel(
     ):
         _set_current_session(_new_session_path(), scope=agent_scope)
         _reset_session_picker_widget(scope=agent_scope)
-        st.rerun(scope="fragment")
+        _rerun_chat_panel()
     if del_col.button(
         "",
         icon=":material/delete:",
@@ -1095,7 +1132,7 @@ def render_chat_panel(
             if remaining:
                 _set_current_session(remaining[0], scope=agent_scope)
             _reset_session_picker_widget(scope=agent_scope)
-            st.rerun(scope="fragment")
+            _rerun_chat_panel()
 
     _ensure_user_settings_file()
 

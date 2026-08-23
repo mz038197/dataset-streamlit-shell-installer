@@ -130,7 +130,12 @@ def test_chat_panel_send_reruns_fragment_not_teaching_pane() -> None:
     before, rest = src.split("def render_chat_panel(", 1)
     assert before.rstrip().splitlines()[-1].strip() == "@st.fragment"
     panel = rest.split("\ndef ", 1)[0]
-    assert 'st.rerun(scope="fragment")' in panel
+    assert "_session_pick_action(" in panel
+    assert "_in_fragment_rerun()" in panel
+    assert "_rerun_chat_panel()" in panel
+    rerun_helper = src.split("def _rerun_chat_panel(", 1)[1].split("\ndef ", 1)[0]
+    assert 'st.rerun(scope="fragment")' in rerun_helper
+    assert "_in_fragment_rerun()" in rerun_helper
     activate = panel.split('key=f"{agent_scope}_activate_agent"', 1)[1]
     activate = activate.split("st.chat_input", 1)[0]
     assert "st.rerun()" in activate
