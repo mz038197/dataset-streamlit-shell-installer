@@ -519,6 +519,9 @@ def lr_host_context_fragment(
 ) -> str:
     return (
         "【線性回歸頁】主教學欄是決策槽列，不是類神經網路 form。"
+        "對學生講五個決策槽：輸入資料、特徵縮放、線性層、損失函數、優化器。"
+        "輸入資料進頁即完成；其餘四個由你寫入決策槽狀態，不要叫學生自己選。"
+        "主教學欄沒有下拉選單，也不要用打勾符號標完成；完成是綠框、第二行目前選擇；點框只看只讀選擇明細。"
         f"決策槽狀態在共享 JSON：{slots_path}，鍵為 simple／multiple 兩學習階段，"
         "每階段含 choices（data、scale、linear、loss、opt）與 alpha、epochs。"
         "輸入資料進頁即為該階段鎖定值（單變量 restaurant、多變量 housing），載入時也回成該值；"

@@ -43,7 +43,7 @@ Agent 多半是可選裝飾。建議問句已全站廢止；卡住時走訓練�
 |---|---|
 | UI | `ui/nn_ui.py` |
 | Form／迴圈狀態 | `ui/nn_form_state.py` |
-| Host 規則片段 | `nn_form_state.nn_host_context_fragment` → `data_ui.dataset_base_context` |
+| Host 規則片段 | `nn_form_state.nn_host_context_fragment` → 類神經網路教學頁 host（不進 `dataset_base_context`） |
 | 程式呼叫 Agent | `data_ui.invoke_data_agent` |
 | 共享檔 | `workspace/nn_form.json`、`nn_train_request.json`、`nn_last_run.json`、`nn_agent_runs.jsonl` |
 | 測試 | `tests/test_nn_form_state.py` |

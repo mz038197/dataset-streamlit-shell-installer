@@ -17,6 +17,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
+    teaching_page_host_context,
 )
 from dataset_streamlit_shell.ml.svm import (
     MODEL_KIND_LINEAR_SVM,
@@ -78,6 +79,8 @@ def render_linear_svm_page() -> None:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,
+            host_context=teaching_page_host_context(),
+            skip_working_snapshot=True,
         )
 
 
@@ -762,6 +765,9 @@ def _send_hard_hint(
             quiz.hard_hint_user_text(qid, features=features, target=target),
             extra_context=extra,
             display_user_text=quiz.hard_hint_display_text(qid),
+            skip_working_snapshot=True,
+            host_context=teaching_page_host_context(),
+            page_name=PAGE_TITLE,
         )
     st.rerun()
 
@@ -816,6 +822,9 @@ def _send_soft_hint(
             quiz.soft_hint_user_text(qid, features=features, target=target, C=C),
             extra_context=extra,
             display_user_text=quiz.soft_hint_display_text(qid),
+            skip_working_snapshot=True,
+            host_context=teaching_page_host_context(),
+            page_name=PAGE_TITLE,
         )
     st.rerun()
 

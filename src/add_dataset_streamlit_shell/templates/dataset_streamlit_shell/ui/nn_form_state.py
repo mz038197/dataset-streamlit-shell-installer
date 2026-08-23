@@ -433,7 +433,7 @@ def nn_host_context_fragment(
     request_path: str,
     last_run_path: str,
 ) -> str:
-    """寫進 dataset_base_context 的類神經網路 writeback／實驗規則。"""
+    """寫進教學頁 host context 的類神經網路 writeback／實驗規則。"""
     return (
         "【類神經網路頁】左欄架構／超參存在共享 JSON："
         f"{form_path}。若使用者要求改架構或超參，請 read_file 後以 edit_file／write_file 更新該檔，"

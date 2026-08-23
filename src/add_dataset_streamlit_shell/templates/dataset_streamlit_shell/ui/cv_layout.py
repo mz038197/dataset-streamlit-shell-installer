@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 
 import streamlit as st
 
-from dataset_streamlit_shell.ui.data_ui import render_chat_panel
+from dataset_streamlit_shell.ui.data_ui import render_chat_panel, teaching_page_host_context
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 
@@ -23,6 +23,8 @@ def render_cv_tabbed_page(
                 st.session_state.get(context_key, f"目前頁面：{page_title}。")
             ),
             page_name=page_title,
+            host_context=teaching_page_host_context(),
+            skip_working_snapshot=True,
         )
     with teaching_col:
         tabs = st.tabs(list(tab_labels))

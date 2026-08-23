@@ -26,7 +26,11 @@ from dataset_streamlit_shell.ml.clustering import (
     ward_linkage,
 )
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
-from dataset_streamlit_shell.ui.data_ui import render_chat_panel, render_dataset_metrics
+from dataset_streamlit_shell.ui.data_ui import (
+    render_chat_panel,
+    render_dataset_metrics,
+    teaching_page_host_context,
+)
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 configure_matplotlib_for_traditional_chinese()
@@ -109,6 +113,8 @@ def render_kmeans_page() -> None:
                 "演算法不使用教學用真實群標籤；該欄僅供對照。"
             ),
             page_name=KMEANS_TITLE,
+            host_context=teaching_page_host_context(),
+            skip_working_snapshot=True,
         )
 
 
@@ -161,6 +167,8 @@ def render_wards_page() -> None:
                 "演算法不使用教學用真實群標籤；該欄僅供對照。"
             ),
             page_name=WARDS_TITLE,
+            host_context=teaching_page_host_context(),
+            skip_working_snapshot=True,
         )
 
 

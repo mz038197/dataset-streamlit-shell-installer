@@ -52,6 +52,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
+    teaching_page_host_context,
 )
 from dataset_streamlit_shell.ui.teaching_flow import (
     CLASSIFICATION_FLOW_VIEW_INPUT,
@@ -120,6 +121,8 @@ def render_logistic_regression_page() -> None:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,
+            host_context=teaching_page_host_context(),
+            skip_working_snapshot=True,
         )
 
 
@@ -1087,6 +1090,9 @@ def _send_boundary_quiz_hint(qid: str) -> None:
         quiz.hint_user_text(qid),
         extra_context=_boundary_quiz_appendix(unlocked=unlocked, focus_qid=qid),
         display_user_text=quiz.hint_display_text(qid),
+        skip_working_snapshot=True,
+        host_context=teaching_page_host_context(),
+        page_name=PAGE_TITLE,
     )
     st.rerun()
 
@@ -1106,6 +1112,9 @@ def _send_poly_quiz_hint(qid: str) -> None:
         quiz.hint_user_text(qid),
         extra_context=_poly_quiz_appendix(unlocked=unlocked, focus_qid=qid),
         display_user_text=quiz.hint_display_text(qid),
+        skip_working_snapshot=True,
+        host_context=teaching_page_host_context(),
+        page_name=PAGE_TITLE,
     )
     st.rerun()
 

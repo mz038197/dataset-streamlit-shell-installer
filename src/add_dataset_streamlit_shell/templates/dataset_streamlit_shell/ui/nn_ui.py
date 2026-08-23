@@ -15,6 +15,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
+    teaching_page_host_context,
 )
 from dataset_streamlit_shell.ui.nn_form_state import (
     AGENT_EPOCHS_MAX,
@@ -36,6 +37,7 @@ from dataset_streamlit_shell.ui.nn_form_state import (
     load_last_run,
     load_nn_form_state,
     nn_form_path,
+    nn_host_context_fragment,
     nn_last_run_path,
     nn_train_request_path,
     remaining_runs,
@@ -93,6 +95,17 @@ configure_matplotlib_for_traditional_chinese()
 BUILTIN_PATH = SHELL_ROOT.joinpath(*BUILTIN_DATA_PATH_SUFFIX)
 RESULT_KEY = "nn_last_result"
 CONTEXT_KEY = "類神經網路_agent_context"
+NN_PAGE_TITLE = "類神經網路"
+
+
+def _nn_host() -> str:
+    return teaching_page_host_context(
+        nn_host_context_fragment(
+            form_path=_display_path(nn_form_path(WORKSPACE_DIR)),
+            request_path=_display_path(nn_train_request_path(WORKSPACE_DIR)),
+            last_run_path=_display_path(nn_last_run_path(WORKSPACE_DIR)),
+        )
+    )
 
 ACTIVATION_Z_MIN = -5.0
 ACTIVATION_Z_MAX = 5.0
@@ -151,7 +164,9 @@ def render_neural_network_page() -> None:
 
         render_chat_panel(
             extra_context=extra_context,
-            page_name="類神經網路",
+            page_name=NN_PAGE_TITLE,
+            host_context=_nn_host(),
+            skip_working_snapshot=True,
             after_reply=after_nn_chat_reply,
         )
 
@@ -399,6 +414,9 @@ def _run_agent_decision_turn(*, extra_context: str, row_count: int) -> None:
             user_text,
             extra_context=extra_context,
             display_user_text="（系統）請依剛剛的訓練結果決定是否調整參數並繼續實驗。",
+            skip_working_snapshot=True,
+            host_context=_nn_host(),
+            page_name=NN_PAGE_TITLE,
         )
     st.info(answer[:500] + ("…" if len(answer) > 500 else ""))
 

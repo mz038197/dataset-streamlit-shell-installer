@@ -31,7 +31,11 @@ from dataset_streamlit_shell.ml.cnn_pytorch import (
 )
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 from dataset_streamlit_shell.ui import cnn_quiz as quiz
-from dataset_streamlit_shell.ui.data_ui import invoke_data_agent, render_chat_panel
+from dataset_streamlit_shell.ui.data_ui import (
+    invoke_data_agent,
+    render_chat_panel,
+    teaching_page_host_context,
+)
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 configure_matplotlib_for_traditional_chinese()
@@ -77,6 +81,8 @@ def render_cnn_introduction_page() -> None:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,
+            host_context=teaching_page_host_context(),
+            skip_working_snapshot=True,
         )
 
 
@@ -439,6 +445,9 @@ def _send_quiz_hint(qid: str) -> None:
         quiz.hint_user_text(qid),
         extra_context=appendix,
         display_user_text=quiz.hint_display_text(qid),
+        skip_working_snapshot=True,
+        host_context=teaching_page_host_context(),
+        page_name=PAGE_TITLE,
     )
     st.rerun()
 

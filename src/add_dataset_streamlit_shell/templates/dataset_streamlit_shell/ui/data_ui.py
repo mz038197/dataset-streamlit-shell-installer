@@ -528,20 +528,12 @@ def load_cleaning_log(limit: int = 8) -> list[dict[str, object]]:
 
 
 def dataset_base_context() -> str:
-    """穩定環境說明 → create_agent(host_context=...) → 學生 system（對齊 Studio）。"""
+    """整理／分析頁 host_context：雙表、Working、Ready、腳本。不含教學頁寫回。"""
     source = _display_path(ORIGINAL_DATASET_PATH)
     working = _display_path(WORKING_DATASET_PATH)
     ready = _display_path(READY_DATASET_PATH)
     cleaning_log = _display_path(CLEANING_LOG_PATH)
     scripts = _display_path(SHELL_ROOT / "scripts")
-    from dataset_streamlit_shell.ui.lr_slot_state import lr_host_context_fragment
-    from dataset_streamlit_shell.ui.nn_form_state import nn_host_context_fragment
-
-    nn_form = _display_path(WORKSPACE_DIR / "nn_form.json")
-    nn_request = _display_path(WORKSPACE_DIR / "nn_train_request.json")
-    nn_last = _display_path(WORKSPACE_DIR / "nn_last_run.json")
-    lr_slots = _display_path(WORKSPACE_DIR / "lr_slots.json")
-    lr_request = _display_path(WORKSPACE_DIR / "lr_train_request.json")
     copies = _display_path(WORKSPACE_DIR / "integration")
     return (
         "目前為 Dataset Streamlit Shell。"
@@ -559,8 +551,7 @@ def dataset_base_context() -> str:
         "（可用 commit_dual_table_merge）。"
         "寫入後請告訴學生按「重新讀取工作資料」。"
         "未解鎖或未對齊鍵名時拒絕合併。"
-        f"Ready 分析就緒資料路徑：{ready}，由工作資料凍結後供圖表探索、降維等分析頁使用；"
-        "監督式與非監督式教學頁使用各頁內建範例資料。"
+        f"Ready 分析就緒資料路徑：{ready}，由工作資料凍結後供圖表探索、降維等分析頁使用。"
         "回答資料問題時，請使用你的 read_file 或 exec 工具實際讀取 CSV 後再回答。"
         f"如果使用者要求補值、清理資料、計算欄位或新增欄位，且 Working 已存在，請預設讀取並更新 {working}，不要覆蓋 {source}。"
         f"如果需要撰寫 Python 腳本來整理或檢查資料，請只建立在 {scripts} 底下，"
@@ -573,16 +564,18 @@ def dataset_base_context() -> str:
         '{"created_at":"2026-05-29T12:05:41","actor":"agent",'
         '"action":"fill_missing_age","columns":["Age"],"rows":177,'
         '"note":"以中位數補齊 Age 欄位的空值。"}'
-        + nn_host_context_fragment(
-            form_path=nn_form,
-            request_path=nn_request,
-            last_run_path=nn_last,
-        )
-        + lr_host_context_fragment(
-            slots_path=lr_slots,
-            request_path=lr_request,
-        )
     )
+
+
+def teaching_page_host_context(*fragments: str) -> str:
+    """教學頁 host_context：內建範例邊界，可接該頁寫回 fragment。不叠 dataset_base_context。"""
+    boundary = (
+        "【教學頁】本頁使用內建範例資料，不是根目錄 Working／Ready／Original。"
+        "不准讀寫或覆寫根目錄 original.csv、working.csv、ready.csv。"
+        "不要引導雙表合併，也不要改 cleaning_log。"
+    )
+    extra = "".join(fragment for fragment in fragments if fragment)
+    return boundary + extra
 
 
 def dataset_page_snapshot(df: pd.DataFrame | None, extra_context: str = "") -> str:
@@ -959,11 +952,25 @@ def _restore_agent_if_possible(
     return False, message
 
 
+def _remember_chat_page(page_name: str, *, scope: str = "data") -> None:
+    """換頁就丟掉 Agent 實例，下一輪用該頁 host_context 重建。"""
+    if not page_name:
+        return
+    keys = _agent_keys(scope)
+    if st.session_state.get("last_chat_page") != page_name:
+        st.session_state.pop(keys["agent"], None)
+        st.session_state.pop(keys["agent_session_path"], None)
+    st.session_state["last_chat_page"] = page_name
+
+
 def invoke_data_agent(
     user_text: str,
     *,
     extra_context: str = "",
     display_user_text: str | None = None,
+    skip_working_snapshot: bool = False,
+    host_context: str | None = None,
+    page_name: str = "",
 ) -> str:
     """程式呼叫 Agent 一輪，並寫入右側 chat 歷史。失敗時回傳錯誤字串。"""
     current_session = st.session_state.get("session_path")
@@ -976,12 +983,13 @@ def invoke_data_agent(
     shown = display_user_text if display_user_text is not None else user_text
     st.session_state["data_chat_history"].append(("user", shown))
 
-    df = load_working_dataset()
-    snapshot = dataset_page_snapshot(df, extra_context)
+    df = None if skip_working_snapshot else load_working_dataset()
+    snapshot = extra_context.strip() if skip_working_snapshot else dataset_page_snapshot(df, extra_context)
     prompt = format_user_turn(user_text, extra_context=snapshot)
 
+    _remember_chat_page(page_name)
     try:
-        agent = _get_agent_for_session(current_session)
+        agent = _get_agent_for_session(current_session, host_context=host_context)
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             final_text = agent.chat(prompt, image_path=None, on_token=lambda _token: None)
         answer = (final_text or "").strip() or "（Agent 未回傳文字）"
@@ -1003,13 +1011,7 @@ def render_chat_panel(
     after_reply: Callable[[], None] | None = None,
 ) -> None:
     keys = _agent_keys(agent_scope)
-    # 從其他頁回到本 scope 時丟掉 Agent 實例（保留對話），以當前 host_context 重建
-    last_page = st.session_state.get("last_chat_page")
-    if page_name and last_page != page_name:
-        st.session_state.pop(keys["agent"], None)
-        st.session_state.pop(keys["agent_session_path"], None)
-    if page_name:
-        st.session_state["last_chat_page"] = page_name
+    _remember_chat_page(page_name, scope=agent_scope)
     st.markdown(
         '<div class="data-agent-title-text">資料 Agent</div>',
         unsafe_allow_html=True,

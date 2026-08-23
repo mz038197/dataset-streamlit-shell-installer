@@ -262,6 +262,11 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "全是 null" not in text
     assert "輸入資料進頁即為該階段鎖定值" in text
     assert "不必為了槽齊而寫 data" in text
+    assert "五個決策槽" in text
+    assert "沒有下拉選單" in text
+    assert "不要叫學生自己選" in text
+    assert "打勾符號" in text
+    assert "✅" not in text
 
 
 def test_slot_button_label_shows_current_choice_only_when_complete() -> None:

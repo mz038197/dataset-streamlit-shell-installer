@@ -32,6 +32,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     _display_path,
     invoke_data_agent,
     render_chat_panel,
+    teaching_page_host_context,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.lr_slot_state import (
@@ -45,6 +46,7 @@ from dataset_streamlit_shell.ui.lr_slot_state import (
     consume_train_request,
     empty_workspace_state,
     load_workspace_state,
+    lr_host_context_fragment,
     lr_slots_path,
     lr_train_request_path,
     model_code_preview,
@@ -91,6 +93,15 @@ HOUSE_PRICES_PATH = REGRESSION_DEMO_DIR / "house_prices.csv"
 
 LR_PAGE_TITLE = "線性回歸"
 LR_CONTEXT_KEY = f"{LR_PAGE_TITLE}_agent_context"
+
+
+def _lr_host() -> str:
+    return teaching_page_host_context(
+        lr_host_context_fragment(
+            slots_path=_display_path(lr_slots_path(WORKSPACE_DIR)),
+            request_path=_display_path(lr_train_request_path(WORKSPACE_DIR)),
+        )
+    )
 LR_STAGE_SIMPLE = "單變量"
 LR_STAGE_MULTIPLE = "多變量"
 SIMPLE_SOURCE_LABEL = "內建範例資料：城市人口與餐廳獲利"
@@ -158,6 +169,8 @@ def render_linear_regression_page() -> None:
         render_chat_panel(
             extra_context=extra,
             page_name=LR_PAGE_TITLE,
+            host_context=_lr_host(),
+            skip_working_snapshot=True,
             after_reply=_after_lr_chat,
         )
 
@@ -1078,6 +1091,9 @@ def _send_simple_hint(
             ),
             extra_context=extra,
             display_user_text=hint_display_text(qid),
+            skip_working_snapshot=True,
+            host_context=_lr_host(),
+            page_name=LR_PAGE_TITLE,
         )
     st.rerun()
 
@@ -1293,6 +1309,9 @@ def _send_multiple_hint(
             multi_quiz.hint_user_text(qid, features=features, target=target),
             extra_context=extra,
             display_user_text=multi_quiz.hint_display_text(qid),
+            skip_working_snapshot=True,
+            host_context=_lr_host(),
+            page_name=LR_PAGE_TITLE,
         )
     st.rerun()
 

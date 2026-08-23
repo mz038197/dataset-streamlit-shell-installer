@@ -39,7 +39,7 @@
 
 ## Agent
 
-- **Challenge host context**：獨立組裝，**不**叠加 `dataset_base_context`（含 NN fragment）
+- **Challenge host context**：獨立組裝，**不**叠加 `dataset_base_context`
 - **Challenge Agent session**：與雙表整理線分開；各公司一條，換公司切換不清空，重整後不保留
 - host＝通用挑戰規則＋當前公司加碼；不剧透教師缺陷清單
 - 每輪 user 附加頁面快照（公司、起點／working／train／test、模型產物）
