@@ -103,15 +103,16 @@ INSPECT_KEY = "lr_inspect_slot"
 DECISION_SLOT_CSS = """
 <style>
 .lr-slot-row { margin: 0.2rem 0 0.55rem; }
-.lr-inspect {
+[class*="st-key-lr_inspect_"] {
   border: 1px solid rgba(90,160,255,.35);
   border-radius: 10px;
   background: rgba(90,160,255,.08);
   padding: 0.65rem 0.75rem;
   margin: 0 0 0.8rem;
 }
+.lr-inspect { margin: 0; }
 .lr-inspect h3 { margin: 0 0 0.35rem; font-size: 14px; }
-.lr-inspect dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.7rem; font-size: 13px; }
+.lr-inspect dl { margin: 0 0 0.55rem; display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.7rem; font-size: 13px; }
 .lr-inspect dt { color: rgba(250,250,250,.58); }
 .lr-inspect dd { margin: 0; }
 .lr-inspect .formula {
@@ -238,21 +239,22 @@ def _render_inspect(
     for key, value in rows:
         cls = ' class="formula"' if key == "公式" else ""
         items.append(f"<dt>{key}</dt><dd{cls}>{value}</dd>")
-    st.markdown(
-        f'<aside class="lr-inspect"><h3>{SLOT_TITLES[open_slot]}</h3>'
-        f"<dl>{''.join(items)}</dl></aside>",
-        unsafe_allow_html=True,
-    )
-    if open_slot != "data" or frame is None or not features or not target:
-        return
-    preview_cols = [column for column in [*features, target] if column in frame.columns]
-    if not preview_cols:
-        return
-    st.dataframe(
-        frame[preview_cols].head(DATA_PREVIEW_ROWS),
-        width="stretch",
-        hide_index=True,
-    )
+    with st.container(key=f"lr_inspect_{stage}_{open_slot}"):
+        st.markdown(
+            f'<aside class="lr-inspect"><h3>{SLOT_TITLES[open_slot]}</h3>'
+            f"<dl>{''.join(items)}</dl></aside>",
+            unsafe_allow_html=True,
+        )
+        if open_slot != "data" or frame is None or not features or not target:
+            return
+        preview_cols = [column for column in [*features, target] if column in frame.columns]
+        if not preview_cols:
+            return
+        st.dataframe(
+            frame[preview_cols].head(DATA_PREVIEW_ROWS),
+            width="stretch",
+            hide_index=True,
+        )
 
 
 def _render_code_preview(state: dict, *, stage: str) -> None:
