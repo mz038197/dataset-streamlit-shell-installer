@@ -22,6 +22,7 @@ from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
     SCALE_MEAN,
     SCALE_MINMAX,
     SCALE_ZSCORE,
+    SLOT_IDS,
     STAGE_MULTIPLE,
     STAGE_SIMPLE,
     apply_slot_write,
@@ -46,9 +47,18 @@ from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
     slot_label,
     slots_are_complete,
     slot_signature,
+    split_frame_by_train_pct,
     train_request_is_set,
     write_train_request,
 )
+
+
+def _complete(stage: str = STAGE_SIMPLE, train_pct: int = 80) -> dict:
+    return apply_slot_write(
+        default_slot_state(stage),
+        {"choices": {"split": train_pct}},
+        stage=stage,
+    )
 
 
 def test_empty_slot_state_locks_data_and_leaves_other_slots_unset() -> None:
@@ -56,6 +66,7 @@ def test_empty_slot_state_locks_data_and_leaves_other_slots_unset() -> None:
     multiple = empty_slot_state(STAGE_MULTIPLE)
     assert simple["choices"]["data"] == "restaurant"
     assert multiple["choices"]["data"] == "housing"
+    assert simple["choices"]["split"] is None
     assert simple["choices"]["scale"] is None
     assert simple["choices"]["linear"] is None
     assert simple["choices"]["loss"] is None
@@ -64,8 +75,10 @@ def test_empty_slot_state_locks_data_and_leaves_other_slots_unset() -> None:
     assert simple["epochs"] is None
     assert slots_are_complete(simple) is False
     assert slot_label("data", simple, STAGE_SIMPLE) == "內建餐廳獲利"
+    assert slot_label("split", simple, STAGE_SIMPLE) == CHOICE_UNSET
     assert slot_label("scale", simple, STAGE_SIMPLE) == CHOICE_UNSET
     assert slot_is_filled("data", simple) is True
+    assert slot_is_filled("split", simple) is False
     assert slot_is_filled("scale", simple) is False
 
 
@@ -74,6 +87,7 @@ def test_default_slot_state_assembles_zscore_and_locked_kinds() -> None:
     multiple = default_slot_state(STAGE_MULTIPLE)
     assert simple["choices"] == {
         "data": "restaurant",
+        "split": None,
         "scale": SCALE_ZSCORE,
         "linear": "dense1",
         "loss": "mse",
@@ -81,7 +95,7 @@ def test_default_slot_state_assembles_zscore_and_locked_kinds() -> None:
     }
     assert simple["alpha"] == 0.01
     assert simple["epochs"] == 1500
-    assert slots_are_complete(simple) is True
+    assert slots_are_complete(simple) is False
     assert multiple["choices"]["data"] == "housing"
     assert multiple["choices"]["scale"] == SCALE_ZSCORE
     assert multiple["alpha"] == 0.1
@@ -102,7 +116,7 @@ def test_default_write_does_not_set_train_request(tmp_path: Path) -> None:
 
 
 def test_apply_slot_write_accepts_scale_and_alpha_rejects_locked_kinds() -> None:
-    assembled = default_slot_state(STAGE_SIMPLE)
+    assembled = _complete()
     changed = apply_slot_write(
         assembled,
         {
@@ -132,7 +146,7 @@ def test_model_code_preview_follows_scale_and_feature_count() -> None:
     empty = empty_slot_state()
     assert "還沒選齊" in model_code_preview(empty, stage=STAGE_SIMPLE)
 
-    simple = default_slot_state(STAGE_SIMPLE)
+    simple = _complete()
     zscore = model_code_preview(simple, stage=STAGE_SIMPLE)
     assert "StandardScaler().fit_transform(x)" in zscore
     assert "Input(shape=(1,))" in zscore
@@ -149,10 +163,12 @@ def test_model_code_preview_follows_scale_and_feature_count() -> None:
         simple, stage=STAGE_SIMPLE
     )
 
-    multiple = default_slot_state(STAGE_MULTIPLE)
+    multiple = _complete(STAGE_MULTIPLE)
     multi_preview = model_code_preview(multiple, stage=STAGE_MULTIPLE)
     assert "Input(shape=(4,))" in multi_preview
     assert "SGD(learning_rate=0.1)" in multi_preview
+    assert "train_test_split" not in zscore
+    assert "train_test_split" not in multi_preview
 
 
 def test_scale_inspect_has_formula_range_and_condition() -> None:
@@ -160,7 +176,7 @@ def test_scale_inspect_has_formula_range_and_condition() -> None:
     assert "x / x_max" in info["formula"].replace(" ", "") or "x / x_max" in info["formula"]
     assert "0" in info["range"]
     assert "≥ 0" in info["condition"] or ">= 0" in info["condition"]
-    rows = slot_inspect_rows("scale", default_slot_state(STAGE_SIMPLE), stage=STAGE_SIMPLE)
+    rows = slot_inspect_rows("scale", _complete(), stage=STAGE_SIMPLE)
     keys = [key for key, _ in rows]
     assert "公式" in keys
     assert "範圍" in keys
@@ -169,7 +185,7 @@ def test_scale_inspect_has_formula_range_and_condition() -> None:
 
 def test_can_write_train_request_needs_complete_slots_and_quiz() -> None:
     empty = empty_slot_state()
-    assembled = default_slot_state(STAGE_SIMPLE)
+    assembled = _complete()
     assert can_write_train_request(empty, quiz_unlocked=True) is False
     assert can_write_train_request(assembled, quiz_unlocked=False) is False
     assert can_write_train_request(assembled, quiz_unlocked=True) is True
@@ -234,7 +250,7 @@ def test_load_keeps_other_stage_when_file_omits_it(tmp_path: Path) -> None:
 def test_page_snapshot_includes_open_slot_and_preview() -> None:
     text = build_lr_page_snapshot(
         stage=STAGE_SIMPLE,
-        state=default_slot_state(STAGE_SIMPLE),
+        state=_complete(),
         open_slot="scale",
         quiz_unlocked=False,
         scale_errors=[],
@@ -262,7 +278,10 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "全是 null" not in text
     assert "輸入資料進頁即為該階段鎖定值" in text
     assert "不必為了槽齊而寫 data" in text
-    assert "五個決策槽" in text
+    assert "六個決策槽" in text
+    assert "訓練／測試切分" in text
+    assert "組模型預設不要寫 split" in text
+    assert "choices.split" in text
     assert "沒有下拉選單" in text
     assert "不要叫學生自己選" in text
     assert "打勾符號" in text
@@ -272,10 +291,12 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
 def test_slot_button_label_shows_current_choice_only_when_complete() -> None:
     empty = empty_slot_state(STAGE_SIMPLE)
     assert slot_button_label("data", empty, STAGE_SIMPLE) == "輸入資料\n內建餐廳獲利"
+    assert slot_button_label("split", empty, STAGE_SIMPLE) == "訓練／測試切分"
     assert slot_button_label("scale", empty, STAGE_SIMPLE) == "特徵縮放"
     assert "尚未選擇" not in slot_button_label("scale", empty, STAGE_SIMPLE)
-    assembled = default_slot_state(STAGE_SIMPLE)
+    assembled = _complete()
     assert slot_button_label("scale", assembled, STAGE_SIMPLE) == "特徵縮放\nZ分數正規化"
+    assert slot_button_label("split", assembled, STAGE_SIMPLE) == "訓練／測試切分\n訓練 80%"
     assert "α=0.01" in slot_button_label("opt", assembled, STAGE_SIMPLE)
 
 
@@ -363,3 +384,60 @@ def test_load_backfills_data_from_legacy_null_json(tmp_path: Path) -> None:
     assert loaded[STAGE_SIMPLE]["choices"]["data"] == "restaurant"
     assert loaded[STAGE_MULTIPLE]["choices"]["data"] == "housing"
     assert loaded[STAGE_SIMPLE]["choices"]["scale"] is None
+    assert loaded[STAGE_SIMPLE]["choices"]["split"] is None
+
+
+def test_slot_order_puts_split_after_data() -> None:
+    assert SLOT_IDS == ("data", "split", "scale", "linear", "loss", "opt")
+
+
+def test_apply_slot_write_accepts_train_pct_and_rejects_empty_sets() -> None:
+    empty = empty_slot_state(STAGE_SIMPLE)
+    written = apply_slot_write(empty, {"choices": {"split": 73}}, stage=STAGE_SIMPLE)
+    assert written["choices"]["split"] == 73
+    assert slot_label("split", written, STAGE_SIMPLE) == "訓練 73%"
+    assert slot_is_filled("split", written) is True
+
+    for rejected in (0, 100, -1, 101, 80.5, "nope"):
+        bounced = apply_slot_write(written, {"choices": {"split": rejected}}, stage=STAGE_SIMPLE)
+        assert bounced["choices"]["split"] == 73
+
+    eighty = apply_slot_write(written, {"choices": {"split": "80"}}, stage=STAGE_SIMPLE)
+    assert eighty["choices"]["split"] == 80
+    assert slot_signature(eighty) != slot_signature(written)
+
+
+def test_split_inspect_shows_train_percent_and_row_counts() -> None:
+    empty_rows = dict(slot_inspect_rows("split", empty_slot_state(STAGE_SIMPLE), stage=STAGE_SIMPLE))
+    assert "尚未選擇" in empty_rows["目前選擇"]
+
+    rows = dict(
+        slot_inspect_rows("split", _complete(train_pct=80), stage=STAGE_SIMPLE, row_count=97)
+    )
+    assert rows["目前選擇"] == "訓練 80%"
+    assert rows["測試"] == "20%"
+    assert rows["訓練列數"] == "78"
+    assert rows["測試列數"] == "19"
+
+
+def test_split_frame_uses_rounded_train_count_and_fixed_seed() -> None:
+    frame = pd.DataFrame({"x": range(97), "y": range(97)})
+    first_train, first_test = split_frame_by_train_pct(frame, 80)
+    again_train, again_test = split_frame_by_train_pct(frame, 80)
+    assert len(first_train) == 78
+    assert len(first_test) == 19
+    assert first_train["x"].tolist() == again_train["x"].tolist()
+    one_pct_train, one_pct_test = split_frame_by_train_pct(frame, 1)
+    assert len(one_pct_train) == 1
+    assert len(one_pct_test) == 96
+
+
+def test_stages_keep_independent_split() -> None:
+    workspace = empty_workspace_state()
+    workspace[STAGE_SIMPLE] = apply_slot_write(
+        default_slot_state(STAGE_SIMPLE),
+        {"choices": {"split": 50}},
+        stage=STAGE_SIMPLE,
+    )
+    assert workspace[STAGE_SIMPLE]["choices"]["split"] == 50
+    assert workspace[STAGE_MULTIPLE]["choices"]["split"] is None

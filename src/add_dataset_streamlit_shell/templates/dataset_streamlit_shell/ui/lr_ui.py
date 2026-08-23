@@ -17,6 +17,7 @@ from dataset_streamlit_shell.ml.regression import (
     SIMPLE_REGRESSION_FEATURE,
     SIMPLE_REGRESSION_TARGET,
     apply_feature_scaler,
+    attach_test_costs,
     build_regression_agent_context,
     create_feature_scaler,
     gradient_descent_steps,
@@ -50,7 +51,9 @@ from dataset_streamlit_shell.ui.lr_slot_state import (
     lr_slots_path,
     lr_train_request_path,
     model_code_preview,
+    parse_train_pct,
     scale_method_errors,
+    split_frame_by_train_pct,
     should_rerun_after_lr_chat,
     slots_file_mtime,
     slot_button_label,
@@ -150,7 +153,7 @@ def render_linear_regression_page() -> None:
         st.title(LR_PAGE_TITLE)
         st.caption(
             "框名是決策槽，框上是目前選擇。請資料 Agent 欄組模型；"
-            "點框看只讀選擇明細。訓練畫面只有回歸線與 Cost。"
+            "點框看只讀選擇明細。訓練畫面只有回歸線與訓練／測試 Cost。"
         )
         st.markdown(DECISION_SLOT_CSS, unsafe_allow_html=True)
         stage_label = st.radio(
@@ -216,7 +219,7 @@ def _after_lr_chat() -> None:
 def _render_slot_row(state: dict, *, stage: str) -> str | None:
     inspect_key = f"{INSPECT_KEY}_{stage}"
     current = st.session_state.get(inspect_key)
-    cols = st.columns(5)
+    cols = st.columns(6)
     for column, slot_id in zip(cols, SLOT_IDS):
         filled = slot_is_filled(slot_id, state)
         status = "done" if filled else "todo"
@@ -244,7 +247,7 @@ def _render_inspect(
     target: str | None = None,
 ) -> None:
     if not open_slot:
-        st.caption("點上面的框看目前選擇。只讀；要換縮放或 α／epochs，跟資料 Agent 欄說。")
+        st.caption("點上面的框看目前選擇。只讀；要換切分、縮放或 α／epochs，跟資料 Agent 欄說。")
         return
     row_count = len(frame) if frame is not None else None
     rows = slot_inspect_rows(open_slot, state, stage=stage, row_count=row_count)
@@ -278,6 +281,23 @@ def _render_code_preview(state: dict, *, stage: str) -> None:
 
 def _training_frame(df: pd.DataFrame, features: list[str], target: str) -> pd.DataFrame:
     return df[features + [target]].apply(pd.to_numeric, errors="coerce").dropna()
+
+
+def _train_test_frames(working: pd.DataFrame, state: dict):
+    pct = parse_train_pct((state.get("choices") or {}).get("split"))
+    if pct is None:
+        return None
+    return split_frame_by_train_pct(working, pct)
+
+
+def _scale_check_frame(working: pd.DataFrame, state: dict) -> pd.DataFrame:
+    split = _train_test_frames(working, state)
+    return split[0] if split is not None else working
+
+
+def _train_row_count(working: pd.DataFrame, state: dict) -> int:
+    split = _train_test_frames(working, state)
+    return len(split[0]) if split is not None else len(working)
 
 
 def _animation_steps(steps: list[GradientDescentStep]) -> list[GradientDescentStep]:
@@ -335,7 +355,7 @@ def _render_simple_stage(state: dict) -> None:
     )
     scale_errors = scale_method_errors(
         state["choices"].get("scale"),
-        working,
+        _scale_check_frame(working, state),
         [feature],
     )
     signature = slot_signature(state)
@@ -445,7 +465,7 @@ def _render_simple_stage(state: dict) -> None:
                 status_placeholder=status_placeholder,
             )
         else:
-            status_placeholder.caption("訓練後這裡只會出現回歸線與 Cost。")
+            status_placeholder.caption("訓練後這裡只會出現回歸線與訓練／測試 Cost。")
 
     _set_simple_agent_context(
         working,
@@ -472,16 +492,26 @@ def _queue_training(
     anim_key: str,
     model_kind: str,
 ) -> None:
+    split = _train_test_frames(working, state)
+    if split is None:
+        return
+    train_df, test_df = split
     method = str(state["choices"]["scale"])
-    scaler = create_feature_scaler(working, features, method)
-    scaled = apply_feature_scaler(working, scaler)
+    scaler = create_feature_scaler(train_df, features, method)
+    scaled_train = apply_feature_scaler(train_df, scaler)
+    scaled_test = apply_feature_scaler(test_df, scaler)
+    scaled_all = apply_feature_scaler(working, scaler)
     learning_rate = float(state["alpha"])
     epochs = int(state["epochs"])
-    steps = gradient_descent_steps(
-        scaled,
-        working[target],
-        learning_rate=learning_rate,
-        epochs=epochs,
+    steps = attach_test_costs(
+        gradient_descent_steps(
+            scaled_train,
+            train_df[target],
+            learning_rate=learning_rate,
+            epochs=epochs,
+        ),
+        scaled_test,
+        test_df[target],
     )
     st.session_state[anim_key] = {
         "steps": steps,
@@ -493,7 +523,7 @@ def _queue_training(
         "model_kind": model_kind,
         "features": list(features),
         "target": target,
-        "scaled": scaled,
+        "scaled": scaled_all,
     }
     st.session_state.pop(result_key, None)
 
@@ -526,6 +556,7 @@ def _run_simple_training(
             weights=step.weights,
             intercept=step.intercept,
             cost=step.cost,
+            test_cost=step.test_cost,
         )
         _render_simple_step_plot(
             working,
@@ -550,6 +581,7 @@ def _run_simple_training(
         scaler=scaler,
         training_cost=float(final_step.cost),
         data_source=str(anim["source_label"]),
+        test_cost=final_step.test_cost,
     )
     st.session_state[result_key] = {
         "signature": anim["signature"],
@@ -597,6 +629,7 @@ def _show_simple_result(
             weights=artifact.weights,
             intercept=float(artifact.intercept),
             cost=float(artifact.training_cost),
+            test_cost=artifact.test_cost,
         )
     )
 
@@ -622,7 +655,7 @@ def _render_multiple_stage(state: dict) -> None:
     quiz_unlocked = multi_quiz.both_quiz_correct(purpose_choice, weights_choice)
     scale_errors = scale_method_errors(
         state["choices"].get("scale"),
-        working,
+        _scale_check_frame(working, state),
         selected_features,
     )
     signature = slot_signature(state)
@@ -733,10 +766,11 @@ def _render_multiple_stage(state: dict) -> None:
                     weights=artifact.weights,
                     intercept=float(artifact.intercept),
                     cost=float(artifact.training_cost),
+                    test_cost=artifact.test_cost,
                 )
             )
         else:
-            status_placeholder.caption("訓練後這裡只會出現預測對照與 Cost。")
+            status_placeholder.caption("訓練後這裡只會出現預測對照與訓練／測試 Cost。")
 
     _set_multiple_agent_context(
         working,
@@ -780,6 +814,7 @@ def _run_multiple_training(
             weights=step.weights,
             intercept=step.intercept,
             cost=step.cost,
+            test_cost=step.test_cost,
         )
         prediction = predict_with_parameters(scaled, step.weights, step.intercept)
         _render_actual_prediction_plot(working[target], prediction, target, pred_placeholder)
@@ -798,6 +833,7 @@ def _run_multiple_training(
         scaler=scaler,
         training_cost=float(final_step.cost),
         data_source=str(anim["source_label"]),
+        test_cost=final_step.test_cost,
     )
     st.session_state[result_key] = {
         "signature": anim["signature"],
@@ -838,10 +874,20 @@ def _render_simple_step_plot(
 
 def _render_cost_history_plot(steps: list[GradientDescentStep], placeholder) -> None:
     fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
-    ax.plot([step.iteration for step in steps], [step.cost for step in steps], color="orange")
+    iterations = [step.iteration for step in steps]
+    ax.plot(iterations, [step.cost for step in steps], color="orange", label="訓練 Cost")
+    test_costs = [step.test_cost for step in steps if step.test_cost is not None]
+    if len(test_costs) == len(steps):
+        ax.plot(
+            iterations,
+            test_costs,
+            color="tab:blue",
+            label="測試 Cost",
+        )
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Cost J")
     ax.set_title("Cost vs Iteration")
+    ax.legend()
     placeholder.pyplot(fig, clear_figure=True)
     plt.close(fig)
 
@@ -913,7 +959,7 @@ def _set_simple_agent_context(
             target=target,
             learning_rate=state["alpha"],
             epochs=state["epochs"],
-            row_count=len(working),
+            row_count=_train_row_count(working, state),
             artifact=artifact,
             prompt_train=quiz_unlocked and slots_are_complete(state),
         )
@@ -972,7 +1018,7 @@ def _set_multiple_agent_context(
             target=target,
             learning_rate=state["alpha"],
             epochs=state["epochs"],
-            row_count=len(working),
+            row_count=_train_row_count(working, state),
             artifact=artifact,
             prompt_train=quiz_unlocked and slots_are_complete(state),
         )
@@ -988,7 +1034,12 @@ def _artifact_note(artifact: LinearModelArtifact | None) -> str:
         return "此學習階段目前沒有訓練結果。"
     return (
         f"此學習階段有訓練結果：B={artifact.intercept:g}，"
-        f"J={artifact.training_cost:g}。"
+        f"訓練 J={artifact.training_cost:g}"
+        + (
+            f"，測試 J={artifact.test_cost:g}。"
+            if artifact.test_cost is not None
+            else "。"
+        )
     )
 
 

@@ -31,6 +31,9 @@ def test_linear_regression_page_uses_decision_slots_not_old_skeleton() -> None:
     assert "檢視中" not in src
     assert "render_dataset_metrics" not in src
     assert "DATA_PREVIEW_ROWS" in src
+    assert "st.columns(6)" in src
+    assert "split_frame_by_train_pct" in src
+    assert "test_cost" in src
 
 
 def test_workflow_ui_no_longer_owns_linear_regression_page() -> None:

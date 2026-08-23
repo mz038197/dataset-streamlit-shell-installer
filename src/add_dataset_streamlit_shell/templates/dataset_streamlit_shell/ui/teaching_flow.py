@@ -135,15 +135,18 @@ def live_fit_caption(
     weights: Iterable[float],
     intercept: float,
     cost: float,
+    test_cost: float | None = None,
 ) -> str:
     weight_list = list(weights)
     if len(weight_list) == 1:
         weight_part = f"W = {weight_list[0]:.4f}"
     else:
         weight_part = "W = [" + ", ".join(f"{w:.3f}" for w in weight_list) + "]"
+    train_label = "訓練 Cost J" if test_cost is not None else "Cost J"
+    test_part = f"，測試 Cost J = {test_cost:.4f}" if test_cost is not None else ""
     return (
         f"Iteration {iteration:,} / {total_iterations:,}，"
-        f"{weight_part}，B = {intercept:.4f}，Cost J = {cost:.4f}"
+        f"{weight_part}，B = {intercept:.4f}，{train_label} = {cost:.4f}{test_part}"
     )
 
 

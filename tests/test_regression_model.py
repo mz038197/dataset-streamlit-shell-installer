@@ -21,6 +21,7 @@ from dataset_streamlit_shell.ml.regression import (
     LinearModelArtifact,
     apply_feature_scaler,
     apply_standard_scaler,
+    attach_test_costs,
     build_regression_agent_context,
     compute_cost_j,
     create_feature_scaler,
@@ -32,6 +33,9 @@ from dataset_streamlit_shell.ml.regression import (
     predict_with_parameters,
     predict_from_artifact,
     save_model_artifact,
+)
+from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
+    split_frame_by_train_pct,
 )
 
 
@@ -275,7 +279,7 @@ def test_build_regression_agent_context_includes_current_settings() -> None:
     assert "餐廳獲利_萬美元" in context
     assert "learning rate α：0.01" in context
     assert "epoch：1500" in context
-    assert "最後 Cost J：4.2" in context
+    assert "最後訓練 Cost J：4.2" in context
     assert "weights：城市人口_萬人=1.25" in context
 
     locked = build_regression_agent_context(
@@ -292,3 +296,32 @@ def test_build_regression_agent_context_includes_current_settings() -> None:
     assert "開始訓練" in locked
     assert "尚未解鎖" in locked
     assert "請引導學生先按「開始訓練」" not in locked
+
+
+def test_scaler_fits_training_rows_not_held_out() -> None:
+    frame = pd.DataFrame(
+        {
+            "x": [0.0, 10.0, 20.0, 30.0, 100.0],
+            "y": [0.0, 1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    train, test = split_frame_by_train_pct(frame, 80)
+    assert len(train) == 4
+    assert len(test) == 1
+    scaler = create_feature_scaler(train, ["x"], "zscore")
+    assert scaler["mean"]["x"] == pytest.approx(float(train["x"].mean()))
+    assert scaler["mean"]["x"] != pytest.approx(float(frame["x"].mean()))
+
+
+def test_attach_test_costs_uses_held_out_rows() -> None:
+    train = pd.DataFrame({"x": [0.0, 1.0, 2.0, 3.0], "y": [0.0, 2.0, 4.0, 6.0]})
+    test = pd.DataFrame({"x": [4.0], "y": [100.0]})
+    steps = gradient_descent_steps(train[["x"]], train["y"], learning_rate=0.1, epochs=2)
+    annotated = attach_test_costs(steps, test[["x"]], test["y"])
+    last = annotated[-1]
+    expected = compute_cost_j(
+        test["y"],
+        predict_with_parameters(test[["x"]], last.weights, last.intercept),
+    )
+    assert last.test_cost == pytest.approx(expected)
+    assert last.test_cost != pytest.approx(last.cost)

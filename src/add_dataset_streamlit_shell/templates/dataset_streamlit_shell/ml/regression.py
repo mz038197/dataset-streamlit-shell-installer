@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -38,6 +38,7 @@ class LinearModelArtifact:
     scaler: dict[str, Any] | None
     training_cost: float
     data_source: str
+    test_cost: float | None = None
     schema_version: int = 1
     created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
@@ -48,6 +49,7 @@ class GradientDescentStep:
     weights: list[float]
     intercept: float
     cost: float
+    test_cost: float | None = None
     prev_weights: list[float] | None = None
     prev_intercept: float | None = None
     prev_cost: float | None = None
@@ -141,6 +143,20 @@ def gradient_descent_steps(
             )
         )
     return steps
+
+
+def attach_test_costs(
+    steps: list[GradientDescentStep],
+    test_features: pd.DataFrame,
+    test_target: pd.Series,
+) -> list[GradientDescentStep]:
+    annotated: list[GradientDescentStep] = []
+    for step in steps:
+        prediction = predict_with_parameters(test_features, step.weights, step.intercept)
+        annotated.append(
+            replace(step, test_cost=compute_cost_j(test_target, prediction))
+        )
+    return annotated
 
 
 def _gradient_step_snapshot(
@@ -341,6 +357,9 @@ def load_model_artifact(path: Path) -> LinearModelArtifact:
         scaler=payload.get("scaler"),
         training_cost=float(payload["training_cost"]),
         data_source=str(payload["data_source"]),
+        test_cost=(
+            float(payload["test_cost"]) if payload.get("test_cost") is not None else None
+        ),
         schema_version=int(payload.get("schema_version", 1)),
         created_at=str(payload["created_at"]),
     )
@@ -409,7 +428,13 @@ def build_regression_agent_context(
         parts.extend(
             [
                 f"最後 intercept/B：{artifact.intercept:g}。",
-                f"最後 Cost J：{artifact.training_cost:g}。",
+                f"最後訓練 Cost J：{artifact.training_cost:g}。",
+            ]
+        )
+        if artifact.test_cost is not None:
+            parts.append(f"最後測試 Cost J：{artifact.test_cost:g}。")
+        parts.extend(
+            [
                 f"weights：{weights}。",
             ]
         )

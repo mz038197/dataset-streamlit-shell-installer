@@ -74,6 +74,17 @@ def test_live_fit_caption_reports_iteration_and_cost() -> None:
     assert "0.2500" in caption
     assert "-1.5000" in caption
     assert "3.1416" in caption
+    assert "測試 Cost" not in caption
+    with_test = live_fit_caption(
+        iteration=12,
+        total_iterations=100,
+        weights=[0.25],
+        intercept=-1.5,
+        cost=3.14159,
+        test_cost=8.5,
+    )
+    assert "訓練 Cost J = 3.1416" in with_test
+    assert "測試 Cost J = 8.5000" in with_test
 
 
 def test_training_flow_state_marks_model_hot_then_output_done() -> None:

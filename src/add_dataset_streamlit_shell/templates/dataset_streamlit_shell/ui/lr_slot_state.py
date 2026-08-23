@@ -10,9 +10,10 @@ STAGE_SIMPLE = "simple"
 STAGE_MULTIPLE = "multiple"
 STAGES = (STAGE_SIMPLE, STAGE_MULTIPLE)
 
-SLOT_IDS = ("data", "scale", "linear", "loss", "opt")
+SLOT_IDS = ("data", "split", "scale", "linear", "loss", "opt")
 SLOT_TITLES = {
     "data": "輸入資料",
+    "split": "訓練／測試切分",
     "scale": "特徵縮放",
     "linear": "線性層",
     "loss": "損失函數",
@@ -64,6 +65,9 @@ ALPHA_MIN = 0.0001
 ALPHA_MAX = 1.0
 EPOCHS_MIN = 1
 EPOCHS_MAX = 5000
+TRAIN_PCT_MIN = 1
+TRAIN_PCT_MAX = 99
+SPLIT_RANDOM_STATE = 42
 
 SCALE_INSPECT = {
     SCALE_MAXDIV: {
@@ -115,6 +119,7 @@ def default_slot_state(stage: str) -> dict[str, Any]:
     return {
         "choices": {
             "data": LOCKED_DATA[stage],
+            "split": None,
             "scale": SCALE_ZSCORE,
             "linear": LINEAR_DENSE1,
             "loss": LOSS_MSE,
@@ -133,6 +138,45 @@ def _clamp_alpha(value: Any, fallback: float | None) -> float | None:
     return max(ALPHA_MIN, min(ALPHA_MAX, parsed))
 
 
+def parse_train_pct(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < TRAIN_PCT_MIN or parsed > TRAIN_PCT_MAX:
+        return None
+    return parsed
+
+
+def train_test_row_counts(row_count: int, train_pct: int) -> tuple[int, int]:
+    if row_count < 2:
+        return row_count, 0
+    train_n = max(1, min(row_count - 1, round(row_count * train_pct / 100)))
+    return train_n, row_count - train_n
+
+
+def split_frame_by_train_pct(
+    frame: Any,
+    train_pct: int,
+    *,
+    random_state: int = SPLIT_RANDOM_STATE,
+) -> tuple[Any, Any]:
+    from sklearn.model_selection import train_test_split
+
+    train_n, _ = train_test_row_counts(len(frame), int(train_pct))
+    train_df, test_df = train_test_split(
+        frame,
+        train_size=train_n,
+        random_state=random_state,
+        shuffle=True,
+    )
+    return train_df.reset_index(drop=True), test_df.reset_index(drop=True)
+
+
 def _clamp_epochs(value: Any, fallback: int | None) -> int | None:
     try:
         parsed = int(value)
@@ -146,6 +190,10 @@ def normalize_slot_state(raw: dict[str, Any] | None, *, stage: str) -> dict[str,
     if not isinstance(raw, dict):
         return base
     incoming = raw.get("choices") if isinstance(raw.get("choices"), dict) else {}
+
+    split = parse_train_pct(incoming.get("split"))
+    if split is not None:
+        base["choices"]["split"] = split
 
     scale = incoming.get("scale")
     if scale in SCALE_METHODS:
@@ -171,7 +219,7 @@ def apply_slot_write(
     *,
     stage: str,
 ) -> dict[str, Any]:
-    """套用 Agent 寫入：可改特徵縮放與 α／epochs；鎖定槽種類拒改。"""
+    """套用 Agent 寫入：可改切分占比、特徵縮放與 α／epochs；鎖定槽種類拒改。"""
     current = normalize_slot_state(previous, stage=stage)
     raw = incoming if isinstance(incoming, dict) else {}
     choices = raw.get("choices") if isinstance(raw.get("choices"), dict) else {}
@@ -188,6 +236,13 @@ def apply_slot_write(
             next_state["choices"]["data"] = locked_data
         elif choices["data"] is not None:
             next_state["choices"]["data"] = current["choices"]["data"]
+
+    if "split" in choices:
+        parsed = parse_train_pct(choices["split"])
+        if parsed is not None:
+            next_state["choices"]["split"] = parsed
+        elif choices["split"] is not None:
+            next_state["choices"]["split"] = current["choices"]["split"]
 
     if "scale" in choices:
         if choices["scale"] in SCALE_METHODS:
@@ -227,6 +282,7 @@ def slot_signature(state: dict[str, Any]) -> tuple[Any, ...]:
     choices = state.get("choices") if isinstance(state.get("choices"), dict) else {}
     return (
         choices.get("data"),
+        choices.get("split"),
         choices.get("scale"),
         choices.get("linear"),
         choices.get("loss"),
@@ -243,6 +299,8 @@ def slot_label(slot_id: str, state: dict[str, Any], stage: str) -> str:
         return CHOICE_UNSET
     if slot_id == "data":
         return DATA_LABELS.get(str(choice), str(choice))
+    if slot_id == "split":
+        return f"訓練 {int(choice)}%"
     if slot_id == "scale":
         return SCALE_LABELS.get(str(choice), str(choice))
     if slot_id == "linear":
@@ -322,6 +380,18 @@ def slot_inspect_rows(
         rows.append(
             ("可討論", "正規化、最小-最大正規化、平均值正規化、Z分數正規化")
         )
+        return rows
+    if slot_id == "split":
+        pct = int(choice)
+        rows = [
+            ("目前選擇", f"訓練 {pct}%"),
+            ("測試", f"{100 - pct}%"),
+        ]
+        if row_count is not None:
+            train_n, test_n = train_test_row_counts(int(row_count), pct)
+            rows.append(("訓練列數", str(train_n)))
+            rows.append(("測試列數", str(test_n)))
+        rows.append(("可否改", "請 Agent 寫訓練占比 1–99"))
         return rows
     if slot_id == "linear":
         n_features = 1 if stage == STAGE_SIMPLE else 4
@@ -519,20 +589,23 @@ def lr_host_context_fragment(
 ) -> str:
     return (
         "【線性回歸頁】主教學欄是決策槽列，不是類神經網路 form。"
-        "對學生講五個決策槽：輸入資料、特徵縮放、線性層、損失函數、優化器。"
-        "輸入資料進頁即完成；其餘四個由你寫入決策槽狀態，不要叫學生自己選。"
+        "對學生講六個決策槽：輸入資料、訓練／測試切分、特徵縮放、線性層、損失函數、優化器。"
+        "輸入資料進頁即完成；其餘五個由你寫入決策槽狀態，不要叫學生自己選。"
         "主教學欄沒有下拉選單，也不要用打勾符號標完成；完成是綠框、第二行目前選擇；點框只看只讀選擇明細。"
         f"決策槽狀態在共享 JSON：{slots_path}，鍵為 simple／multiple 兩學習階段，"
-        "每階段含 choices（data、scale、linear、loss、opt）與 alpha、epochs。"
+        "每階段含 choices（data、split、scale、linear、loss、opt）與 alpha、epochs。"
         "輸入資料進頁即為該階段鎖定值（單變量 restaurant、多變量 housing），載入時也回成該值；"
         "不必為了槽齊而寫 data，寫鎖定值可以，寫其他來源拒絕。"
-        "該階段尚未組過時，scale／linear／loss／opt 與 alpha、epochs 為尚未選擇。"
+        "該階段尚未組過時，split／scale／linear／loss／opt 與 alpha、epochs 為尚未選擇。"
         "若使用者要求組一個線性回歸，請 read_file 後以 edit_file／write_file 寫入該階段預設："
         "scale=zscore、linear=dense1、loss=mse、opt=sgd，"
         "以及該階段預設 alpha／epochs（單變量 0.01／1500，多變量 0.1／1000）。"
+        "組模型預設不要寫 split；訓練／測試切分必須另寫 choices.split"
+        "（訓練集整數占比 1–99，測試為其餘；0 與 100 拒絕）。"
         "組模型只寫決策槽狀態，不要同時寫訓練請求，也不要自行開始訓練。"
-        "可改的只有 scale（maxdiv／minmax／mean／zscore）與 alpha、epochs。"
+        "可改的有 split（1–99）與 scale（maxdiv／minmax／mean／zscore）與 alpha、epochs。"
         "data／linear／loss／opt 是鎖定槽，種類拒絕改成其他值。"
+        "頁上沒有切分旋鈕或％輸入框。"
         "write_file 時必須保留另一學習階段的鍵，不要清掉另一側。"
         "若要讓主教學欄播放與「開始訓練」相同的動畫，另寫 "
         f'{request_path}，內容為 {{"requested": true}}。'

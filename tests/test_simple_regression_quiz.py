@@ -15,6 +15,7 @@ if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
 from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
+    apply_slot_write,
     can_write_train_request,
     default_slot_state,
     empty_slot_state,
@@ -142,7 +143,11 @@ def test_hint_cooldown_and_appendix_no_answer_leak() -> None:
 
 
 def test_unlocked_quiz_still_cannot_write_train_request_when_slots_empty() -> None:
-    assembled = default_slot_state("simple")
+    assembled = apply_slot_write(
+        default_slot_state("simple"),
+        {"choices": {"split": 80}},
+        stage="simple",
+    )
     assert can_write_train_request(assembled, quiz_unlocked=False) is False
     assert can_write_train_request(empty_slot_state(), quiz_unlocked=True) is False
     assert can_write_train_request(assembled, quiz_unlocked=True) is True
