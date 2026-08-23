@@ -32,6 +32,7 @@ LOSS_MSE = "mse"
 OPT_SGD = "sgd"
 
 CHOICE_UNSET = "尚未選擇"
+DATA_PREVIEW_ROWS = 10
 
 SCALE_LABELS = {
     SCALE_MAXDIV: "正規化",
@@ -92,16 +93,20 @@ SCALE_INSPECT = {
 }
 
 
-def empty_slot_state() -> dict[str, Any]:
+def empty_slot_state(stage: str = STAGE_SIMPLE) -> dict[str, Any]:
+    if stage not in STAGES:
+        raise ValueError(f"unknown stage: {stage}")
     return {
-        "choices": {slot: None for slot in SLOT_IDS},
+        "choices": {
+            slot: LOCKED_DATA[stage] if slot == "data" else None for slot in SLOT_IDS
+        },
         "alpha": None,
         "epochs": None,
     }
 
 
 def empty_workspace_state() -> dict[str, Any]:
-    return {stage: empty_slot_state() for stage in STAGES}
+    return {stage: empty_slot_state(stage) for stage in STAGES}
 
 
 def default_slot_state(stage: str) -> dict[str, Any]:
@@ -137,15 +142,10 @@ def _clamp_epochs(value: Any, fallback: int | None) -> int | None:
 
 
 def normalize_slot_state(raw: dict[str, Any] | None, *, stage: str) -> dict[str, Any]:
-    base = empty_slot_state()
+    base = empty_slot_state(stage)
     if not isinstance(raw, dict):
         return base
     incoming = raw.get("choices") if isinstance(raw.get("choices"), dict) else {}
-    locked_data = LOCKED_DATA[stage]
-
-    data = incoming.get("data")
-    if data == locked_data:
-        base["choices"]["data"] = locked_data
 
     scale = incoming.get("scale")
     if scale in SCALE_METHODS:
@@ -258,6 +258,24 @@ def slot_label(slot_id: str, state: dict[str, Any], stage: str) -> str:
     return str(choice)
 
 
+def slot_is_filled(slot_id: str, state: dict[str, Any]) -> bool:
+    choices = state.get("choices") if isinstance(state.get("choices"), dict) else {}
+    if slot_id == "opt":
+        return (
+            choices.get("opt") is not None
+            and state.get("alpha") is not None
+            and state.get("epochs") is not None
+        )
+    return choices.get(slot_id) is not None
+
+
+def slot_button_label(slot_id: str, state: dict[str, Any], stage: str) -> str:
+    title = SLOT_TITLES[slot_id]
+    if not slot_is_filled(slot_id, state):
+        return title
+    return f"{title}\n{slot_label(slot_id, state, stage)}"
+
+
 def scale_inspect(method: str | None) -> dict[str, str]:
     if method not in SCALE_INSPECT:
         return {"formula": "", "range": "", "condition": "", "code": ""}
@@ -269,25 +287,29 @@ def slot_inspect_rows(
     state: dict[str, Any],
     *,
     stage: str,
+    row_count: int | None = None,
 ) -> list[tuple[str, str]]:
     choices = state.get("choices") if isinstance(state.get("choices"), dict) else {}
     choice = choices.get(slot_id)
-    if choice is None:
-        return [("目前選擇", "尚未選擇。跟右側 Agent 說你要哪一個。")]
     if slot_id == "data":
         if stage == STAGE_SIMPLE:
-            return [
+            rows = [
                 ("目前選擇", DATA_LABELS[DATA_RESTAURANT]),
                 ("x", "城市人口_萬人"),
                 ("y", "餐廳獲利_萬美元"),
-                ("可否改", "本頁鎖內建資料"),
             ]
-        return [
-            ("目前選擇", DATA_LABELS[DATA_HOUSING]),
-            ("x", "面積_平方英尺、房間數、樓層數、屋齡_年"),
-            ("y", "房價_千美元"),
-            ("可否改", "本頁鎖內建資料"),
-        ]
+        else:
+            rows = [
+                ("目前選擇", DATA_LABELS[DATA_HOUSING]),
+                ("x", "面積_平方英尺、房間數、樓層數、屋齡_年"),
+                ("y", "房價_千美元"),
+            ]
+        if row_count is not None:
+            rows.append(("列數", str(row_count)))
+        rows.append(("可否改", "本頁鎖內建資料"))
+        return rows
+    if choice is None:
+        return [("目前選擇", "尚未選擇。跟右側 Agent 說你要哪一個。")]
     if slot_id == "scale":
         info = scale_inspect(str(choice))
         rows = [
@@ -499,9 +521,11 @@ def lr_host_context_fragment(
         "【線性回歸頁】主教學欄是決策槽列，不是類神經網路 form。"
         f"決策槽狀態在共享 JSON：{slots_path}，鍵為 simple／multiple 兩學習階段，"
         "每階段含 choices（data、scale、linear、loss、opt）與 alpha、epochs。"
-        "進頁或該階段尚未組過時全是 null（尚未選擇）。"
+        "輸入資料進頁即為該階段鎖定值（單變量 restaurant、多變量 housing），載入時也回成該值；"
+        "不必為了槽齊而寫 data，寫鎖定值可以，寫其他來源拒絕。"
+        "該階段尚未組過時，scale／linear／loss／opt 與 alpha、epochs 為尚未選擇。"
         "若使用者要求組一個線性回歸，請 read_file 後以 edit_file／write_file 寫入該階段預設："
-        "scale=zscore、data 單變量 restaurant／多變量 housing、linear=dense1、loss=mse、opt=sgd，"
+        "scale=zscore、linear=dense1、loss=mse、opt=sgd，"
         "以及該階段預設 alpha／epochs（單變量 0.01／1500，多變量 0.1／1000）。"
         "組模型只寫決策槽狀態，不要同時寫訓練請求，也不要自行開始訓練。"
         "可改的只有 scale（maxdiv／minmax／mean／zscore）與 alpha、epochs。"

@@ -15,7 +15,7 @@ UI = (
 def test_linear_regression_page_uses_decision_slots_not_old_skeleton() -> None:
     src = (UI / "lr_ui.py").read_text(encoding="utf-8")
     assert "決策槽" in src
-    assert "CHOICE_UNSET" in src
+    assert "slot_button_label" in src
     assert "模型程式碼預覽" in src
     assert "after_reply=" in src
     assert "consume_train_request" in src
@@ -28,6 +28,9 @@ def test_linear_regression_page_uses_decision_slots_not_old_skeleton() -> None:
     assert "micro_stepper_html" not in src
     assert "保存模型 JSON" not in src
     assert "手動預測" not in src
+    assert "檢視中" not in src
+    assert "render_dataset_metrics" not in src
+    assert "DATA_PREVIEW_ROWS" in src
 
 
 def test_workflow_ui_no_longer_owns_linear_regression_page() -> None:

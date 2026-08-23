@@ -10,16 +10,17 @@ Status: ready-for-agent
 
 ## Solution
 
-同一頁改成決策槽列：進頁尚未選擇，請 Agent 寫入決策槽狀態（預設 Z分數正規化、MSE、SGD）。點槽看只讀選擇明細（特徵縮放帶公式）。槽齊且訓練前預測過關後，學生或 Agent 可開訓；畫面只播回歸線與 Cost。改該階段選擇就清掉該階段訓練結果。
+同一頁改成決策槽列：輸入資料進頁即為該階段內建表；其餘決策槽尚未選擇，請 Agent 寫入決策槽狀態（Z分數正規化、MSE、SGD）。完成綠框、未完成紅框，框上不寫尚未選擇。點槽看只讀選擇明細（輸入資料含列數與前 10 列；特徵縮放帶公式）。槽齊且訓練前預測過關後，學生或 Agent 可開訓；畫面只播回歸線與 Cost。改該階段選擇就清掉該階段訓練結果。
 
 ## User Stories
 
 1. As a 學生, I want 側欄仍叫線性回歸, so that 我不用找新頁
-2. As a 學生, I want 進頁時五個決策槽都是尚未選擇, so that 我知道要先跟 Agent 組模型
+2. As a 學生, I want 進頁時輸入資料已是該階段內建表、其餘四槽未完成, so that 我知道表不用選、模型還要組
 3. As a 學生, I want 看到輸入資料、特徵縮放、線性層、損失函數、優化器五格, so that 我知道這頁要決定什麼
-4. As a 學生, I want 決策槽框上看到目前選擇, so that 不用點開就知道 Agent 寫了什麼
-5. As a 學生, I want 尚未選擇的槽看起來與已選不同, so that 我看得出還沒組完
+4. As a 學生, I want 完成的決策槽框上看到目前選擇, so that 不用點開就知道 Agent 寫了什麼
+5. As a 學生, I want 完成用綠框、未完成用紅框、框上不寫尚未選擇, so that 狀態只靠顏色
 6. As a 學生, I want 點決策槽展開選擇明細, so that 我能對目前選擇與公式
+6a. As a 學生, I want 輸入資料的選擇明細含列數與訓練欄前 10 列, so that 我不必在頁頂另看 metric
 7. As a 學生, I want 再點同一槽收起選擇明細, so that 左欄不會一直佔著
 8. As a 學生, I want 特徵縮放明細標出公式、範圍與條件, so that 我能對課堂四種方法
 9. As a 學生, I want 明細只讀、沒有下拉, so that 改選擇一定走右欄
@@ -33,7 +34,7 @@ Status: ready-for-agent
 17. As a 學生, I want 單變量輸入資料鎖餐廳獲利欄位, so that 我不會去選欄
 18. As a 學生, I want 多變量輸入資料鎖房價四特徵, so that 線性層維度跟著變成 4
 19. As a 學生, I want 切學習階段後另一側的決策槽狀態與訓練結果還在, so that 兩階段可以對照
-20. As a 學生, I want 尚未組過的學習階段仍是尚未選擇, so that 不會偷帶另一階段的選擇
+20. As a 學生, I want 尚未組過的學習階段只預填輸入資料、其餘仍未完成, so that 不會偷帶另一階段的縮放與 α
 21. As a 學生, I want 特徵縮放同一選擇套用該階段全部訓練特徵, so that 多變量不必每欄各選一種
 22. As a 學生, I want 模型程式碼預覽跟決策槽狀態一致, so that 我看到的 Sequential 就是框上的選擇
 23. As a 學生, I want 程式碼預覽只讀, so that 我不會以為改字就能跑
@@ -82,7 +83,8 @@ opt = sgd
 alpha, epochs 屬 opt
 ```
 
-- 進頁或該階段尚未組過：全部尚未選擇。Agent「組模型」寫入鎖定槽固定值＋ Z分數正規化＋預設 α／epochs。
+- 進頁：輸入資料即為該階段內建表（載入舊檔也回填）。其餘尚未選擇。Agent「組模型」寫入 Z分數正規化＋鎖定槽種類＋預設 α／epochs；不必為了槽齊而寫 data。
+- 框上完成綠框、未完成紅框；未完成只留槽名，不用尚未選擇／檢視中。頁頂不掛資料列數 metric。
 - 模型程式碼預覽是決策槽狀態的純函式，與 UI 用同一輸出。
 - 特徵縮放四種在訓練模組用同一 scaler 字典慣例擴充 `method`；`predict_line_on_original_x` 依 method 映回，不假設只有 zscore。
 - 正規化（除以最大）在任一訓練特徵出現負值時驗證失敗，Agent／UI 顯示原因，不開訓。

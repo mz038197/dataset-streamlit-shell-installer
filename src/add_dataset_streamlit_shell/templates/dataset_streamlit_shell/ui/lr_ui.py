@@ -32,11 +32,10 @@ from dataset_streamlit_shell.ui.data_ui import (
     _display_path,
     invoke_data_agent,
     render_chat_panel,
-    render_dataset_metrics,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.lr_slot_state import (
-    CHOICE_UNSET,
+    DATA_PREVIEW_ROWS,
     SLOT_IDS,
     SLOT_TITLES,
     STAGE_MULTIPLE,
@@ -52,8 +51,9 @@ from dataset_streamlit_shell.ui.lr_slot_state import (
     scale_method_errors,
     should_rerun_after_lr_chat,
     slots_file_mtime,
+    slot_button_label,
     slot_inspect_rows,
-    slot_label,
+    slot_is_filled,
     slot_signature,
     slots_are_complete,
     train_request_is_set,
@@ -120,6 +120,12 @@ DECISION_SLOT_CSS = """
   border-radius: 6px;
   background: #0b0d12;
   font: 15px/1.45 "Cambria Math", "Times New Roman", serif;
+}
+[class*="st-key-lr_slotbox_"][class*="_done"] button {
+  border: 2px solid #3dd68c !important;
+}
+[class*="st-key-lr_slotbox_"][class*="_todo"] button {
+  border: 2px solid #e85d5d !important;
 }
 </style>
 """
@@ -198,28 +204,36 @@ def _render_slot_row(state: dict, *, stage: str) -> str | None:
     current = st.session_state.get(inspect_key)
     cols = st.columns(5)
     for column, slot_id in zip(cols, SLOT_IDS):
-        title = SLOT_TITLES[slot_id]
-        choice = slot_label(slot_id, state, stage)
-        open_mark = " · 檢視中" if current == slot_id else ""
-        unset = choice == CHOICE_UNSET
+        filled = slot_is_filled(slot_id, state)
+        status = "done" if filled else "todo"
         with column:
-            if st.button(
-                f"{title}\n{choice}{open_mark}",
-                key=f"lr_slot_{stage}_{slot_id}",
-                width="stretch",
-                type="secondary" if unset else "primary",
-                help="點一下看選擇明細，再點收起。不能在這裡改選擇。",
-            ):
-                st.session_state[inspect_key] = None if current == slot_id else slot_id
-                st.rerun()
+            with st.container(key=f"lr_slotbox_{stage}_{slot_id}_{status}"):
+                if st.button(
+                    slot_button_label(slot_id, state, stage),
+                    key=f"lr_slot_{stage}_{slot_id}",
+                    width="stretch",
+                    type="secondary",
+                    help="點一下看選擇明細，再點收起。不能在這裡改選擇。",
+                ):
+                    st.session_state[inspect_key] = None if current == slot_id else slot_id
+                    st.rerun()
     return st.session_state.get(inspect_key)
 
 
-def _render_inspect(state: dict, *, stage: str, open_slot: str | None) -> None:
+def _render_inspect(
+    state: dict,
+    *,
+    stage: str,
+    open_slot: str | None,
+    frame: pd.DataFrame | None = None,
+    features: list[str] | None = None,
+    target: str | None = None,
+) -> None:
     if not open_slot:
         st.caption("點上面的框看目前選擇。只讀；要換縮放或 α／epochs，跟資料 Agent 欄說。")
         return
-    rows = slot_inspect_rows(open_slot, state, stage=stage)
+    row_count = len(frame) if frame is not None else None
+    rows = slot_inspect_rows(open_slot, state, stage=stage, row_count=row_count)
     items = []
     for key, value in rows:
         cls = ' class="formula"' if key == "公式" else ""
@@ -228,6 +242,16 @@ def _render_inspect(state: dict, *, stage: str, open_slot: str | None) -> None:
         f'<aside class="lr-inspect"><h3>{SLOT_TITLES[open_slot]}</h3>'
         f"<dl>{''.join(items)}</dl></aside>",
         unsafe_allow_html=True,
+    )
+    if open_slot != "data" or frame is None or not features or not target:
+        return
+    preview_cols = [column for column in [*features, target] if column in frame.columns]
+    if not preview_cols:
+        return
+    st.dataframe(
+        frame[preview_cols].head(DATA_PREVIEW_ROWS),
+        width="stretch",
+        hide_index=True,
     )
 
 
@@ -275,7 +299,6 @@ def _maybe_start_from_request(
 def _render_simple_stage(state: dict) -> None:
     df = pd.read_csv(RESTAURANT_PROFIT_PATH)
     source_label = SIMPLE_SOURCE_LABEL
-    render_dataset_metrics(df)
     feature = SIMPLE_REGRESSION_FEATURE
     target = SIMPLE_REGRESSION_TARGET
     if feature not in df.columns or target not in df.columns:
@@ -308,7 +331,14 @@ def _render_simple_stage(state: dict) -> None:
         artifact = stored["artifact"]
 
     open_slot = _render_slot_row(state, stage=STAGE_SIMPLE)
-    _render_inspect(state, stage=STAGE_SIMPLE, open_slot=open_slot)
+    _render_inspect(
+        state,
+        stage=STAGE_SIMPLE,
+        open_slot=open_slot,
+        frame=working,
+        features=[feature],
+        target=target,
+    )
     _render_code_preview(state, stage=STAGE_SIMPLE)
     quiz_unlocked = _render_simple_quiz(
         working,
@@ -563,7 +593,6 @@ def _show_simple_result(
 def _render_multiple_stage(state: dict) -> None:
     df = pd.read_csv(HOUSE_PRICES_PATH)
     source_label = MULTIPLE_SOURCE_LABEL
-    render_dataset_metrics(df)
     selected_features = list(MULTIPLE_REGRESSION_FEATURES)
     target = MULTIPLE_REGRESSION_TARGET
     missing = [column for column in selected_features + [target] if column not in df.columns]
@@ -592,7 +621,14 @@ def _render_multiple_stage(state: dict) -> None:
         artifact = stored["artifact"]
 
     open_slot = _render_slot_row(state, stage=STAGE_MULTIPLE)
-    _render_inspect(state, stage=STAGE_MULTIPLE, open_slot=open_slot)
+    _render_inspect(
+        state,
+        stage=STAGE_MULTIPLE,
+        open_slot=open_slot,
+        frame=working,
+        features=selected_features,
+        target=target,
+    )
     _render_code_preview(state, stage=STAGE_MULTIPLE)
     quiz_unlocked = _render_multiple_quiz(
         features=selected_features,

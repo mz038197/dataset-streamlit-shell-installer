@@ -36,10 +36,13 @@ from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
     lr_slots_path,
     lr_train_request_path,
     model_code_preview,
+    normalize_slot_state,
     save_workspace_state,
     scale_inspect,
     scale_method_errors,
+    slot_button_label,
     slot_inspect_rows,
+    slot_is_filled,
     slot_label,
     slots_are_complete,
     slot_signature,
@@ -48,21 +51,22 @@ from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
 )
 
 
-def test_empty_slot_state_is_unset_and_incomplete() -> None:
-    state = empty_slot_state()
-    assert state["choices"] == {
-        "data": None,
-        "scale": None,
-        "linear": None,
-        "loss": None,
-        "opt": None,
-    }
-    assert state["alpha"] is None
-    assert state["epochs"] is None
-    assert slots_are_complete(state) is False
-    assert slot_label("data", state, STAGE_SIMPLE) == CHOICE_UNSET
-    assert slot_label("scale", state, STAGE_SIMPLE) == CHOICE_UNSET
-    assert slot_label("opt", state, STAGE_SIMPLE) == CHOICE_UNSET
+def test_empty_slot_state_locks_data_and_leaves_other_slots_unset() -> None:
+    simple = empty_slot_state(STAGE_SIMPLE)
+    multiple = empty_slot_state(STAGE_MULTIPLE)
+    assert simple["choices"]["data"] == "restaurant"
+    assert multiple["choices"]["data"] == "housing"
+    assert simple["choices"]["scale"] is None
+    assert simple["choices"]["linear"] is None
+    assert simple["choices"]["loss"] is None
+    assert simple["choices"]["opt"] is None
+    assert simple["alpha"] is None
+    assert simple["epochs"] is None
+    assert slots_are_complete(simple) is False
+    assert slot_label("data", simple, STAGE_SIMPLE) == "內建餐廳獲利"
+    assert slot_label("scale", simple, STAGE_SIMPLE) == CHOICE_UNSET
+    assert slot_is_filled("data", simple) is True
+    assert slot_is_filled("scale", simple) is False
 
 
 def test_default_slot_state_assembles_zscore_and_locked_kinds() -> None:
@@ -255,3 +259,102 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "鎖定槽" in text
     assert "nn_form.json" in text
     assert "代填" in text
+    assert "全是 null" not in text
+    assert "輸入資料進頁即為該階段鎖定值" in text
+    assert "不必為了槽齊而寫 data" in text
+
+
+def test_slot_button_label_shows_current_choice_only_when_complete() -> None:
+    empty = empty_slot_state(STAGE_SIMPLE)
+    assert slot_button_label("data", empty, STAGE_SIMPLE) == "輸入資料\n內建餐廳獲利"
+    assert slot_button_label("scale", empty, STAGE_SIMPLE) == "特徵縮放"
+    assert "尚未選擇" not in slot_button_label("scale", empty, STAGE_SIMPLE)
+    assembled = default_slot_state(STAGE_SIMPLE)
+    assert slot_button_label("scale", assembled, STAGE_SIMPLE) == "特徵縮放\nZ分數正規化"
+    assert "α=0.01" in slot_button_label("opt", assembled, STAGE_SIMPLE)
+
+
+def test_opt_is_incomplete_until_alpha_and_epochs_are_written() -> None:
+    state = empty_slot_state(STAGE_SIMPLE)
+    state["choices"]["opt"] = "sgd"
+    assert slot_is_filled("opt", state) is False
+    assert slot_button_label("opt", state, STAGE_SIMPLE) == "優化器"
+    state["alpha"] = 0.01
+    state["epochs"] = 1500
+    assert slot_is_filled("opt", state) is True
+
+
+def test_data_selection_detail_shows_builtin_table_and_row_count_before_assemble() -> None:
+    rows = dict(
+        slot_inspect_rows(
+            "data",
+            empty_slot_state(STAGE_SIMPLE),
+            stage=STAGE_SIMPLE,
+            row_count=97,
+        )
+    )
+    assert rows["目前選擇"] == "內建餐廳獲利"
+    assert rows["列數"] == "97"
+    assert rows["x"] == "城市人口_萬人"
+    assert "尚未選擇" not in rows["目前選擇"]
+    housing = dict(
+        slot_inspect_rows(
+            "data",
+            empty_slot_state(STAGE_MULTIPLE),
+            stage=STAGE_MULTIPLE,
+            row_count=47,
+        )
+    )
+    assert housing["目前選擇"] == "內建房價四特徵"
+    assert housing["列數"] == "47"
+
+
+def test_normalize_backfills_locked_data_when_json_has_null() -> None:
+    raw = {
+        "choices": {
+            "data": None,
+            "scale": None,
+            "linear": None,
+            "loss": None,
+            "opt": None,
+        },
+        "alpha": None,
+        "epochs": None,
+    }
+    simple = normalize_slot_state(raw, stage=STAGE_SIMPLE)
+    multiple = normalize_slot_state(raw, stage=STAGE_MULTIPLE)
+    assert simple["choices"]["data"] == "restaurant"
+    assert multiple["choices"]["data"] == "housing"
+    assert simple["choices"]["scale"] is None
+
+
+def test_load_backfills_data_from_legacy_null_json(tmp_path: Path) -> None:
+    lr_slots_path(tmp_path).write_text(
+        json.dumps(
+            {
+                "simple": {
+                    "choices": {
+                        "data": None,
+                        "scale": None,
+                        "linear": None,
+                        "loss": None,
+                        "opt": None,
+                    }
+                },
+                "multiple": {
+                    "choices": {
+                        "data": None,
+                        "scale": None,
+                        "linear": None,
+                        "loss": None,
+                        "opt": None,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = load_workspace_state(tmp_path)
+    assert loaded[STAGE_SIMPLE]["choices"]["data"] == "restaurant"
+    assert loaded[STAGE_MULTIPLE]["choices"]["data"] == "housing"
+    assert loaded[STAGE_SIMPLE]["choices"]["scale"] is None
