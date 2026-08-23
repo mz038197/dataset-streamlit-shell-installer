@@ -50,7 +50,7 @@ Status: ready-for-agent
 33. As a 學生, I want 槽齊且過關後按開始訓練, so that 我自己也能開訓
 34. As a 學生, I want 跟 Agent 說開始訓練時左欄播同一套動畫, so that 口頭開訓與按鈕沒有兩套結果
 35. As a 學生, I want 訓練中只看到回歸線、Cost 與一行狀態, so that 視線不被表打斷
-36. As a 學生, I want 訓練中決策槽列還在且可點, so that 我仍看得到現在的 α 與縮放
+36. As a 學生, I want 訓練中決策槽列還在、框上仍看得到目前選擇, so that 我不必點開也能對 α 與縮放；動畫播完前決策槽、訓練前預測與資料 Agent 欄凍結
 37. As a 學生, I want 看不到訓練微步驟、梯度演算板、樣本運算表、逐步模式, so that 頁不再是看步驟
 38. As a 學生, I want 看不到三節點 SVG 與目前查看, so that 頂部只有決策槽列
 39. As a 學生, I want 散點用原始單位、線映回原尺度, so that 圖上的人口／房價還認得
@@ -89,7 +89,7 @@ alpha, epochs 屬 opt
 - 特徵縮放四種在訓練模組用同一 scaler 字典慣例擴充 `method`；`predict_line_on_original_x` 依 method 映回，不假設只有 zscore。
 - 正規化（除以最大）在任一訓練特徵出現負值時驗證失敗，Agent／UI 顯示原因，不開訓。
 - 決策槽狀態簽名改變（該階段 choices／α／epochs）即丟掉該階段訓練結果。
-- 訓練動畫抽樣可沿用現有上限思維（長 epochs 抽幀），但畫面不得組微步驟 frame、不得切訓練雙欄。
+- 訓練動畫抽樣可沿用現有上限思維（長 epochs 抽幀），但畫面不得組微步驟 frame、不得切訓練雙欄。播完前只更新回歸線、Cost 與狀態行，不得整頁跟著每一幀重畫；決策槽列可見但不可點，訓練前預測與資料 Agent 欄凍結。
 - 訓練前預測沿用現有兩題與 Agent 提示；解鎖條件接到「可否寫訓練請求／可否按開始訓練」。
 - host 規則用本頁 fragment 講清：組模型只寫決策槽狀態；開訓另寫訓練請求；未齊或未過關不准請求；禁止 exec 訓練；點開的槽寫進當頁 snapshot。
 - 內容區雙欄殼契約不變。Agent 欄寬沿用全站可拖寬度，不為本頁另做預設更寬。

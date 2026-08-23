@@ -293,7 +293,6 @@ def _maybe_start_from_request(
     started = consume_train_request(WORKSPACE_DIR, allowed=allowed)
     if started:
         start()
-        st.rerun()
     elif had_request:
         st.warning("訓練請求已忽略：決策槽未齊、訓練前預測未過關，或縮放條件不成立。")
 
@@ -373,6 +372,8 @@ def _render_simple_stage(state: dict) -> None:
             scale_errors=scale_errors,
             start=_start,
         )
+        anim = st.session_state.get(anim_key)
+        training_active = isinstance(anim, dict) and not anim.get("finished", True)
 
     allowed = can_write_train_request(
         state,
@@ -394,7 +395,7 @@ def _render_simple_stage(state: dict) -> None:
         st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
     if train_clicked and allowed:
         _start()
-        st.rerun()
+        training_active = True
 
     chart_left, chart_right = st.columns(2)
     line_placeholder = chart_left.empty()
@@ -472,7 +473,6 @@ def _queue_training(
     st.session_state[anim_key] = {
         "steps": steps,
         "sampled": _animation_steps(steps),
-        "index": 0,
         "finished": False,
         "signature": slot_signature(state),
         "scaler": scaler,
@@ -506,48 +506,44 @@ def _run_simple_training(
         anim["finished"] = True
         return
 
-    index = min(max(int(anim.get("index", 0)), 0), len(sampled) - 1)
-    step = sampled[index]
-    caption = live_fit_caption(
-        iteration=step.iteration,
-        total_iterations=steps[-1].iteration,
-        weights=step.weights,
-        intercept=step.intercept,
-        cost=step.cost,
-    )
-    _render_simple_step_plot(
-        working,
-        feature,
-        target,
-        step,
-        line_placeholder,
-        scaler=scaler,
-    )
-    history = [item for item in steps if item.iteration <= step.iteration]
-    _render_cost_history_plot(history, cost_placeholder)
-    status_placeholder.caption(caption)
-    if index + 1 >= len(sampled):
-        final_step = steps[-1]
-        artifact = LinearModelArtifact(
-            model_kind="simple_linear_regression",
-            features=[feature],
-            target=target,
-            weights=[float(final_step.weights[0])],
-            intercept=float(final_step.intercept),
-            scaler=scaler,
-            training_cost=float(final_step.cost),
-            data_source=str(anim["source_label"]),
+    for step in sampled:
+        caption = live_fit_caption(
+            iteration=step.iteration,
+            total_iterations=steps[-1].iteration,
+            weights=step.weights,
+            intercept=step.intercept,
+            cost=step.cost,
         )
-        st.session_state[result_key] = {
-            "signature": anim["signature"],
-            "artifact": artifact,
-            "steps": steps,
-        }
-        anim["finished"] = True
-        st.rerun()
-    anim["index"] = index + 1
-    time.sleep(0.015)
-    st.rerun()
+        _render_simple_step_plot(
+            working,
+            feature,
+            target,
+            step,
+            line_placeholder,
+            scaler=scaler,
+        )
+        history = [item for item in steps if item.iteration <= step.iteration]
+        _render_cost_history_plot(history, cost_placeholder)
+        status_placeholder.caption(caption)
+        time.sleep(0.015)
+
+    final_step = steps[-1]
+    artifact = LinearModelArtifact(
+        model_kind="simple_linear_regression",
+        features=[feature],
+        target=target,
+        weights=[float(final_step.weights[0])],
+        intercept=float(final_step.intercept),
+        scaler=scaler,
+        training_cost=float(final_step.cost),
+        data_source=str(anim["source_label"]),
+    )
+    st.session_state[result_key] = {
+        "signature": anim["signature"],
+        "artifact": artifact,
+        "steps": steps,
+    }
+    anim["finished"] = True
 
 
 def _show_simple_result(
@@ -662,6 +658,8 @@ def _render_multiple_stage(state: dict) -> None:
             scale_errors=scale_errors,
             start=_start,
         )
+        anim = st.session_state.get(anim_key)
+        training_active = isinstance(anim, dict) and not anim.get("finished", True)
     allowed = can_write_train_request(
         state,
         quiz_unlocked=quiz_unlocked,
@@ -682,7 +680,7 @@ def _render_multiple_stage(state: dict) -> None:
         st.caption("兩題訓練前預測都答對後，才能開始訓練。卡住時可按各題「Agent 提示」。")
     if train_clicked and allowed:
         _start()
-        st.rerun()
+        training_active = True
 
     chart_left, chart_right = st.columns(2)
     pred_placeholder = chart_left.empty()
@@ -762,42 +760,38 @@ def _run_multiple_training(
         anim["finished"] = True
         return
 
-    index = min(max(int(anim.get("index", 0)), 0), len(sampled) - 1)
-    step = sampled[index]
-    caption = live_fit_caption(
-        iteration=step.iteration,
-        total_iterations=steps[-1].iteration,
-        weights=step.weights,
-        intercept=step.intercept,
-        cost=step.cost,
-    )
-    prediction = predict_with_parameters(scaled, step.weights, step.intercept)
-    _render_actual_prediction_plot(working[target], prediction, target, pred_placeholder)
-    history = [item for item in steps if item.iteration <= step.iteration]
-    _render_cost_history_plot(history, cost_placeholder)
-    status_placeholder.caption(caption)
-    if index + 1 >= len(sampled):
-        final_step = steps[-1]
-        artifact = LinearModelArtifact(
-            model_kind="multiple_linear_regression",
-            features=features,
-            target=target,
-            weights=[float(value) for value in final_step.weights],
-            intercept=float(final_step.intercept),
-            scaler=scaler,
-            training_cost=float(final_step.cost),
-            data_source=str(anim["source_label"]),
+    for step in sampled:
+        caption = live_fit_caption(
+            iteration=step.iteration,
+            total_iterations=steps[-1].iteration,
+            weights=step.weights,
+            intercept=step.intercept,
+            cost=step.cost,
         )
-        st.session_state[result_key] = {
-            "signature": anim["signature"],
-            "artifact": artifact,
-            "steps": steps,
-        }
-        anim["finished"] = True
-        st.rerun()
-    anim["index"] = index + 1
-    time.sleep(0.015)
-    st.rerun()
+        prediction = predict_with_parameters(scaled, step.weights, step.intercept)
+        _render_actual_prediction_plot(working[target], prediction, target, pred_placeholder)
+        history = [item for item in steps if item.iteration <= step.iteration]
+        _render_cost_history_plot(history, cost_placeholder)
+        status_placeholder.caption(caption)
+        time.sleep(0.015)
+
+    final_step = steps[-1]
+    artifact = LinearModelArtifact(
+        model_kind="multiple_linear_regression",
+        features=features,
+        target=target,
+        weights=[float(value) for value in final_step.weights],
+        intercept=float(final_step.intercept),
+        scaler=scaler,
+        training_cost=float(final_step.cost),
+        data_source=str(anim["source_label"]),
+    )
+    st.session_state[result_key] = {
+        "signature": anim["signature"],
+        "artifact": artifact,
+        "steps": steps,
+    }
+    anim["finished"] = True
 
 
 def _render_simple_step_plot(

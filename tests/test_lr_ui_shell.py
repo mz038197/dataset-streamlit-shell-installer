@@ -55,3 +55,28 @@ def test_dataset_base_context_includes_lr_host_fragment() -> None:
     assert "lr_host_context_fragment" in src
     assert "lr_slots.json" in src
     assert "lr_train_request.json" in src
+
+
+def _def_block(src: str, name: str) -> str:
+    marker = f"def {name}("
+    start = src.index(marker)
+    lines = src[start:].splitlines()
+    collected = [lines[0]]
+    for line in lines[1:]:
+        if line.startswith("def "):
+            break
+        collected.append(line)
+    return "\n".join(collected)
+
+
+def test_training_animation_replays_frames_in_one_request() -> None:
+    src = (UI / "lr_ui.py").read_text(encoding="utf-8")
+    simple = _def_block(src, "_run_simple_training")
+    multiple = _def_block(src, "_run_multiple_training")
+    maybe_start = _def_block(src, "_maybe_start_from_request")
+    for body in (simple, multiple):
+        assert "for step in sampled:" in body
+        assert "st.rerun()" not in body
+        assert 'anim["index"] = index + 1' not in body
+    assert "st.rerun()" not in maybe_start
+    assert "if train_clicked and allowed:\n        _start()\n        st.rerun()" not in src
