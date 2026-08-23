@@ -19,9 +19,11 @@ if str(TEMPLATE_ROOT) not in sys.path:
 
 from dataset_streamlit_shell.ml.regression import (
     LinearModelArtifact,
+    apply_feature_scaler,
     apply_standard_scaler,
     build_regression_agent_context,
     compute_cost_j,
+    create_feature_scaler,
     create_standard_scaler,
     format_prediction_formula,
     gradient_descent_steps,
@@ -57,6 +59,61 @@ def test_predict_line_on_original_x_applies_zscore_then_weights() -> None:
         scaler=scaler,
     )
     np.testing.assert_allclose(line, [1.0, 4.0, -2.0])
+
+
+def test_maxdiv_scaler_and_line_map_back_to_original_x() -> None:
+    frame = pd.DataFrame({"x": [0.0, 5.0, 10.0]})
+    scaler = create_feature_scaler(frame, ["x"], "maxdiv")
+    scaled = apply_feature_scaler(frame, scaler)
+    np.testing.assert_allclose(scaled["x"].to_numpy(), [0.0, 0.5, 1.0])
+    line = predict_line_on_original_x(
+        frame["x"],
+        weight=4.0,
+        intercept=1.0,
+        feature="x",
+        scaler=scaler,
+    )
+    # x' = x/10 ; ŷ = 4 x' + 1
+    np.testing.assert_allclose(line, [1.0, 3.0, 5.0])
+
+
+def test_maxdiv_scaler_rejects_negative_values() -> None:
+    frame = pd.DataFrame({"x": [-1.0, 2.0, 3.0]})
+    with pytest.raises(ValueError, match="負值"):
+        create_feature_scaler(frame, ["x"], "maxdiv")
+
+
+def test_minmax_scaler_and_line_map_back_to_original_x() -> None:
+    frame = pd.DataFrame({"x": [10.0, 20.0, 30.0]})
+    scaler = create_feature_scaler(frame, ["x"], "minmax")
+    scaled = apply_feature_scaler(frame, scaler)
+    np.testing.assert_allclose(scaled["x"].to_numpy(), [0.0, 0.5, 1.0])
+    line = predict_line_on_original_x(
+        np.array([10.0, 20.0, 30.0]),
+        weight=2.0,
+        intercept=3.0,
+        feature="x",
+        scaler=scaler,
+    )
+    # x' = (x-10)/20 ; ŷ = 2 x' + 3
+    np.testing.assert_allclose(line, [3.0, 4.0, 5.0])
+
+
+def test_mean_scaler_and_line_map_back_to_original_x() -> None:
+    frame = pd.DataFrame({"x": [0.0, 10.0, 20.0]})
+    scaler = create_feature_scaler(frame, ["x"], "mean")
+    scaled = apply_feature_scaler(frame, scaler)
+    # μ=10, range=20 → [-0.5, 0.0, 0.5]
+    np.testing.assert_allclose(scaled["x"].to_numpy(), [-0.5, 0.0, 0.5])
+    line = predict_line_on_original_x(
+        frame["x"],
+        weight=2.0,
+        intercept=1.0,
+        feature="x",
+        scaler=scaler,
+    )
+    # x' = (x-10)/20 ; ŷ = 2 x' + 1
+    np.testing.assert_allclose(line, [0.0, 1.0, 2.0])
 
 
 def test_standard_scaler_round_trip_uses_training_statistics() -> None:

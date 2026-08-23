@@ -534,11 +534,14 @@ def dataset_base_context() -> str:
     ready = _display_path(READY_DATASET_PATH)
     cleaning_log = _display_path(CLEANING_LOG_PATH)
     scripts = _display_path(SHELL_ROOT / "scripts")
+    from dataset_streamlit_shell.ui.lr_slot_state import lr_host_context_fragment
     from dataset_streamlit_shell.ui.nn_form_state import nn_host_context_fragment
 
     nn_form = _display_path(WORKSPACE_DIR / "nn_form.json")
     nn_request = _display_path(WORKSPACE_DIR / "nn_train_request.json")
     nn_last = _display_path(WORKSPACE_DIR / "nn_last_run.json")
+    lr_slots = _display_path(WORKSPACE_DIR / "lr_slots.json")
+    lr_request = _display_path(WORKSPACE_DIR / "lr_train_request.json")
     copies = _display_path(WORKSPACE_DIR / "integration")
     return (
         "目前為 Dataset Streamlit Shell。"
@@ -574,6 +577,10 @@ def dataset_base_context() -> str:
             form_path=nn_form,
             request_path=nn_request,
             last_run_path=nn_last,
+        )
+        + lr_host_context_fragment(
+            slots_path=lr_slots,
+            request_path=lr_request,
         )
     )
 

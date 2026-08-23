@@ -14,6 +14,11 @@ TEMPLATE_ROOT = (
 if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
+from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
+    can_write_train_request,
+    default_slot_state,
+    empty_slot_state,
+)
 from dataset_streamlit_shell.ui.simple_regression_quiz import (  # noqa: E402
     ALPHA_CONVERGE,
     ALPHA_CORRECT,
@@ -134,3 +139,10 @@ def test_hint_cooldown_and_appendix_no_answer_leak() -> None:
     assert "勿直接告訴學生" in text or "不要直接" in text or "請勿直接" in text
     assert ALPHA_EXPLODE not in text
     assert "訓練是否已解鎖：否" in text
+
+
+def test_unlocked_quiz_still_cannot_write_train_request_when_slots_empty() -> None:
+    assembled = default_slot_state("simple")
+    assert can_write_train_request(assembled, quiz_unlocked=False) is False
+    assert can_write_train_request(empty_slot_state(), quiz_unlocked=True) is False
+    assert can_write_train_request(assembled, quiz_unlocked=True) is True

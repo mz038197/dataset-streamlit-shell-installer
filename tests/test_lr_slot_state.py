@@ -1,0 +1,257 @@
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+TEMPLATE_ROOT = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "add_dataset_streamlit_shell"
+    / "templates"
+)
+if str(TEMPLATE_ROOT) not in sys.path:
+    sys.path.insert(0, str(TEMPLATE_ROOT))
+
+from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
+    CHOICE_UNSET,
+    SCALE_MAXDIV,
+    SCALE_MEAN,
+    SCALE_MINMAX,
+    SCALE_ZSCORE,
+    STAGE_MULTIPLE,
+    STAGE_SIMPLE,
+    apply_slot_write,
+    build_lr_page_snapshot,
+    can_write_train_request,
+    consume_train_request,
+    default_slot_state,
+    empty_slot_state,
+    empty_workspace_state,
+    load_workspace_state,
+    lr_host_context_fragment,
+    lr_slots_path,
+    lr_train_request_path,
+    model_code_preview,
+    save_workspace_state,
+    scale_inspect,
+    scale_method_errors,
+    slot_inspect_rows,
+    slot_label,
+    slots_are_complete,
+    slot_signature,
+    train_request_is_set,
+    write_train_request,
+)
+
+
+def test_empty_slot_state_is_unset_and_incomplete() -> None:
+    state = empty_slot_state()
+    assert state["choices"] == {
+        "data": None,
+        "scale": None,
+        "linear": None,
+        "loss": None,
+        "opt": None,
+    }
+    assert state["alpha"] is None
+    assert state["epochs"] is None
+    assert slots_are_complete(state) is False
+    assert slot_label("data", state, STAGE_SIMPLE) == CHOICE_UNSET
+    assert slot_label("scale", state, STAGE_SIMPLE) == CHOICE_UNSET
+    assert slot_label("opt", state, STAGE_SIMPLE) == CHOICE_UNSET
+
+
+def test_default_slot_state_assembles_zscore_and_locked_kinds() -> None:
+    simple = default_slot_state(STAGE_SIMPLE)
+    multiple = default_slot_state(STAGE_MULTIPLE)
+    assert simple["choices"] == {
+        "data": "restaurant",
+        "scale": SCALE_ZSCORE,
+        "linear": "dense1",
+        "loss": "mse",
+        "opt": "sgd",
+    }
+    assert simple["alpha"] == 0.01
+    assert simple["epochs"] == 1500
+    assert slots_are_complete(simple) is True
+    assert multiple["choices"]["data"] == "housing"
+    assert multiple["choices"]["scale"] == SCALE_ZSCORE
+    assert multiple["alpha"] == 0.1
+    assert multiple["epochs"] == 1000
+    assert slot_label("scale", simple, STAGE_SIMPLE) == "Z分數正規化"
+    assert "Dense(1, linear)" in slot_label("linear", simple, STAGE_SIMPLE)
+    assert "α=0.01" in slot_label("opt", simple, STAGE_SIMPLE)
+
+
+def test_default_write_does_not_set_train_request(tmp_path: Path) -> None:
+    workspace = empty_workspace_state()
+    workspace[STAGE_SIMPLE] = default_slot_state(STAGE_SIMPLE)
+    save_workspace_state(tmp_path, workspace)
+    loaded = load_workspace_state(tmp_path)
+    assert loaded[STAGE_SIMPLE]["choices"]["scale"] == SCALE_ZSCORE
+    assert loaded[STAGE_MULTIPLE]["choices"]["scale"] is None
+    assert train_request_is_set(tmp_path) is False
+
+
+def test_apply_slot_write_accepts_scale_and_alpha_rejects_locked_kinds() -> None:
+    assembled = default_slot_state(STAGE_SIMPLE)
+    changed = apply_slot_write(
+        assembled,
+        {
+            "choices": {
+                "scale": SCALE_MINMAX,
+                "data": "upload",
+                "linear": "dense8",
+                "loss": "mae",
+                "opt": "adam",
+            },
+            "alpha": 0.2,
+            "epochs": 80,
+        },
+        stage=STAGE_SIMPLE,
+    )
+    assert changed["choices"]["scale"] == SCALE_MINMAX
+    assert changed["choices"]["data"] == "restaurant"
+    assert changed["choices"]["linear"] == "dense1"
+    assert changed["choices"]["loss"] == "mse"
+    assert changed["choices"]["opt"] == "sgd"
+    assert changed["alpha"] == pytest.approx(0.2)
+    assert changed["epochs"] == 80
+    assert slot_signature(changed) != slot_signature(assembled)
+
+
+def test_model_code_preview_follows_scale_and_feature_count() -> None:
+    empty = empty_slot_state()
+    assert "還沒選齊" in model_code_preview(empty, stage=STAGE_SIMPLE)
+
+    simple = default_slot_state(STAGE_SIMPLE)
+    zscore = model_code_preview(simple, stage=STAGE_SIMPLE)
+    assert "StandardScaler().fit_transform(x)" in zscore
+    assert "Input(shape=(1,))" in zscore
+    assert 'Dense(1, activation="linear")' in zscore
+    assert 'loss="mse"' in zscore
+    assert "SGD(learning_rate=0.01)" in zscore
+
+    simple["choices"]["scale"] = SCALE_MAXDIV
+    assert "x = x / x.max()" in model_code_preview(simple, stage=STAGE_SIMPLE)
+    simple["choices"]["scale"] = SCALE_MINMAX
+    assert "MinMaxScaler().fit_transform(x)" in model_code_preview(simple, stage=STAGE_SIMPLE)
+    simple["choices"]["scale"] = SCALE_MEAN
+    assert "(x - x.mean()) / (x.max() - x.min())" in model_code_preview(
+        simple, stage=STAGE_SIMPLE
+    )
+
+    multiple = default_slot_state(STAGE_MULTIPLE)
+    multi_preview = model_code_preview(multiple, stage=STAGE_MULTIPLE)
+    assert "Input(shape=(4,))" in multi_preview
+    assert "SGD(learning_rate=0.1)" in multi_preview
+
+
+def test_scale_inspect_has_formula_range_and_condition() -> None:
+    info = scale_inspect(SCALE_MAXDIV)
+    assert "x / x_max" in info["formula"].replace(" ", "") or "x / x_max" in info["formula"]
+    assert "0" in info["range"]
+    assert "≥ 0" in info["condition"] or ">= 0" in info["condition"]
+    rows = slot_inspect_rows("scale", default_slot_state(STAGE_SIMPLE), stage=STAGE_SIMPLE)
+    keys = [key for key, _ in rows]
+    assert "公式" in keys
+    assert "範圍" in keys
+    assert "條件" in keys
+
+
+def test_can_write_train_request_needs_complete_slots_and_quiz() -> None:
+    empty = empty_slot_state()
+    assembled = default_slot_state(STAGE_SIMPLE)
+    assert can_write_train_request(empty, quiz_unlocked=True) is False
+    assert can_write_train_request(assembled, quiz_unlocked=False) is False
+    assert can_write_train_request(assembled, quiz_unlocked=True) is True
+    assert (
+        can_write_train_request(
+            assembled,
+            quiz_unlocked=True,
+            scale_errors=["正規化（除以最大）要求訓練特徵 x≥0"],
+        )
+        is False
+    )
+
+
+def test_consume_train_request_only_when_allowed(tmp_path: Path) -> None:
+    write_train_request(tmp_path)
+    assert consume_train_request(tmp_path, allowed=False) is False
+    assert train_request_is_set(tmp_path) is False
+
+    write_train_request(tmp_path)
+    assert consume_train_request(tmp_path, allowed=True) is True
+    assert train_request_is_set(tmp_path) is False
+
+
+def test_maxdiv_rejects_negative_training_features() -> None:
+    frame = pd.DataFrame({"x": [-1.0, 0.0, 2.0], "z": [1.0, 2.0, 3.0]})
+    errors = scale_method_errors(SCALE_MAXDIV, frame, ["x"])
+    assert errors
+    assert "負值" in errors[0]
+    assert scale_method_errors(SCALE_MAXDIV, frame, ["z"]) == []
+    assert scale_method_errors(SCALE_ZSCORE, frame, ["x"]) == []
+
+
+def test_two_stages_keep_independent_state_and_signatures(tmp_path: Path) -> None:
+    workspace = empty_workspace_state()
+    workspace[STAGE_SIMPLE] = default_slot_state(STAGE_SIMPLE)
+    save_workspace_state(tmp_path, workspace)
+    loaded = load_workspace_state(tmp_path)
+    loaded[STAGE_SIMPLE] = apply_slot_write(
+        loaded[STAGE_SIMPLE],
+        {"choices": {"scale": SCALE_MEAN}, "alpha": 0.05, "epochs": 100},
+        stage=STAGE_SIMPLE,
+    )
+    save_workspace_state(tmp_path, loaded)
+    again = load_workspace_state(tmp_path)
+    assert again[STAGE_SIMPLE]["choices"]["scale"] == SCALE_MEAN
+    assert again[STAGE_MULTIPLE]["choices"]["scale"] is None
+    assert slot_signature(again[STAGE_SIMPLE]) != slot_signature(again[STAGE_MULTIPLE])
+
+
+def test_load_keeps_other_stage_when_file_omits_it(tmp_path: Path) -> None:
+    previous = empty_workspace_state()
+    previous[STAGE_MULTIPLE] = default_slot_state(STAGE_MULTIPLE)
+    lr_slots_path(tmp_path).write_text(
+        json.dumps({"simple": default_slot_state(STAGE_SIMPLE)}),
+        encoding="utf-8",
+    )
+    loaded = load_workspace_state(tmp_path, previous)
+    assert loaded[STAGE_SIMPLE]["choices"]["scale"] == SCALE_ZSCORE
+    assert loaded[STAGE_MULTIPLE]["choices"]["data"] == "housing"
+
+
+def test_page_snapshot_includes_open_slot_and_preview() -> None:
+    text = build_lr_page_snapshot(
+        stage=STAGE_SIMPLE,
+        state=default_slot_state(STAGE_SIMPLE),
+        open_slot="scale",
+        quiz_unlocked=False,
+        scale_errors=[],
+        artifact_note="此學習階段目前沒有訓練結果。",
+        slots_path="workspace/lr_slots.json",
+        request_path="workspace/lr_train_request.json",
+    )
+    assert "學生正打開的決策槽：特徵縮放" in text
+    assert "可否寫訓練請求：否" in text
+    assert "StandardScaler().fit_transform(x)" in text
+
+
+def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
+    text = lr_host_context_fragment(
+        slots_path="workspace/lr_slots.json",
+        request_path="workspace/lr_train_request.json",
+    )
+    assert "lr_slots.json" in text
+    assert "lr_train_request.json" in text
+    assert "不要同時寫訓練請求" in text
+    assert "不要自行 exec" in text
+    assert "鎖定槽" in text
+    assert "nn_form.json" in text
+    assert "代填" in text

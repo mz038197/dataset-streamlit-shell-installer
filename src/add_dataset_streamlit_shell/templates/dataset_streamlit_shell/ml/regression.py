@@ -175,9 +175,76 @@ def _gradient_step_snapshot(
 
 
 def create_standard_scaler(frame: pd.DataFrame, features: list[str]) -> dict[str, Any]:
+    return create_feature_scaler(frame, features, "zscore")
+
+
+def create_feature_scaler(
+    frame: pd.DataFrame,
+    features: list[str],
+    method: str,
+) -> dict[str, Any]:
     if not features:
         raise ValueError("features must not be empty")
+    if method not in {"zscore", "maxdiv", "minmax", "mean"}:
+        raise ValueError(f"unknown scale method: {method}")
     numeric = frame[features].apply(pd.to_numeric, errors="coerce")
+    names = [str(feature) for feature in features]
+    if method == "maxdiv":
+        negatives = [
+            name for name in names if bool((numeric[name].astype(float) < 0).any())
+        ]
+        if negatives:
+            raise ValueError(
+                "正規化（除以最大）要求訓練特徵 x≥0，但 "
+                + "、".join(negatives)
+                + " 出現負值"
+            )
+        xmax = numeric.max()
+        invalid = [name for name in names if pd.isna(xmax[name]) or float(xmax[name]) == 0]
+        if invalid:
+            raise ValueError("cannot scale constant or empty columns: " + ", ".join(invalid))
+        return {
+            "method": "maxdiv",
+            "features": names,
+            "max": {name: float(xmax[name]) for name in names},
+        }
+    if method == "minmax":
+        xmin = numeric.min()
+        xmax = numeric.max()
+        invalid = [
+            name
+            for name in names
+            if pd.isna(xmin[name]) or pd.isna(xmax[name]) or float(xmax[name]) == float(xmin[name])
+        ]
+        if invalid:
+            raise ValueError("cannot scale constant or empty columns: " + ", ".join(invalid))
+        return {
+            "method": "minmax",
+            "features": names,
+            "min": {name: float(xmin[name]) for name in names},
+            "max": {name: float(xmax[name]) for name in names},
+        }
+    if method == "mean":
+        means = numeric.mean()
+        xmin = numeric.min()
+        xmax = numeric.max()
+        invalid = [
+            name
+            for name in names
+            if pd.isna(means[name])
+            or pd.isna(xmin[name])
+            or pd.isna(xmax[name])
+            or float(xmax[name]) == float(xmin[name])
+        ]
+        if invalid:
+            raise ValueError("cannot scale constant or empty columns: " + ", ".join(invalid))
+        return {
+            "method": "mean",
+            "features": names,
+            "mean": {name: float(means[name]) for name in names},
+            "min": {name: float(xmin[name]) for name in names},
+            "max": {name: float(xmax[name]) for name in names},
+        }
     means = numeric.mean()
     scales = numeric.std(ddof=0)
     invalid = [str(column) for column, scale in scales.items() if pd.isna(scale) or scale == 0]
@@ -185,21 +252,59 @@ def create_standard_scaler(frame: pd.DataFrame, features: list[str]) -> dict[str
         raise ValueError("cannot scale constant or empty columns: " + ", ".join(invalid))
     return {
         "method": "zscore",
-        "features": [str(feature) for feature in features],
+        "features": names,
         "mean": {str(column): float(value) for column, value in means.items()},
         "scale": {str(column): float(value) for column, value in scales.items()},
     }
 
 
 def apply_standard_scaler(frame: pd.DataFrame, scaler: dict[str, Any]) -> pd.DataFrame:
+    return apply_feature_scaler(frame, scaler)
+
+
+def apply_feature_scaler(frame: pd.DataFrame, scaler: dict[str, Any]) -> pd.DataFrame:
     features = [str(feature) for feature in scaler["features"]]
     numeric = frame[features].apply(pd.to_numeric, errors="coerce")
     result = numeric.copy()
+    method = str(scaler.get("method") or "zscore")
     for feature in features:
-        result[feature] = (numeric[feature] - float(scaler["mean"][feature])) / float(
-            scaler["scale"][feature]
-        )
+        values = numeric[feature].astype(float)
+        result[feature] = _transform_feature_values(values.to_numpy(), feature, scaler, method)
     return result
+
+
+def _transform_feature_values(
+    values: np.ndarray,
+    feature: str,
+    scaler: dict[str, Any],
+    method: str,
+) -> np.ndarray:
+    key = str(feature)
+    if method == "maxdiv":
+        xmax = float(scaler["max"][key])
+        if xmax == 0:
+            raise ValueError(f"scaler max for {feature!r} must be non-zero")
+        return values / xmax
+    if method == "minmax":
+        xmin = float(scaler["min"][key])
+        xmax = float(scaler["max"][key])
+        span = xmax - xmin
+        if span == 0:
+            raise ValueError(f"scaler range for {feature!r} must be non-zero")
+        return (values - xmin) / span
+    if method == "mean":
+        mean = float(scaler["mean"][key])
+        xmin = float(scaler["min"][key])
+        xmax = float(scaler["max"][key])
+        span = xmax - xmin
+        if span == 0:
+            raise ValueError(f"scaler range for {feature!r} must be non-zero")
+        return (values - mean) / span
+    mean = float(scaler["mean"][key])
+    scale = float(scaler["scale"][key])
+    if scale == 0:
+        raise ValueError(f"scaler scale for {feature!r} must be non-zero")
+    return (values - mean) / scale
 
 
 def predict_line_on_original_x(
@@ -210,14 +315,11 @@ def predict_line_on_original_x(
     feature: str,
     scaler: dict[str, Any],
 ) -> np.ndarray:
-    """將 Z-score 空間的 w／b 映射回原始特徵橫軸上的回歸線 ŷ。"""
+    """將縮放空間的 w／b 映射回原始特徵橫軸上的回歸線 ŷ。"""
     values = np.asarray(raw_x, dtype=float)
-    mean = float(scaler["mean"][str(feature)])
-    scale = float(scaler["scale"][str(feature)])
-    if scale == 0:
-        raise ValueError(f"scaler scale for {feature!r} must be non-zero")
-    z = (values - mean) / scale
-    return z * float(weight) + float(intercept)
+    method = str(scaler.get("method") or "zscore")
+    transformed = _transform_feature_values(values, str(feature), scaler, method)
+    return transformed * float(weight) + float(intercept)
 
 
 def save_model_artifact(artifact: LinearModelArtifact, path: Path) -> None:
@@ -248,7 +350,7 @@ def predict_from_artifact(artifact: LinearModelArtifact, frame: pd.DataFrame) ->
     features = artifact.features
     numeric = frame[features].apply(pd.to_numeric, errors="coerce")
     if artifact.scaler is not None:
-        numeric = apply_standard_scaler(numeric, artifact.scaler)
+        numeric = apply_feature_scaler(numeric, artifact.scaler)
     values = numeric.to_numpy(dtype=float)
     weights = np.asarray(artifact.weights, dtype=float)
     predictions = values @ weights + artifact.intercept
@@ -297,7 +399,8 @@ def build_regression_agent_context(
             )
         else:
             parts.append(
-                "目前尚未完成本組設定的訓練；「開始訓練」尚未解鎖，請先協助完成訓練前預測關卡，不要建議按該按鈕。"
+                "目前尚未完成本組設定的訓練；「開始訓練」尚未解鎖，"
+                "請先確認決策槽已齊且訓練前預測已過關，不要建議按該按鈕。"
             )
     else:
         weights = "、".join(
@@ -311,7 +414,8 @@ def build_regression_agent_context(
             ]
         )
         if artifact.scaler is not None:
-            parts.append("本模型使用 Z-score 特徵縮放；inference 需使用 JSON 內保存的 mean/scale。")
+            method = str((artifact.scaler or {}).get("method") or "zscore")
+            parts.append(f"本模型使用特徵縮放 method={method}；inference 需使用保存的 scaler 統計量。")
     if note:
         parts.append(note)
     return "".join(parts)
