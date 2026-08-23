@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PROTOTYPE · 線性回歸組裝頁</title>
+  <style>
+    :root {
+      --bg: #0e1117;
+      --sidebar: #1a1c24;
+      --panel: #16181f;
+      --line: rgba(250,250,250,.12);
+      --text: rgba(250,250,250,.92);
+      --muted: rgba(250,250,250,.58);
+      --teal: #009999;
+      --teal-dim: #007070;
+      --gold: #f8c000;
+      --blue: #5aa0ff;
+      --ok: #50c88c;
+      --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font: 14px/1.45 "Segoe UI", "Noto Sans TC", system-ui, sans-serif; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .banner {
+      position: sticky; top: 0; z-index: 40;
+      background: #2a1f00; color: #ffd56a; padding: .45rem 1rem; font-size: 12.5px;
+      border-bottom: 1px solid rgba(248,192,0,.35);
+    }
+    .banner strong { color: #fff; }
+
+    .app { display: grid; grid-template-columns: 220px 1fr; height: calc(100vh - 34px); }
+
+    .nav { background: var(--sidebar); border-right: 1px solid var(--line); padding: .8rem .7rem; }
+    .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 1.1rem; }
+    .logo { width: 36px; height: 36px; border-radius: 8px; background: #eef5f5;
+      box-shadow: 0 0 0 1px rgba(0,112,112,.18); }
+    .brand-name {
+      font-weight: 700; letter-spacing: -.02em;
+      background: linear-gradient(135deg, #007070, #009999 50%, #f8c000);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .nav h4 { margin: 1rem 0 .35rem; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+    .nav a { display: block; padding: .35rem .5rem; border-radius: 6px; color: var(--muted); text-decoration: none; }
+    .nav a.on { background: rgba(0,153,153,.18); color: #b6f0f0; }
+
+    .stage { display: flex; min-width: 0; min-height: 0; }
+    .teach { flex: 1; min-width: 0; overflow: auto; padding: 1rem 1.1rem 6.5rem; }
+    .agent { width: 320px; flex: 0 0 320px; border-left: 1px solid var(--line);
+      background: #12141a; display: flex; flex-direction: column; min-height: 0; }
+    .layout-c .teach { flex: 0 0 38%; }
+    .layout-c .agent { flex: 1 1 auto; width: auto; }
+
+    h1 { font-size: 1.55rem; margin: 0 0 .2rem; font-weight: 650; }
+    .cap { color: var(--muted); margin: 0 0 .8rem; font-size: 13px; }
+    .row { display: flex; gap: .4rem; flex-wrap: wrap; margin: .4rem 0 .7rem; }
+    .seg { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; }
+    .seg button { background: transparent; color: var(--muted); border: 0; padding: .32rem .7rem; }
+    .seg button.on { background: rgba(90,160,255,.18); color: #d6e8ff; }
+
+    .flow { display: flex; align-items: center; justify-content: center; gap: .6rem; margin: .4rem 0 1rem; }
+    .fnode { min-width: 118px; text-align: center; padding: .55rem .7rem; border-radius: 9px;
+      border: 1.2px solid rgba(250,250,250,.28); background: rgba(255,255,255,.04); font-weight: 600; }
+    .fnode.hot { border-color: var(--blue); background: rgba(90,160,255,.16); }
+    .fnode.done { border-color: var(--ok); background: rgba(80,200,140,.12); }
+    .farrow { color: var(--muted); }
+
+    .stack { display: flex; flex-direction: column; gap: .45rem; margin: .6rem 0 1rem; }
+    .block { border: 1px solid var(--line); border-radius: 12px; padding: .65rem .8rem; background: rgba(255,255,255,.03); }
+    .block header { display: flex; justify-content: space-between; align-items: baseline; gap: .6rem; }
+    .block b { font-size: 13px; }
+    .block .meta { color: var(--muted); font-size: 12px; }
+    .block.missing { border-style: dashed; opacity: .55; }
+    .knobs { display: flex; gap: .6rem; margin-top: .45rem; }
+    .knobs label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: .2rem; }
+    .knobs input { width: 110px; background: #0e1117; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: .25rem .4rem; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .3rem 0 .8rem; }
+    .chip { border-radius: 999px; padding: .18rem .6rem; border: 1px solid rgba(90,160,255,.3);
+      background: rgba(90,160,255,.14); font-size: 12px; }
+    .chip.off { background: transparent; color: var(--muted); border-style: dashed; }
+
+    .pipe { display: flex; flex-wrap: wrap; align-items: stretch; gap: .4rem; margin: .35rem 0 .55rem; }
+    .pipe-box {
+      flex: 1 1 104px; min-width: 96px; text-align: left; padding: .45rem .55rem;
+      border-radius: 9px; border: 1.2px solid rgba(250,250,250,.28);
+      background: rgba(255,255,255,.04); color: inherit;
+    }
+    .pipe-box .ttl { display: block; font-weight: 700; font-size: 12.5px; }
+    .pipe-box .now { display: block; margin-top: .2rem; color: var(--muted); font-size: 11.5px; line-height: 1.3; }
+    .pipe-box.on { border-color: rgba(80,200,140,.65); background: rgba(80,200,140,.1); }
+    .pipe-box.open { border-color: var(--blue); background: rgba(90,160,255,.16); }
+    .pipe-box.off { border-style: dashed; opacity: .55; }
+    .inspect {
+      border: 1px solid rgba(90,160,255,.35); border-radius: 10px;
+      background: rgba(90,160,255,.08); padding: .65rem .75rem; margin: 0 0 .8rem;
+    }
+    .inspect h3 { margin: 0 0 .35rem; font-size: 14px; }
+    .inspect dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: .2rem .7rem; font-size: 13px; }
+    .inspect dt { color: var(--muted); }
+    .inspect dd { margin: 0; }
+    .inspect .formula {
+      margin: .55rem 0 0; padding: .45rem .55rem; border-radius: 8px;
+      background: #0b0d12; font: 15px/1.45 "Cambria Math", "Times New Roman", serif;
+    }
+    .inspect .note { margin: .45rem 0 0; color: var(--muted); font-size: 12px; }
+
+    .code { background: #0b0d12; border: 1px solid var(--line); border-radius: 10px;
+      padding: .75rem .9rem; font: 12.5px/1.5 ui-monospace, Consolas, monospace; overflow: auto; }
+    .code-hero { min-height: 220px; font-size: 14px; }
+
+    .quiz { margin: 1rem 0; }
+    .quiz h3 { margin: 0 0 .3rem; font-size: 15px; }
+    .q { margin: .55rem 0; }
+    .q label { margin-right: .8rem; color: var(--muted); }
+
+    .btn { background: var(--teal-dim); color: #fff; border: 0; border-radius: 8px; padding: .55rem 1rem; font-weight: 600; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+    .hint { color: var(--muted); font-size: 12.5px; margin: .35rem 0 0; }
+
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; margin-top: .6rem; }
+    .chart { background: #111318; border: 1px solid var(--line); border-radius: 10px; padding: .5rem; min-height: 210px; }
+    .chart svg { width: 100%; height: 190px; display: block; }
+    .status { color: var(--blue); font-size: 12.5px; margin: .4rem 0; }
+
+    .agent h2 { font-size: 1.05rem; margin: 0; padding: .75rem .85rem .4rem; }
+    .msgs { flex: 1; overflow: auto; padding: .4rem .85rem 0; }
+    .msg { margin: 0 0 .65rem; padding: .55rem .65rem; border-radius: 10px; background: rgba(255,255,255,.04); }
+    .msg.user { background: rgba(0,153,153,.14); }
+    .msg .who { font-size: 11px; color: var(--muted); margin-bottom: .2rem; }
+    .composer { padding: .65rem .85rem 5.8rem; border-top: 1px solid var(--line); }
+    .composer input { width: 100%; background: #0e1117; color: var(--text); border: 1px solid var(--line);
+      border-radius: 8px; padding: .45rem .55rem; }
+
+    .cinema .teach { padding-bottom: 5.5rem; }
+    .cinema .flow, .cinema .quiz, .cinema .code, .cinema .stack, .cinema .chips { display: none; }
+
+    .state-dock {
+      position: fixed; left: 12px; bottom: 64px; z-index: 50; width: min(360px, calc(100vw - 24px));
+      background: #0a0c10; border: 1px solid rgba(248,192,0,.4); border-radius: 10px;
+      padding: .55rem .7rem; font-size: 12px; color: #ffe7a3; max-height: 28vh; overflow: auto;
+    }
+    .state-dock b { color: #fff; }
+    .state-dock pre { margin: .35rem 0 0; white-space: pre-wrap; font: 11.5px/1.4 ui-monospace, Consolas, monospace; }
+
+    .switcher {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 60;
+      display: flex; align-items: center; gap: .45rem;
+      background: #f4f1ea; color: #111; border-radius: 999px; padding: .35rem .4rem;
+      box-shadow: 0 8px 28px rgba(0,0,0,.45);
+      font-weight: 700; font-size: 13px;
+    }
+    .switcher button { border: 0; background: #111; color: #fff; width: 32px; height: 32px; border-radius: 50%; }
+    .switcher .label { min-width: 168px; text-align: center; padding: 0 .4rem; }
+  </style>
+</head>
+<body>
+  <div class="banner">
+    <strong>PROTOTYPE · 可丟</strong>
+    三個變體在看同一件事：線性回歸用積木組模型、請右欄 Agent 寫入、顯示對應程式碼、訓練只留線與 Cost。
+    C 的框是決策槽（特徵縮放／損失函數），框上才是目前選擇。用下方切換條或 ← →。不是正式教學頁。
+  </div>
+  <div class="app">
+    <aside class="nav">
+      <div class="brand"><div class="logo"></div><div class="brand-name">VansCoding.AI</div></div>
+      <h4>機器學習 · 監督式</h4>
+      <a class="on" href="#">線性回歸</a>
+      <a href="#">邏輯迴歸</a>
+      <a href="#">線性支持向量機</a>
+      <a href="#">K-近鄰分類</a>
+      <a href="#">類神經網路</a>
+    </aside>
+    <div id="stage" class="stage"></div>
+  </div>
+
+  <aside class="state-dock" id="stateDock"></aside>
+  <div class="switcher" id="switcher">
+    <button type="button" id="prevBtn" aria-label="上一個變體">←</button>
+    <div class="label" id="switchLabel"></div>
+    <button type="button" id="nextBtn" aria-label="下一個變體">→</button>
+  </div>
+
+<script>
+(function () {
+  const VARIANTS = [
+    { key: "A", name: "積木欄" },
+    { key: "B", name: "程式碼主畫面" },
+    { key: "C", name: "Agent 主導" },
+  ];
+
+  const BLOCKS = [
+    { id: "data", title: "輸入資料", locked: true },
+    { id: "scale", title: "特徵縮放" },
+    { id: "linear", title: "線性層" },
+    { id: "loss", title: "損失函數" },
+    { id: "opt", title: "優化器" },
+  ];
+
+  const CHOICE_LABEL = {
+    restaurant: "內建餐廳獲利",
+    maxdiv: "正規化",
+    minmax: "最小-最大正規化",
+    mean: "平均值正規化",
+    zscore: "Z分數正規化",
+    dense1: "Dense(1, linear)",
+    mse: "MSE",
+    mae: "MAE",
+    sgd: "SGD",
+  };
+
+  const SCALE_INFO = {
+    maxdiv: {
+      formula: "x′ = x / x_max",
+      range: "0 ≤ x′ ≤ 1",
+      note: "x 必須 ≥ 0",
+      code: "x = x / x.max()",
+    },
+    minmax: {
+      formula: "x′ = (x − x_min) / (x_max − x_min)",
+      range: "0 ≤ x′ ≤ 1",
+      note: "",
+      code: "x = MinMaxScaler().fit_transform(x)",
+    },
+    mean: {
+      formula: "x′ = (x − μ) / (x_max − x_min)",
+      range: "−1 ≤ x′ ≤ 1",
+      note: "μ 為平均",
+      code: "x = (x - x.mean()) / (x.max() - x.min())",
+    },
+    zscore: {
+      formula: "x′ = (x − μ) / σ",
+      range: "實務上 −3 ≤ x′ ≤ 3",
+      note: "μ 為平均，σ 為標準差",
+      code: "x = StandardScaler().fit_transform(x)",
+    },
+  };
+
+  const state = {
+    choices: { data: null, scale: null, linear: null, loss: null, opt: null },
+    builtBy: "none",
+    alpha: 0.01,
+    epochs: 1500,
+    slope: "",
+    alphaQuiz: "",
+    phase: "empty",
+    iter: 0,
+    cost: null,
+    w: null,
+    agentLog: [],
+    draft: "",
+    inspect: null,
+  };
+
+  function variantKey() {
+    const raw = new URLSearchParams(location.search).get("variant") || "A";
+    return VARIANTS.some((v) => v.key === raw) ? raw : "A";
+  }
+
+  function setVariant(key) {
+    const url = new URL(location.href);
+    url.searchParams.set("variant", key);
+    history.replaceState(null, "", url);
+    render();
+  }
+
+  function cycle(delta) {
+    const i = VARIANTS.findIndex((v) => v.key === variantKey());
+    const next = VARIANTS[(i + delta + VARIANTS.length) % VARIANTS.length];
+    setVariant(next.key);
+  }
+
+  function slotChosen(id) {
+    return Boolean(state.choices[id]);
+  }
+
+  function stackReady() {
+    return BLOCKS.every((b) => slotChosen(b.id));
+  }
+
+  function quizOk() {
+    return state.slope === "pos" && state.alphaQuiz === "explode";
+  }
+
+  function codeText() {
+    if (!stackReady()) return "# 決策槽還沒選齊，沒有對應程式碼。";
+    const lines = [];
+    const scale = SCALE_INFO[state.choices.scale];
+    if (scale) lines.push(scale.code);
+    lines.push("model = Sequential([");
+    lines.push("    Input(shape=(1,)),");
+    lines.push("    Dense(1, activation=\"linear\"),");
+    lines.push("])");
+    lines.push("model.compile(");
+    lines.push(`    loss=${JSON.stringify(state.choices.loss)},`);
+    lines.push(`    optimizer=SGD(learning_rate=${state.alpha}),`);
+    lines.push(")");
+    return lines.join("\n");
+  }
+
+  function pushAgent(who, text) {
+    state.agentLog.push({ who, text });
+  }
+
+  function setScaleChoice(userText, id) {
+    pushAgent("學生", userText);
+    state.choices.scale = id;
+    if (state.builtBy === "none") state.builtBy = "agent";
+    const info = SCALE_INFO[id];
+    pushAgent("Agent", `特徵縮放改成${CHOICE_LABEL[id]}。公式：${info.formula}。點開左欄明細可對。`);
+    render();
+  }
+
+  function buildViaAgent() {
+    state.choices = {
+      data: "restaurant",
+      scale: "zscore",
+      linear: "dense1",
+      loss: "mse",
+      opt: "sgd",
+    };
+    state.builtBy = "agent";
+    if (state.phase === "empty") state.phase = "stacked";
+    pushAgent("學生", "幫我組一個預測餐廳獲利的線性回歸。");
+    pushAgent("Agent", "先用課堂四種縮放裡的 Z分數正規化，損失用 MSE。要換成正規化、最小-最大、或平均值正規化，直接跟我說。點開特徵縮放可看公式。我沒有開始訓練。");
+    render();
+  }
+
+  function trainViaAgent() {
+    pushAgent("學生", "用現在這組開始訓練。");
+    if (!stackReady()) {
+      pushAgent("Agent", "決策槽還沒選齊，我不會寫訓練請求。");
+    } else if (!quizOk()) {
+      pushAgent("Agent", "兩題訓練前預測還沒過，我不能寫訓練請求。先看散點斜率，或按 Agent 提示。");
+    } else {
+      pushAgent("Agent", "已寫入訓練請求。左欄會播回歸線與 Cost，沒有梯度表。");
+      startTrain();
+      return;
+    }
+    render();
+  }
+
+  function startTrain() {
+    if (!stackReady() || !quizOk()) return;
+    state.phase = "training";
+    state.iter = 0;
+    state.cost = 12.4;
+    render();
+    const tick = () => {
+      if (state.phase !== "training") return;
+      state.iter += 8;
+      state.cost = Math.max(0.42, 12.4 * Math.exp(-state.iter / 90));
+      if (state.iter >= 80) {
+        state.phase = "done";
+        state.w = 1.18;
+        state.cost = 0.42;
+        render();
+        return;
+      }
+      render();
+      setTimeout(tick, 90);
+    };
+    setTimeout(tick, 90);
+  }
+
+  function sendDraft() {
+    const text = state.draft.trim();
+    if (!text) return;
+    state.draft = "";
+    if (/組|建立|堆/.test(text)) buildViaAgent();
+    else if (/訓/.test(text)) trainViaAgent();
+    else if (/最小-?最大|min-?max/i.test(text)) {
+      setScaleChoice(text, "minmax");
+    } else if (/平均值|mean\s*norm/i.test(text)) {
+      setScaleChoice(text, "mean");
+    } else if (/z-?score|z分數|z分数|標準差|標準化/i.test(text)) {
+      setScaleChoice(text, "zscore");
+    } else if (/正規化|除以最大|x_?max/i.test(text)) {
+      setScaleChoice(text, "maxdiv");
+    } else if (/\bmae\b/i.test(text)) {
+      pushAgent("學生", text);
+      state.choices.loss = "mae";
+      pushAgent("Agent", "損失函數改成 MAE。");
+      render();
+    } else if (/\bmse\b/i.test(text)) {
+      pushAgent("學生", text);
+      state.choices.loss = "mse";
+      pushAgent("Agent", "損失函數改成 MSE。");
+      render();
+    } else {
+      pushAgent("學生", text);
+      pushAgent("Agent", "這是原型。試組模型，或指定四種縮放：正規化、最小-最大、平均值、Z分數。");
+      render();
+    }
+  }
+
+  function flowHtml() {
+    const modelHot = state.phase === "training" || state.phase === "stacked" || stackReady();
+    const outDone = state.phase === "done";
+    return `<div class="flow">
+      <div class="fnode${state.phase === "empty" ? "" : " done"}">輸入資料</div>
+      <div class="farrow">→</div>
+      <div class="fnode${modelHot && !outDone ? " hot" : outDone ? " done" : ""}">回歸模型</div>
+      <div class="farrow">→</div>
+      <div class="fnode${outDone ? " hot" : ""}">輸出呈現</div>
+    </div>`;
+  }
+
+  function stackHtml() {
+    return `<div class="stack">${BLOCKS.map((b) => {
+      const on = slotChosen(b.id);
+      const extra = b.id === "opt" && on ? `<div class="knobs">
+        <label>α <input id="alphaIn" type="number" step="0.001" value="${state.alpha}" /></label>
+        <label>epochs <input id="epochsIn" type="number" step="100" value="${state.epochs}" /></label>
+      </div>` : "";
+      return `<article class="block${on ? "" : " missing"}">
+        <header><b>${b.title}</b><span class="meta">${blockSummary(b.id)}</span></header>
+        ${extra}
+      </article>`;
+    }).join("")}</div>`;
+  }
+
+  function chipsHtml() {
+    return `<div class="chips">${BLOCKS.map((b) =>
+      `<span class="chip${slotChosen(b.id) ? "" : " off"}">${b.title}${slotChosen(b.id) ? " · " + blockSummary(b.id) : ""}</span>`
+    ).join("")}</div>`;
+  }
+
+  function blockOn(id) {
+    return slotChosen(id);
+  }
+
+  function blockSummary(id) {
+    const choice = state.choices[id];
+    if (!choice) return "尚未選擇";
+    if (id === "data") return "97 筆 · 人口 → 獲利";
+    if (id === "opt") return `${CHOICE_LABEL[choice]} · α=${state.alpha} · ${state.epochs} epochs`;
+    return CHOICE_LABEL[choice] || choice;
+  }
+
+  function inspectTitle() {
+    const b = BLOCKS.find((x) => x.id === state.inspect);
+    return b ? b.title : "";
+  }
+
+  function inspectRows() {
+    const id = state.inspect;
+    if (!id) return [];
+    if (!blockOn(id)) return [["目前選擇", "尚未選擇。跟右側 Agent 說你要哪一個。"]];
+    if (id === "data") {
+      return [
+        ["目前選擇", CHOICE_LABEL[state.choices.data]],
+        ["x", "城市人口_萬人"],
+        ["y", "餐廳獲利_萬美元"],
+        ["列數", "97"],
+        ["可否改", "本頁鎖內建資料"],
+      ];
+    }
+    if (id === "scale") {
+      const info = SCALE_INFO[state.choices.scale] || {};
+      const rows = [
+        ["目前選擇", CHOICE_LABEL[state.choices.scale]],
+        ["公式", info.formula || "—"],
+        ["範圍", info.range || "—"],
+      ];
+      if (info.note) rows.push(["條件", info.note]);
+      rows.push(["可討論", "正規化、最小-最大正規化、平均值正規化、Z分數正規化"]);
+      return rows;
+    }
+    if (id === "linear") {
+      return [
+        ["目前選擇", CHOICE_LABEL[state.choices.linear]],
+        ["特徵數", "1"],
+      ];
+    }
+    if (id === "loss") {
+      const mse = state.choices.loss === "mse";
+      return [
+        ["目前選擇", CHOICE_LABEL[state.choices.loss]],
+        ["可討論", "MSE 或 MAE"],
+        ["對應", mse ? "Cost J = (1/2m) Σ (ŷ − y)²" : "平均絕對誤差"],
+      ];
+    }
+    const rows = [
+      ["目前選擇", CHOICE_LABEL[state.choices.opt]],
+      ["α", String(state.alpha)],
+      ["epochs", String(state.epochs)],
+    ];
+    if (state.cost != null) rows.push(["最近 J", state.cost.toFixed(2)]);
+    if (state.w != null) rows.push(["最近 w", String(state.w)]);
+    return rows;
+  }
+
+  function pipeHtml() {
+    return `<div class="pipe">${BLOCKS.map((b) => {
+      const cls = [
+        "pipe-box",
+        blockOn(b.id) ? "on" : "off",
+        state.inspect === b.id ? "open" : "",
+      ].join(" ");
+      return `<button type="button" class="${cls}" data-block="${b.id}">
+        <span class="ttl">${b.title}</span>
+        <span class="now">${blockSummary(b.id)}</span>
+      </button>`;
+    }).join("")}</div>`;
+  }
+
+  function inspectHtml() {
+    if (!state.inspect) {
+      return `<p class="hint">點上面的框看目前選擇。只讀；要換縮放或損失，跟右側 Agent 說。</p>`;
+    }
+    const rows = inspectRows().map(([k, v]) => {
+      const cls = k === "公式" ? " class=\"formula\"" : "";
+      return `<dt>${k}</dt><dd${cls}>${v}</dd>`;
+    }).join("");
+    return `<aside class="inspect">
+      <h3>${inspectTitle()}</h3>
+      <dl>${rows}</dl>
+      <p class="note">跟右欄 snapshot 同一份選擇。學生正打開：${inspectTitle()}。</p>
+    </aside>`;
+  }
+
+  function codeHtml(hero) {
+    return `<pre class="code${hero ? " code-hero" : ""}">${codeText()}</pre>
+      <p class="hint">積木對應的寫法。左欄訓練仍用本頁梯度下降動畫，不是 exec 這段。</p>`;
+  }
+
+  function quizHtml() {
+    return `<section class="quiz">
+      <h3>訓練前先猜一下</h3>
+      <p class="hint">兩題都對，「開始訓練」才會亮。Agent 開訓也要過關。</p>
+      <div class="q">題1：斜率 w 比較可能
+        <label><input type="radio" name="slope" value="pos"${state.slope === "pos" ? " checked" : ""} /> 正的</label>
+        <label><input type="radio" name="slope" value="neg"${state.slope === "neg" ? " checked" : ""} /> 負的</label>
+        <label><input type="radio" name="slope" value="zero"${state.slope === "zero" ? " checked" : ""} /> 接近 0</label>
+      </div>
+      <div class="q">題2：α 明顯偏大時 Cost
+        <label><input type="radio" name="alphaQuiz" value="smooth"${state.alphaQuiz === "smooth" ? " checked" : ""} /> 平滑下降</label>
+        <label><input type="radio" name="alphaQuiz" value="explode"${state.alphaQuiz === "explode" ? " checked" : ""} /> 劇烈震盪或往上爆</label>
+      </div>
+    </section>`;
+  }
+
+  function chartsHtml() {
+    if (state.phase !== "training" && state.phase !== "done") {
+      return `<p class="hint">訓練後這裡只會出現回歸線與 Cost。沒有梯度演算板，也沒有樣本運算表。</p>`;
+    }
+    const t = state.iter / 80;
+    const y2 = 170 - t * 90;
+    const costY = 20 + (1 - Math.exp(-state.iter / 90)) * 140;
+    return `<p class="status">Iteration ${state.iter}／80 · J = ${state.cost.toFixed(2)} · α = ${state.alpha} · 沒有微步驟條</p>
+      <div class="charts">
+        <div class="chart"><svg viewBox="0 0 260 190">
+          <text x="8" y="16" fill="#8aa" font-size="11">回歸線（原尺度散點）</text>
+          <circle cx="40" cy="150" r="3.2" fill="#5aa0ff"/><circle cx="70" cy="132" r="3.2" fill="#5aa0ff"/>
+          <circle cx="110" cy="118" r="3.2" fill="#5aa0ff"/><circle cx="150" cy="88" r="3.2" fill="#5aa0ff"/>
+          <circle cx="190" cy="70" r="3.2" fill="#5aa0ff"/><circle cx="230" cy="48" r="3.2" fill="#5aa0ff"/>
+          <line x1="24" y1="168" x2="246" y2="${y2}" stroke="#f8c000" stroke-width="2"/>
+        </svg></div>
+        <div class="chart"><svg viewBox="0 0 260 190">
+          <text x="8" y="16" fill="#8aa" font-size="11">Cost J</text>
+          <polyline fill="none" stroke="#50c88c" stroke-width="2"
+            points="20,20 60,${40 + (160 - costY) * 0.55} 120,${30 + (160 - costY) * 0.25} 200,${200 - costY} 240,${210 - costY}"/>
+        </svg></div>
+      </div>`;
+  }
+
+  function trainBtnHtml() {
+    const locked = !(stackReady() && quizOk()) || state.phase === "training";
+    return `<button class="btn" id="trainBtn" ${locked ? "disabled" : ""}>開始訓練</button>
+      <p class="hint">${stackReady() ? (quizOk() ? "可以開訓。訓練畫面只有線與 Cost。" : "兩題還沒過關。") : "先請 Agent 選齊決策槽。"}</p>`;
+  }
+
+  function agentHtml() {
+    const msgs = state.agentLog.length
+      ? state.agentLog.map((m) => `<div class="msg${m.who === "學生" ? " user" : ""}"><div class="who">${m.who}</div>${m.text}</div>`).join("")
+      : `<div class="msg"><div class="who">Agent</div>課堂縮放有四種：正規化、最小-最大、平均值、Z分數。組模型只寫選擇，不會自動開訓。${state.inspect ? `你正打開「${inspectTitle()}」。` : ""}</div>`;
+    return `<aside class="agent">
+      <h2>資料 Agent</h2>
+      <div class="msgs">${msgs}</div>
+      <div class="composer">
+        <div class="row">
+          <button class="btn ghost" id="askBuild">請 Agent 組模型</button>
+          <button class="btn ghost" id="askTrain">請 Agent 訓練</button>
+        </div>
+        <input id="draft" placeholder="組模型／最小-最大／平均值／Z分數／開始訓練" value="${state.draft.replace(/"/g, "&quot;")}" />
+      </div>
+    </aside>`;
+  }
+
+  function teachingA() {
+    const cinema = state.phase === "training";
+    return `<section class="teach${cinema ? " cinema" : ""}">
+      <h1>線性回歸</h1>
+      <p class="cap">積木決定管線。程式碼跟堆疊走。訓練只播圖。</p>
+      <div class="row"><div class="seg"><button class="on">單變量</button><button>多變量</button></div></div>
+      ${flowHtml()}
+      <div class="row"><div class="seg"><button>輸入資料</button><button class="on">回歸模型</button><button>輸出呈現</button></div></div>
+      ${cinema ? "" : `<h3>回歸模型</h3>${stackHtml()}${codeHtml(false)}${quizHtml()}`}
+      ${trainBtnHtml()}
+      ${chartsHtml()}
+    </section>`;
+  }
+
+  function teachingB() {
+    const cinema = state.phase === "training";
+    return `<section class="teach${cinema ? " cinema" : ""}">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div><h1>線性回歸</h1><p class="cap">程式碼是主畫面。積木收成一排標籤。</p></div>
+        <div class="seg"><button class="on">單變量</button><button>多變量</button></div>
+      </div>
+      ${cinema ? "" : `${chipsHtml()}${codeHtml(true)}`}
+      <div class="row">
+        <label class="hint">α <input id="alphaIn" type="number" step="0.001" value="${state.alpha}" /></label>
+        <label class="hint">epochs <input id="epochsIn" type="number" step="100" value="${state.epochs}" /></label>
+      </div>
+      ${cinema ? "" : quizHtml()}
+      ${trainBtnHtml()}
+      ${chartsHtml()}
+    </section>`;
+  }
+
+  function teachingC() {
+    return `<section class="teach">
+      <h1>線性回歸</h1>
+      <p class="cap">框名是決策槽，框上是目前選擇。換縮放或損失請跟右側 Agent 說。</p>
+      ${pipeHtml()}
+      ${inspectHtml()}
+      ${quizHtml()}
+      ${trainBtnHtml()}
+      ${state.phase === "training" || state.phase === "done" ? chartsHtml() : `<p class="hint">還沒訓。請右側 Agent 組完、過關後再請它開訓。</p>`}
+      <details style="margin-top:1rem">
+        <summary>對應程式碼</summary>
+        ${codeHtml(false)}
+      </details>
+    </section>`;
+  }
+
+  function bind() {
+    document.getElementById("askBuild")?.addEventListener("click", buildViaAgent);
+    document.getElementById("askTrain")?.addEventListener("click", trainViaAgent);
+    document.getElementById("trainBtn")?.addEventListener("click", startTrain);
+    document.getElementById("draft")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { state.draft = e.target.value; sendDraft(); }
+    });
+    document.getElementById("draft")?.addEventListener("input", (e) => { state.draft = e.target.value; });
+    document.getElementById("alphaIn")?.addEventListener("change", (e) => {
+      state.alpha = Number(e.target.value) || 0.01; render();
+    });
+    document.getElementById("epochsIn")?.addEventListener("change", (e) => {
+      state.epochs = Number(e.target.value) || 1500; render();
+    });
+    document.querySelectorAll("input[name=slope]").forEach((el) => {
+      el.addEventListener("change", () => { state.slope = el.value; render(); });
+    });
+    document.querySelectorAll("input[name=alphaQuiz]").forEach((el) => {
+      el.addEventListener("change", () => { state.alphaQuiz = el.value; render(); });
+    });
+    document.querySelectorAll("[data-block]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const id = el.getAttribute("data-block");
+        state.inspect = state.inspect === id ? null : id;
+        render();
+      });
+    });
+  }
+
+  function renderState() {
+    const v = variantKey();
+    const name = VARIANTS.find((x) => x.key === v).name;
+    document.getElementById("switchLabel").textContent = `${v} — ${name}`;
+    document.getElementById("stateDock").innerHTML = `<b>原型狀態</b>（切變體時共用同一份記憶體，不寫盤）
+<pre>${JSON.stringify({
+      variant: v,
+      phase: state.phase,
+      choices: state.choices,
+      builtBy: state.builtBy,
+      alpha: state.alpha,
+      epochs: state.epochs,
+      quiz: { slope: state.slope, alpha: state.alphaQuiz, unlocked: quizOk() },
+      inspect: state.inspect,
+      lastRun: { iter: state.iter, cost: state.cost, w: state.w },
+      agentTurns: state.agentLog.length,
+    }, null, 2)}</pre>`;
+  }
+
+  function render() {
+    const v = variantKey();
+    const root = document.getElementById("stage");
+    const cinema = v !== "C" && state.phase === "training";
+    root.className = `stage layout-${v.toLowerCase()}${cinema ? " cinema" : ""}`;
+    const teach = v === "B" ? teachingB() : v === "C" ? teachingC() : teachingA();
+    root.innerHTML = teach + agentHtml();
+    renderState();
+    bind();
+  }
+
+  document.getElementById("prevBtn").addEventListener("click", () => cycle(-1));
+  document.getElementById("nextBtn").addEventListener("click", () => cycle(1));
+  document.addEventListener("keydown", (e) => {
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
+    if (e.key === "ArrowLeft") cycle(-1);
+    if (e.key === "ArrowRight") cycle(1);
+  });
+
+  if (!new URLSearchParams(location.search).get("variant")) {
+    const url = new URL(location.href);
+    url.searchParams.set("variant", "C");
+    history.replaceState(null, "", url);
+  }
+  render();
+})();
+</script>
+</body>
+</html>
