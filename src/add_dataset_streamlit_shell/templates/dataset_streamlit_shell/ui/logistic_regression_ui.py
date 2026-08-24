@@ -25,12 +25,14 @@ from dataset_streamlit_shell.ml.classification import (
     RegularizedLogisticModelArtifact,
     attach_logistic_test_costs,
     build_classification_agent_context,
+    confusion_matrix_counts,
     logistic_gradient_descent_steps,
     map_feature,
     predict_class_from_proba,
     predict_proba,
     predict_proba_from_logistic_artifact,
     predict_proba_from_regularized_artifact,
+    sample_gradient_steps,
     training_accuracy,
 )
 from dataset_streamlit_shell.ml.regression import (
@@ -156,7 +158,7 @@ def render_logistic_regression_page() -> None:
         st.title(PAGE_TITLE)
         st.caption(
             "框名是決策槽，框上是目前選擇。請資料 Agent 欄組模型；"
-            "點框看只讀選擇明細。訓練畫面是決策邊界、訓練／測試 Cost，下方為測試集機率對照。"
+            "點框看只讀選擇明細。訓練畫面是決策邊界、訓練／測試 Cost，下方為測試集混淆矩陣。"
         )
         st.markdown(DECISION_SLOT_CSS, unsafe_allow_html=True)
         stage_label = st.radio(
@@ -331,13 +333,7 @@ def _scale_check_frame(working: pd.DataFrame, state: dict) -> pd.DataFrame:
 
 
 def _animation_steps(steps: list[GradientDescentStep]) -> list[GradientDescentStep]:
-    if len(steps) <= 80:
-        return steps
-    stride = max(len(steps) // 80, 1)
-    selected = steps[::stride]
-    if selected[-1] != steps[-1]:
-        selected.append(steps[-1])
-    return selected
+    return sample_gradient_steps(steps)
 
 
 def _fit_status_caption(step: GradientDescentStep, *, total_iterations: int, mapped: bool) -> str:
@@ -482,7 +478,7 @@ def _render_stage(
     chart_left, chart_right = st.columns(2)
     left_placeholder = chart_left.empty()
     cost_placeholder = chart_right.empty()
-    pred_placeholder = st.empty()
+    confusion_placeholder = st.empty()
     status_placeholder = st.empty()
 
     if training_active:
@@ -494,7 +490,7 @@ def _render_stage(
             anim_key=anim_key,
             left_placeholder=left_placeholder,
             cost_placeholder=cost_placeholder,
-            pred_placeholder=pred_placeholder,
+            confusion_placeholder=confusion_placeholder,
             status_placeholder=status_placeholder,
             mapped=mapped,
         )
@@ -516,7 +512,7 @@ def _render_stage(
                 result_key=result_key,
                 left_placeholder=left_placeholder,
                 cost_placeholder=cost_placeholder,
-                pred_placeholder=pred_placeholder,
+                confusion_placeholder=confusion_placeholder,
                 status_placeholder=status_placeholder,
                 state=state,
                 mapped=mapped,
@@ -524,7 +520,7 @@ def _render_stage(
             )
         else:
             status_placeholder.caption(
-                "訓練後這裡會出現決策邊界、訓練／測試 Cost 與測試集機率對照。"
+                "訓練後這裡會出現決策邊界、訓練／測試 Cost 與測試集混淆矩陣。"
             )
 
     _set_agent_context(
@@ -540,6 +536,7 @@ def _render_stage(
         open_slot=open_slot,
         threshold=threshold if artifact is not None else None,
         mapped=mapped,
+        result_key=result_key,
     )
 
 
@@ -590,8 +587,6 @@ def _queue_training(
         ),
         test_x,
         test_df[target],
-        lambda_=lambda_,
-        regularized=regularized,
     )
     st.session_state[anim_key] = {
         "steps": steps,
@@ -622,7 +617,7 @@ def _run_training(
     anim_key: str,
     left_placeholder,
     cost_placeholder,
-    pred_placeholder,
+    confusion_placeholder,
     status_placeholder,
     mapped: bool,
 ) -> None:
@@ -651,10 +646,10 @@ def _run_training(
         )
         history = [item for item in steps if item.iteration <= step.iteration]
         _render_cost_history_plot(history, cost_placeholder)
-        _render_probability_plot(
+        _render_confusion_matrix(
             anim["test_frame"][target],
             predict_proba(anim["test_x"], step.weights, step.intercept),
-            pred_placeholder,
+            confusion_placeholder,
             threshold=0.5,
         )
         status_placeholder.caption(caption)
@@ -709,7 +704,7 @@ def _show_result(
     result_key: str,
     left_placeholder,
     cost_placeholder,
-    pred_placeholder,
+    confusion_placeholder,
     status_placeholder,
     state: dict,
     mapped: bool,
@@ -756,7 +751,7 @@ def _show_result(
         if isinstance(artifact, RegularizedLogisticModelArtifact)
         else predict_proba_from_logistic_artifact(artifact, test_df)
     )
-    _render_probability_plot(test_df[target], test_proba, pred_placeholder, threshold=threshold)
+    _render_confusion_matrix(test_df[target], test_proba, confusion_placeholder, threshold=threshold)
     train_proba = (
         predict_proba_from_regularized_artifact(artifact, train_df)
         if isinstance(artifact, RegularizedLogisticModelArtifact)
@@ -896,24 +891,29 @@ def _render_cost_history_plot(steps: list[GradientDescentStep], placeholder) -> 
     plt.close(fig)
 
 
-def _render_probability_plot(
+def _render_confusion_matrix(
     actual: pd.Series,
     probability: pd.Series,
     placeholder,
     *,
     threshold: float,
 ) -> None:
+    predicted = predict_class_from_proba(probability, threshold)
+    n00, n01, n10, n11 = confusion_matrix_counts(actual, predicted)
+    mat = np.array([[n00, n01], [n10, n11]], dtype=float)
     fig, ax = plt.subplots(figsize=LG_TRAINING_CHART_FIGSIZE, constrained_layout=True)
-    y = pd.to_numeric(actual, errors="coerce").to_numpy(dtype=float)
-    p = np.asarray(probability, dtype=float)
-    ax.scatter(y, p, color="C0", alpha=0.8)
-    ax.axhline(float(threshold), color="red", linestyle="--", label="分類 threshold")
-    ax.set_xlim(-0.1, 1.1)
-    ax.set_ylim(-0.05, 1.05)
-    ax.set_xlabel("實際 y")
-    ax.set_ylabel("預測機率 ŷ")
-    ax.set_title("測試集機率對照")
-    ax.legend()
+    vmax = max(float(mat.max()), 1.0)
+    ax.imshow(mat, cmap="Blues", vmin=0.0, vmax=vmax)
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(["預測 0", "預測 1"])
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["實際 y=0", "實際 y=1"])
+    ax.set_title("測試集混淆矩陣")
+    for i in range(2):
+        for j in range(2):
+            value = int(mat[i, j])
+            color = "white" if value > vmax / 2 else "black"
+            ax.text(j, i, str(value), ha="center", va="center", color=color, fontsize=16)
     placeholder.pyplot(fig, clear_figure=True)
     plt.close(fig)
 
@@ -940,7 +940,7 @@ def _classification_threshold_slider(stage: str, *, enabled: bool) -> float:
             step=0.01,
             key=f"logistic_threshold_{stage}",
             disabled=not enabled,
-            help="圖上決策邊界／contour 維持 ŷ=0.5；threshold 只切測試集表與測試集機率對照虛線。",
+            help="圖上決策邊界／contour 維持 ŷ=0.5；threshold 只切測試集表與測試集混淆矩陣。",
         )
     )
 
@@ -1134,7 +1134,17 @@ def _set_agent_context(
     open_slot: str | None,
     threshold: float | None,
     mapped: bool,
+    result_key: str,
 ) -> None:
+    extras = _training_snapshot_fields(
+        working,
+        state=state,
+        artifact=artifact,
+        result_key=result_key,
+        threshold=threshold,
+        mapped=mapped,
+        target=target,
+    )
     quiz_note = (
         _boundary_quiz_appendix(unlocked=quiz_unlocked, focus_qid=st.session_state.get(quiz.SESSION_FOCUS_BOUNDARY))
         if stage == STAGE_BOUNDARY
@@ -1146,7 +1156,7 @@ def _set_agent_context(
         open_slot=open_slot,
         quiz_unlocked=quiz_unlocked,
         scale_errors=scale_errors,
-        artifact_note=_artifact_note(artifact),
+        artifact_note=_artifact_note(artifact, test_cost=extras["test_cost"]),
         slots_path=_display_path(logistic_slots_path(WORKSPACE_DIR)),
         request_path=_display_path(logistic_train_request_path(WORKSPACE_DIR)),
     )
@@ -1164,6 +1174,11 @@ def _set_agent_context(
             lambda_=state.get("lambda_") if mapped else None,
             map_degree=DEFAULT_MAP_DEGREE if mapped else None,
             threshold=threshold,
+            test_cost=extras["test_cost"],
+            cost_curve=extras["cost_curve"],
+            confusion=extras["confusion"],
+            train_accuracy=extras["train_accuracy"],
+            test_accuracy=extras["test_accuracy"],
         )
         + "\n"
         + snapshot
@@ -1172,7 +1187,66 @@ def _set_agent_context(
     )
 
 
-def _artifact_note(artifact: ClassificationArtifact | None) -> str:
+def _training_snapshot_fields(
+    working: pd.DataFrame,
+    *,
+    state: dict,
+    artifact: ClassificationArtifact | None,
+    result_key: str,
+    threshold: float | None,
+    mapped: bool,
+    target: str,
+) -> dict:
+    extras: dict = {
+        "test_cost": None,
+        "cost_curve": None,
+        "confusion": None,
+        "train_accuracy": None,
+        "test_accuracy": None,
+    }
+    if artifact is None or threshold is None:
+        return extras
+    bundle = st.session_state.get(result_key)
+    if not isinstance(bundle, dict):
+        return extras
+    steps = bundle.get("steps")
+    if isinstance(steps, list) and steps:
+        sampled = sample_gradient_steps(steps)
+        extras["cost_curve"] = [
+            (int(step.iteration), float(step.cost), float(step.test_cost))
+            for step in sampled
+            if step.test_cost is not None
+        ]
+        if bundle.get("test_cost") is not None:
+            extras["test_cost"] = float(bundle["test_cost"])
+        elif steps[-1].test_cost is not None:
+            extras["test_cost"] = float(steps[-1].test_cost)
+    split = _train_test_frames(working, state)
+    if split is None:
+        return extras
+    train_df, test_df = split
+    if mapped:
+        train_proba = predict_proba_from_regularized_artifact(artifact, train_df)
+        test_proba = predict_proba_from_regularized_artifact(artifact, test_df)
+    else:
+        train_proba = predict_proba_from_logistic_artifact(artifact, train_df)
+        test_proba = predict_proba_from_logistic_artifact(artifact, test_df)
+    predicted = predict_class_from_proba(test_proba, threshold)
+    extras["confusion"] = confusion_matrix_counts(test_df[target], predicted)
+    extras["train_accuracy"] = training_accuracy(train_df[target], train_proba, threshold)
+    extras["test_accuracy"] = training_accuracy(test_df[target], test_proba, threshold)
+    return extras
+
+
+def _artifact_note(
+    artifact: ClassificationArtifact | None,
+    *,
+    test_cost: float | None = None,
+) -> str:
     if artifact is None:
         return "此學習階段目前沒有訓練結果。"
-    return f"此學習階段有訓練結果：B={artifact.intercept:g}，訓練 J={artifact.training_cost:g}。"
+    test_part = f"，測試 J={test_cost:g}" if test_cost is not None else ""
+    return (
+        f"此學習階段有訓練結果：B={artifact.intercept:g}，"
+        f"訓練 J={artifact.training_cost:g}{test_part}。"
+    )

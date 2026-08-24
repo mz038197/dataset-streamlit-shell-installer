@@ -389,22 +389,43 @@ def attach_logistic_test_costs(
     steps: list[GradientDescentStep],
     test_features: pd.DataFrame | np.ndarray,
     test_target: pd.Series | np.ndarray,
-    *,
-    lambda_: float = 0.0,
-    regularized: bool = False,
 ) -> list[GradientDescentStep]:
     annotated: list[GradientDescentStep] = []
     for step in steps:
-        if regularized:
-            test_cost = compute_cost_logistic_reg(
-                test_features, test_target, step.weights, step.intercept, lambda_
-            )
-        else:
-            test_cost = compute_cost_logistic(
-                test_features, test_target, step.weights, step.intercept
-            )
+        test_cost = compute_cost_logistic(
+            test_features, test_target, step.weights, step.intercept
+        )
         annotated.append(replace(step, test_cost=test_cost))
     return annotated
+
+
+def sample_gradient_steps(
+    steps: list[GradientDescentStep],
+    *,
+    max_points: int = 80,
+) -> list[GradientDescentStep]:
+    if len(steps) <= max_points:
+        return list(steps)
+    stride = max(len(steps) // max_points, 1)
+    selected = list(steps[::stride])
+    if selected[-1] != steps[-1]:
+        selected.append(steps[-1])
+    return selected
+
+
+def confusion_matrix_counts(
+    actual: pd.Series | np.ndarray,
+    predicted: pd.Series | np.ndarray,
+) -> tuple[int, int, int, int]:
+    y = np.asarray(actual, dtype=int).reshape(-1)
+    p = np.asarray(predicted, dtype=int).reshape(-1)
+    if y.shape != p.shape:
+        raise ValueError("actual and predicted must have the same length")
+    n00 = int(np.sum((y == 0) & (p == 0)))
+    n01 = int(np.sum((y == 0) & (p == 1)))
+    n10 = int(np.sum((y == 1) & (p == 0)))
+    n11 = int(np.sum((y == 1) & (p == 1)))
+    return n00, n01, n10, n11
 
 
 def build_classification_agent_context(
@@ -420,6 +441,11 @@ def build_classification_agent_context(
     lambda_: float | None = None,
     map_degree: int | None = None,
     threshold: float | None = None,
+    test_cost: float | None = None,
+    cost_curve: list[tuple[int, float, float]] | None = None,
+    confusion: tuple[int, int, int, int] | None = None,
+    train_accuracy: float | None = None,
+    test_accuracy: float | None = None,
     note: str = "",
 ) -> str:
     parts = [
@@ -441,7 +467,30 @@ def build_classification_agent_context(
         parts.append("目前尚未完成本組設定的訓練，請引導學生先按「開始訓練」觀察 Cost 與模型演進。")
     else:
         parts.append(f"最後 intercept/B：{artifact.intercept:g}。")
-        parts.append(f"最後 Cost J：{artifact.training_cost:g}。")
+        parts.append(f"最後訓練 Cost J：{artifact.training_cost:g}。")
+        if test_cost is not None:
+            parts.append(f"最後測試 Cost J：{test_cost:g}。")
+        if lambda_ is not None:
+            parts.append("測試 Cost 為純對數損失，不含 λ。")
+        if cost_curve:
+            parts.append(
+                "訓練／測試 Cost 曲線（與動畫同一套；iteration,訓練Cost,測試Cost）："
+                + ";".join(
+                    f"{iteration},{train_cost:g},{held_out:g}"
+                    for iteration, train_cost, held_out in cost_curve
+                )
+                + "。"
+            )
+        if confusion is not None:
+            n00, n01, n10, n11 = confusion
+            parts.append(
+                "測試集混淆矩陣（列實際 y=0/1，欄預測 0/1）："
+                f"0→0={n00}，0→1={n01}，1→0={n10}，1→1={n11}。"
+            )
+        if train_accuracy is not None:
+            parts.append(f"訓練正確率：{train_accuracy:g}%。")
+        if test_accuracy is not None:
+            parts.append(f"測試正確率：{test_accuracy:g}%。")
         if isinstance(artifact, LogisticModelArtifact):
             weights = "、".join(
                 f"{feature}={weight:g}"

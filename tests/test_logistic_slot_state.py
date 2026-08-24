@@ -198,7 +198,10 @@ def test_host_fragment_matches_slot_contract() -> None:
     assert "logloss" in text
     assert "lambda_" in text
     assert "BinaryCrossentropy(from_logits=True)" in text
-    assert "測試集機率對照" in text
+    assert "測試集混淆矩陣" in text
+    assert "測試集機率對照" not in text
+    assert "禁止說看不到測試 Cost" in text
+    assert "測試 Cost 只算對數損失" in text
 
 
 def test_linear_inspect_has_phi_row_only_on_poly_stage() -> None:

@@ -27,12 +27,14 @@ from dataset_streamlit_shell.ml.classification import (
     build_classification_agent_context,
     compute_cost_logistic,
     compute_cost_logistic_reg,
+    confusion_matrix_counts,
     logistic_gradient_descent_steps,
     map_feature,
     predict_class_from_proba,
     predict_proba,
     predict_proba_from_logistic_artifact,
     predict_proba_from_regularized_artifact,
+    sample_gradient_steps,
     save_classification_artifact,
     sigmoid,
     training_accuracy,
@@ -285,6 +287,87 @@ def test_attach_logistic_test_costs_fills_each_step() -> None:
     assert all(step.test_cost is not None for step in annotated)
     expected = compute_cost_logistic(test[["x"]], test["y"], steps[-1].weights, steps[-1].intercept)
     assert annotated[-1].test_cost == pytest.approx(expected)
+
+
+def test_attach_logistic_test_costs_omits_lambda() -> None:
+    train = pd.DataFrame({"x": [0.0, 1.0], "y": [0, 1]})
+    test = pd.DataFrame({"x": [0.2, 0.8], "y": [0, 1]})
+    steps = logistic_gradient_descent_steps(
+        train[["x"]],
+        train["y"],
+        learning_rate=0.1,
+        epochs=2,
+        lambda_=2.0,
+        regularized=True,
+    )
+    annotated = attach_logistic_test_costs(steps, test[["x"]], test["y"])
+    unreg = compute_cost_logistic(test[["x"]], test["y"], steps[-1].weights, steps[-1].intercept)
+    regularized = compute_cost_logistic_reg(
+        test[["x"]], test["y"], steps[-1].weights, steps[-1].intercept, 2.0
+    )
+    assert annotated[-1].test_cost == pytest.approx(unreg)
+    assert annotated[-1].test_cost != pytest.approx(regularized)
+
+
+def test_confusion_matrix_counts_is_actual_by_predicted() -> None:
+    actual = pd.Series([0, 0, 1, 1, 1])
+    predicted = pd.Series([0, 1, 0, 1, 1])
+    assert confusion_matrix_counts(actual, predicted) == (1, 1, 1, 2)
+
+
+def test_sample_gradient_steps_keeps_last_and_caps_length() -> None:
+    from dataset_streamlit_shell.ml.regression import GradientDescentStep
+
+    steps = [
+        GradientDescentStep(
+            iteration=i,
+            weights=[0.0],
+            intercept=0.0,
+            cost=1.0,
+            test_cost=1.1,
+        )
+        for i in range(10001)
+    ]
+    sampled = sample_gradient_steps(steps, max_points=80)
+    assert 80 <= len(sampled) <= 82
+    assert sampled[0] == steps[0]
+    assert sampled[-1] == steps[-1]
+
+
+def test_agent_context_includes_test_cost_curve_and_confusion() -> None:
+    artifact = LogisticModelArtifact(
+        model_kind=MODEL_KIND_LOGISTIC,
+        features=["考試1分數", "考試2分數"],
+        target="是否錄取",
+        weights=[0.1, -0.2],
+        intercept=0.0,
+        scaler={"method": "minmax", "features": ["考試1分數", "考試2分數"]},
+        training_cost=0.4,
+        data_source="test",
+    )
+    context = build_classification_agent_context(
+        page_name="邏輯迴歸",
+        data_source="內建",
+        features=["考試1分數", "考試2分數"],
+        target="是否錄取",
+        learning_rate=0.001,
+        epochs=10000,
+        row_count=100,
+        artifact=artifact,
+        lambda_=0.01,
+        test_cost=0.55,
+        cost_curve=[(0, 0.7, 0.72), (80, 0.4, 0.55)],
+        confusion=(3, 1, 2, 4),
+        train_accuracy=80.0,
+        test_accuracy=70.0,
+    )
+    assert "最後訓練 Cost J：0.4" in context
+    assert "最後測試 Cost J：0.55" in context
+    assert "測試 Cost 為純對數損失，不含 λ" in context
+    assert "0,0.7,0.72" in context
+    assert "0→0=3" in context
+    assert "訓練正確率：80%" in context
+    assert "測試正確率：70%" in context
 
 
 def test_regularized_artifact_scales_then_maps() -> None:
