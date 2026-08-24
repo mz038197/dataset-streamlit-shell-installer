@@ -205,6 +205,8 @@ def test_host_fragment_matches_slot_contract() -> None:
     assert "Z分數正規化" in text
     assert "Dense(1, linear)" in text
     assert "學生同一句要求多格時可一次寫入" in text
+    assert "講明鎖定值" in text
+    assert "學生確認該格" in text
     assert "寫入該階段預設" not in text
     assert "poly 預設 lambda_=0.01" not in text
     assert "boundary" in text
