@@ -24,11 +24,18 @@ from dataset_streamlit_shell.ui.startup_challenge_context import (  # noqa: E402
     challenge_page_snapshot,
     challenge_paths,
     challenge_agent_scope,
+    clear_back_to_start_available,
     clear_challenge_runtime,
     company_changed_should_reset,
     default_data_view,
+    apply_clear_back_to_start,
     apply_confirmed_company,
     artifact_path,
+    CLEAR_BACK_TO_START_BUTTON_LABEL,
+    CLEAR_BACK_TO_START_CANCEL_LABEL,
+    CLEAR_BACK_TO_START_CONFIRM_LABEL,
+    CLEAR_BACK_TO_START_DIALOG_TITLE,
+    clear_back_to_start_dialog_body,
     invalidate_challenge_artifact,
     legacy_shared_runtime_exists,
     load_company_ui,
@@ -272,6 +279,8 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "只作為重置來源" not in text
     assert "不要改根目錄的 original.csv" in text
     assert "challenge_model_artifact" in text
+    assert "自行還原專案展示空殼" in text
+    assert "清除回起點確認" in text
 
 
 def test_host_context_vitalrisk_fragment() -> None:
@@ -484,3 +493,97 @@ def test_save_and_load_ui_snapshot(tmp_path: Path) -> None:
     missing = tmp_path / "missing.py"
     load_company_ui(live, missing, empty)
     assert live.read_text(encoding="utf-8") == "# empty\n"
+
+
+def test_clear_back_to_start_confirm_copy() -> None:
+    assert CLEAR_BACK_TO_START_BUTTON_LABEL == "清除回起點"
+    assert CLEAR_BACK_TO_START_DIALOG_TITLE == "確定清除回起點？"
+    assert CLEAR_BACK_TO_START_CONFIRM_LABEL == "確認清除"
+    assert CLEAR_BACK_TO_START_CANCEL_LABEL == "取消"
+    assert clear_back_to_start_dialog_body() == (
+        "會刪這間公司的工作、訓練、測試與畫面快照，模型區回到空殼。"
+        "起點檔與其他公司、對話都還在。確定清除？"
+    )
+
+
+def test_clear_back_to_start_available_when_runtime_or_snapshot_exists(
+    tmp_path: Path,
+) -> None:
+    paths = challenge_paths(tmp_path, "edupulse")
+    paths.working_csv.parent.mkdir(parents=True)
+    paths.start_csv.write_text("a\n1\n", encoding="utf-8")
+    assert clear_back_to_start_available(paths) is False
+    paths.working_csv.write_text("w\n1\n", encoding="utf-8")
+    assert clear_back_to_start_available(paths) is True
+    paths.working_csv.unlink()
+    paths.train_csv.write_text("t\n1\n", encoding="utf-8")
+    assert clear_back_to_start_available(paths) is True
+    paths.train_csv.unlink()
+    paths.test_csv.write_text("e\n1\n", encoding="utf-8")
+    assert clear_back_to_start_available(paths) is True
+    paths.test_csv.unlink()
+    artifact_path(paths).write_text("{}\n", encoding="utf-8")
+    assert clear_back_to_start_available(paths) is True
+    artifact_path(paths).unlink()
+    ui_snapshot_path(paths).write_text("# snap\n", encoding="utf-8")
+    assert clear_back_to_start_available(paths) is True
+    empty_shell = tmp_path / "startup_challenge_empty_shell.py"
+    empty_shell.write_text("# empty shell\n", encoding="utf-8")
+    ui_snapshot_path(paths).write_text("# empty shell\n", encoding="utf-8")
+    assert (
+        clear_back_to_start_available(paths, empty_shell=empty_shell) is False
+    )
+
+
+def test_apply_clear_back_to_start_only_touches_that_company(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    live = tmp_path / "startup_challenge_ui.py"
+    empty = tmp_path / "startup_challenge_empty_shell.py"
+    empty.write_text("# empty shell\n", encoding="utf-8")
+    live.write_text("# filled model zone\n", encoding="utf-8")
+
+    edu = challenge_paths(workspace, "edupulse")
+    vital = challenge_paths(workspace, "vitalrisk")
+    edu.working_csv.parent.mkdir(parents=True)
+    vital.working_csv.parent.mkdir(parents=True)
+    edu.start_csv.write_text("start-edu\n", encoding="utf-8")
+    vital.start_csv.write_text("start-vital\n", encoding="utf-8")
+    edu.working_csv.write_text("w-edu\n", encoding="utf-8")
+    edu.train_csv.write_text("tr-edu\n", encoding="utf-8")
+    edu.test_csv.write_text("te-edu\n", encoding="utf-8")
+    artifact_path(edu).write_text("{}\n", encoding="utf-8")
+    ui_snapshot_path(edu).write_text("# edu snap\n", encoding="utf-8")
+    vital.working_csv.write_text("w-vital\n", encoding="utf-8")
+    vital.train_csv.write_text("tr-vital\n", encoding="utf-8")
+    ui_snapshot_path(vital).write_text("# vital snap\n", encoding="utf-8")
+    write_committed_company(workspace / "challenge", "edupulse")
+
+    apply_clear_back_to_start(paths=edu, live_ui=live, empty_shell=empty)
+
+    assert edu.start_csv.read_text(encoding="utf-8") == "start-edu\n"
+    assert not edu.working_csv.exists()
+    assert not edu.train_csv.exists()
+    assert not edu.test_csv.exists()
+    assert not artifact_path(edu).exists()
+    assert not ui_snapshot_path(edu).exists()
+    assert live.read_text(encoding="utf-8") == "# empty shell\n"
+    assert vital.working_csv.read_text(encoding="utf-8") == "w-vital\n"
+    assert vital.train_csv.read_text(encoding="utf-8") == "tr-vital\n"
+    assert ui_snapshot_path(vital).read_text(encoding="utf-8") == "# vital snap\n"
+    assert vital.start_csv.read_text(encoding="utf-8") == "start-vital\n"
+    assert read_committed_company(workspace / "challenge") == "edupulse"
+    assert clear_back_to_start_available(edu) is False
+
+
+def test_empty_shell_wires_clear_back_to_start_dialog() -> None:
+    ui = (UI / "startup_challenge_ui.py").read_text(encoding="utf-8")
+    empty = (UI / "startup_challenge_empty_shell.py").read_text(encoding="utf-8")
+    assert ui == empty
+    assert "CLEAR_BACK_TO_START_DIALOG_TITLE" in ui
+    assert "CLEAR_BACK_TO_START_BUTTON_LABEL" in ui
+    assert "apply_clear_back_to_start" in ui
+    assert "clear_back_to_start_available" in ui
+    assert "challenge_confirm_clear_back" in ui
+    assert "challenge_cancel_clear_back" in ui
+    assert "PENDING_CLEAR_KEY] = company" in ui
+    assert "apply_clear_company == committed_for_clear" in ui

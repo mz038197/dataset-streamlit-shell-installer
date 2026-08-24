@@ -25,12 +25,12 @@ _Avoid_: 白板②、我們做出來的結果；把指標圖／混淆矩陣放�
 _Avoid_: 以「成果展示」作側欄名、白板③、我們不能亂承諾什麼（不當本區標題）；寫死分數常數；沒檔就隱藏下半
 
 **專案展示空殼**:
-老師發佈時的 `ui/startup_challenge_ui.py`：上半 Challenge 資料檢視，下半模型區／成果區空輪廓，並依「有無訓練／測試檔、有無 Challenge 模型產物」決定顯示輪廓或填入內容。某挑戰公司尚無 Challenge UI 快照時才載入此檔；不還原其他教學頁。
-_Avoid_: 還原整份學生專案；有快照仍蓋成空殼；讓 Agent 拆掉無檔則顯示輪廓的判斷
+老師發佈時的 `ui/startup_challenge_ui.py`：上半 Challenge 資料檢視，下半模型區／成果區空輪廓，並依「有無訓練／測試檔、有無 Challenge 模型產物」決定顯示輪廓或填入內容。某挑戰公司尚無 Challenge UI 快照時載入此檔；清除回起點確認後亦載入（該公司快照已刪）。不還原其他教學頁。
+_Avoid_: 還原整份學生專案；更換挑戰公司時有快照仍蓋成空殼；讓 Agent 拆掉無檔則顯示輪廓的判斷；讓 Agent 自行還原空殼
 
 **Challenge UI 快照**:
-該挑戰公司上次的專案展示 live UI 副本（`workspace/challenge/{company}/startup_challenge_ui.py`）。更換挑戰公司時先把目前 `ui/startup_challenge_ui.py` 存成原公司快照，再載入新公司快照；沒有則用專案展示空殼。重整頁面不改 live UI。Agent 只改 live UI，不直接改各公司快照。
-_Avoid_: 換公司一律還原空殼；五間公司共用一份已填模型區的 UI 去配另一間的資料；把快照當學生主編檔
+該挑戰公司上次的專案展示 live UI 副本（`workspace/challenge/{company}/startup_challenge_ui.py`）。更換挑戰公司時先把目前 `ui/startup_challenge_ui.py` 存成原公司快照，再載入新公司快照；沒有則用專案展示空殼。重整頁面不改 live UI。Agent 只改 live UI，不直接改各公司快照。清除回起點確認會刪目前公司這份快照，並把 live UI 還原成專案展示空殼。
+_Avoid_: 換公司一律還原空殼；五間公司共用一份已填模型區的 UI 去配另一間的資料；把快照當學生主編檔；清除回起點仍留該公司快照
 
 **Challenge 模型產物**:
 模型區訓練成功後、成果區用來判斷可以渲染的產物。各挑戰公司各自一份，寫在該公司資料夾；重整頁面與更換挑戰公司後仍有效。沒有產物時成果區維持空輪廓。該公司的 Challenge 訓練資料／測試資料被刪除時一併失效。
@@ -44,20 +44,24 @@ _Avoid_: 把公司 id 與側欄頁名混稱；混用其他公司的 CSV；重整
 更換挑戰公司生效前的模態確認。選到另一間必須通過；進頁第一次或選同一間不跳。例外：磁碟上還沒有已確認的挑戰公司、卻仍有舊的共用 working／train／test 時，第一次也要確認（即使選清單第一間），確認後才把舊檔搬進該公司資料夾。取消或關閉則維持原公司。確認後切到該公司的資料、Challenge UI 快照與 Challenge Agent session；不會刪除各公司已分開存放的檔。再切回來進度仍在。
 _Avoid_: 防呆、alert、window.confirm；只在有工作資料時才跳；確認更換就刪掉工作副本；文案仍寫會清除工作資料；有舊共用檔時默默搬進清單第一間
 
+**清除回起點確認**:
+專案展示「清除回起點」生效前的模態確認。只動目前已確認的挑戰公司：刪 Challenge 工作資料／訓練資料／測試資料與該公司 Challenge UI 快照，Challenge 模型產物失效，live UI 還原成專案展示空殼；Challenge 起點資料、其他公司與 Challenge Agent session 不動。無工作／切分／產物且無該公司快照時不畫按鈕。取消或關閉維持現狀；確認後 Challenge 資料檢視改看起點。
+_Avoid_: 重置、防呆、alert、window.confirm；清除訓練／測試（未刪 working 的舊草案）；回到只有工作檔案；與清除回雙表起點混稱；當更換挑戰公司；清對話；五間一起清；兩個確認視窗
+
 **Challenge 起點資料**:
 各挑戰公司內建的只讀起點 CSV（`workspace/challenge/{company}.csv`）。可髒、供診斷與複製清理；不得覆寫此檔。與雙表線的 Original 原始資料不是同一概念。
 _Avoid_: Original 原始資料（未加 Challenge 前綴）、起點檔（未鎖定挑戰語境時）
 
 **Challenge 工作資料**:
-學生清理後的工作副本；各挑戰公司各自一份（`workspace/challenge/{company}/working.csv`），從不覆寫該公司的 Challenge 起點資料。切出該公司 Challenge 訓練資料／Challenge 測試資料的來源；模型不直接吃這份。任何寫回該公司本檔都會刪除該公司已有的訓練／測試檔（切分作廢）。與雙表線根目錄的 Working 工作資料不是同一份。不走 Ready，亦不強制 cleaning_log。重整頁面與更換挑戰公司時保留。安裝或更新殼層時不得覆蓋或刪除各公司工作資料、訓練資料、測試資料，以及舊的共用 working／train／test。
+學生清理後的工作副本；各挑戰公司各自一份（`workspace/challenge/{company}/working.csv`），從不覆寫該公司的 Challenge 起點資料。切出該公司 Challenge 訓練資料／Challenge 測試資料的來源；模型不直接吃這份。任何寫回該公司本檔都會刪除該公司已有的訓練／測試檔（切分作廢）。與雙表線根目錄的 Working 工作資料不是同一份。不走 Ready，亦不強制 cleaning_log。重整頁面與更換挑戰公司時保留；清除回起點確認後刪除該公司這份。安裝或更新殼層時不得覆蓋或刪除各公司工作資料、訓練資料、測試資料，以及舊的共用 working／train／test。
 _Avoid_: Working、working.csv（未指明挑戰公司與軌道）；五間公司共用一份工作副本；更換挑戰公司或重整時刪掉工作副本；安裝／--force 蓋掉學生已清的 Challenge 工作資料；暗示挑戰線要先建立 Ready；把切分寫到根目錄 train／val／test
 
 **Challenge 訓練資料**:
-從該公司 Challenge 工作資料切出的訓練 CSV（`workspace/challenge/{company}/train.csv`）。由學生與 Agent 討論後寫出，頁上無套用按鈕。預設 80／20；有類別目標則分層，否則隨機。模型訓練吃這份。不是側欄「資料切分」的產物，也不是根目錄 `train.csv`。更換挑戰公司時保留；寫回該公司 Challenge 工作資料時一併清除。
+從該公司 Challenge 工作資料切出的訓練 CSV（`workspace/challenge/{company}/train.csv`）。由學生與 Agent 討論後寫出，頁上無套用按鈕。預設 80／20；有類別目標則分層，否則隨機。模型訓練吃這份。不是側欄「資料切分」的產物，也不是根目錄 `train.csv`。更換挑戰公司時保留；寫回該公司 Challenge 工作資料時一併清除；清除回起點確認後亦刪。
 _Avoid_: 資料切分（側欄頁）、Ready、workspace/train.csv、Challenge 工作資料（當訓練輸入）；挑戰線 val；五間公司共用一份 train.csv
 
 **Challenge 測試資料**:
-與該公司 Challenge 訓練資料同一次切分寫出的測試 CSV（`workspace/challenge/{company}/test.csv`）。模型評估／演示吃這份。不是根目錄 `test.csv`；挑戰線第一版不做 val。更換挑戰公司時保留；寫回該公司 Challenge 工作資料時一併清除。
+與該公司 Challenge 訓練資料同一次切分寫出的測試 CSV（`workspace/challenge/{company}/test.csv`）。模型評估／演示吃這份。不是根目錄 `test.csv`；挑戰線第一版不做 val。更換挑戰公司時保留；寫回該公司 Challenge 工作資料時一併清除；清除回起點確認後亦刪。
 _Avoid_: workspace/test.csv、Challenge 驗證資料（第一版不做）、側欄「資料切分」的 test.csv；五間公司共用一份 test.csv
 
 **Challenge 資料說明書**:
@@ -65,8 +69,8 @@ _Avoid_: workspace/test.csv、Challenge 驗證資料（第一版不做）、側�
 _Avoid_: 教師用缺陷說明、劇透缺陷清單；把說明書全文貼進主教學欄
 
 **Challenge 資料檢視**:
-專案展示上半切換目前查看哪一份挑戰 CSV 的控制。標籤為起點／工作／訓練／測試；有檔才可選。有 Challenge 工作資料時預設工作，否則起點。起點只讀。
-_Avoid_: 一次並排四份表；預設改成訓練資料；把根目錄 train／test 算進來
+專案展示上半切換目前查看哪一份挑戰 CSV 的控制。標籤為起點／工作／訓練／測試；有檔才可選。有 Challenge 工作資料時預設工作，否則起點。起點只讀。「清除回起點」放在此控制旁；通過清除回起點確認後改看起點。
+_Avoid_: 一次並排四份表；預設改成訓練資料；把根目錄 train／test 算進來；把清除回起點放到挑戰公司下拉或模型區
 
 **dataset_base_context**:
 總覽、AI 協作資料整理與降維分析專用的 Agent `host_context`。內容為雙表工作副本、Original、Working、腳本目錄與 cleaning_log 規則。不含教學頁寫回規則，亦不含 Ready。
@@ -77,12 +81,12 @@ _Avoid_: 焊進類神經網路左欄或線性回歸決策槽；教學頁沒傳 h
 _Avoid_: 沒傳 host 就吃 dataset_base_context；在圖表探索組線性回歸或改 NN 架構；把 Challenge host context 當教學頁 host；跟學生講左欄下拉
 
 **Challenge host context**:
-專案展示頁專用的 Agent `host_context`：定角色、挑戰軌道檔案邊界（起點只讀、目前公司的工作副本可寫、訓練／測試由該公司工作副本切出、改該公司 working 即作廢該公司切分）、模型區／成果區完成樣貌，並串上當前挑戰公司的倫理／資料加碼片段；不叠加 dataset_base_context，也不叠教學頁 host context。加碼只強化必講紅線與檢查方向，不剧透教師缺陷清單。倫理紅線只在對話與口頭 Gate，不上頁。禁止拆掉專案展示空殼「無檔則顯示輪廓」的判斷。
-_Avoid_: 挑戰頁直接叠 Titanic／Ready／教學頁寫回；靠「衝突以挑戰為準」口頭覆寫卻仍灌入根目錄 working 規則；在 host 列出老師埋的缺陷清單；引導去改根目錄 train／val／test；把紅線寫成頁上第三塊；引導改其他公司資料夾或 Challenge UI 快照
+專案展示頁專用的 Agent `host_context`：定角色、挑戰軌道檔案邊界（起點只讀、目前公司的工作副本可寫、訓練／測試由該公司工作副本切出、改該公司 working 即作廢該公司切分）、模型區／成果區完成樣貌，並串上當前挑戰公司的倫理／資料加碼片段；不叠加 dataset_base_context，也不叠教學頁 host context。加碼只強化必講紅線與檢查方向，不剧透教師缺陷清單。倫理紅線只在對話與口頭 Gate，不上頁。禁止拆掉專案展示空殼「無檔則顯示輪廓」的判斷。還原空殼只走清除回起點確認，Agent 不得自行還原。
+_Avoid_: 挑戰頁直接叠 Titanic／Ready／教學頁寫回；靠「衝突以挑戰為準」口頭覆寫卻仍灌入根目錄 working 規則；在 host 列出老師埋的缺陷清單；引導去改根目錄 train／val／test；把紅線寫成頁上第三塊；引導改其他公司資料夾或 Challenge UI 快照；自行還原專案展示空殼
 
 **Challenge Agent session**:
-專案展示頁專用的對話 session；與雙表整理線的 Agent session 分開。各挑戰公司各一條；更換挑戰公司時切換 session、不清空對話。重整頁面後不保留（不寫盤）。進頁或換公司時以該公司的 Challenge host context 對應該條 session。
-_Avoid_: 與全站整理頁共用同一條 session 卻不換 host；換公司就重建而砍掉該公司對話；只靠每輪 snapshot 提醒卻不換 host；為挑戰頁單獨做 F5 對話存盤
+專案展示頁專用的對話 session；與雙表整理線的 Agent session 分開。各挑戰公司各一條；更換挑戰公司時切換 session、不清空對話。重整頁面後不保留（不寫盤）。進頁或換公司時以該公司的 Challenge host context 對應該條 session。清除回起點確認也不清空該公司對話。
+_Avoid_: 與全站整理頁共用同一條 session 卻不換 host；換公司就重建而砍掉該公司對話；清除回起點就清對話；只靠每輪 snapshot 提醒卻不換 host；為挑戰頁單獨做 F5 對話存盤
 
 **Challenge 允許改動範圍**:
 專案展示軌道上 Agent／學生預設可改：`ui/startup_challenge_ui.py`、目前挑戰公司資料夾內的 Challenge 工作資料／訓練資料／測試資料、必要時 `scripts/`。不改其他 ML 教學頁、不改專案展示空殼、不直接改各公司 Challenge UI 快照；頁入口薄包裝與側欄導覽由老師預放。
@@ -458,7 +462,7 @@ _Avoid_: 分層抽樣（可作口語）、stratify（作頁標題主文）；無
 
 **雙表起點**:
 課堂整合線的起始狀態與協作區入口狀態：無 working／切分產物。進「欄位與資料整合」時從內建雙表教材寫出雙表工作副本。「清除回雙表起點」刪除 Working／Original／切分／副本與遺留 ready.csv 後回到此狀態。不提供單表 CSV 上傳進 Original／Working。
-_Avoid_: 僅刪 working 卻留下 train／val／test 或雙表工作副本仍稱為回到起點；以「資料上傳與預覽」或上傳 CSV 作為協作線起點；側欄再設僅名為「資料整合」的獨立頁才算起點完成；把舊 ready.csv 當成起點還沒收乾淨的條件
+_Avoid_: 僅刪 working 卻留下 train／val／test 或雙表工作副本仍稱為回到起點；以「資料上傳與預覽」或上傳 CSV 作為協作線起點；側欄再設僅名為「資料整合」的獨立頁才算起點完成；把舊 ready.csv 當成起點還沒收乾淨的條件；與專案展示的清除回起點確認混稱
 
 **內建雙表教材**:
 課堂只讀的乘客表／航程表 CSV（`built-in-data/integration/`）。不得覆寫。進雙表起點頁時複製為雙表工作副本。

@@ -1,6 +1,6 @@
 # 專案展示（AI Startup Challenge）定案
 
-> 來源：grilling（2026-08-11～12、2026-08-16、2026-08-19）。以本文與 `CONTEXT.md` 為準。白板三塊為舊頁結構，見 ADR-0011。各公司進度見 ADR-0014。
+> 來源：grilling（2026-08-11～12、2026-08-16、2026-08-19、2026-08-24）。以本文與 `CONTEXT.md` 為準。白板三塊為舊頁結構，見 ADR-0011。各公司進度見 ADR-0014。清除回起點見 ADR-0025。
 
 ## 產品
 
@@ -22,12 +22,13 @@
 - 挑戰公司：`edupulse`／`vitalrisk`／`airsense`／`churnlab`／`flowcast`（模板內建五間起點 CSV 與說明書；教師用缺陷說明不進學生專案）。已確認的那一間寫進磁碟，重整後仍有效
 - 改該公司 working：刪除該公司 train／test，該公司模型產物失效
 - 換公司：先經過更換挑戰公司確認；確認後**不刪檔**，改存／載入 Challenge UI 快照（沒有則專案展示空殼），切換該公司的 Challenge Agent session
+- 清除回起點：Challenge 資料檢視旁的按鈕；無工作／切分／產物且無該公司快照時不畫。經清除回起點確認後只動目前公司：刪 working／train／test 與該公司 Challenge UI 快照，live UI 還原專案展示空殼；起點與其他公司、對話不動（ADR-0025）
 - 舊共用 `challenge/working.csv`（及 train／test）：只搬進確認的那一間。磁碟上還沒記住公司卻仍有舊檔時，第一次也要確認後才搬
 - 安裝／更新／`--force`：不得覆蓋或刪除 Challenge 工作資料、訓練資料、測試資料（含各公司資料夾與舊共用檔）
 
 ## 空殼與成果
 
-- 發佈＝專案展示空殼；某公司尚無 Challenge UI 快照時才載入 `ui/startup_challenge_empty_shell.py`
+- 發佈＝專案展示空殼；某公司尚無 Challenge UI 快照時載入 `ui/startup_challenge_empty_shell.py`；清除回起點確認後亦載入（該公司快照已刪）
 - Challenge UI 快照：`workspace/challenge/{company}/startup_challenge_ui.py`；Agent 只改 live `ui/startup_challenge_ui.py`
 - 模型區／成果區框始終可見；無該公司 train+test 時不可填入
 - 模型區＝選型與訓練；成果區＝訓練後指標／圖／演示（要有該公司 Challenge 模型產物才渲染；產物寫在該公司資料夾，重整與換公司後仍有效）

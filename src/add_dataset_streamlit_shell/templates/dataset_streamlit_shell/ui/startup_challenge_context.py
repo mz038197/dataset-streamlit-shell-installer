@@ -31,6 +31,10 @@ CHALLENGE_SPLIT_SIGNATURE_KEY = "challenge_split_signature"
 COMPANY_SWITCH_DIALOG_TITLE = "確定更換挑戰公司？"
 COMPANY_SWITCH_CONFIRM_LABEL = "確認更換"
 COMPANY_SWITCH_CANCEL_LABEL = "取消"
+CLEAR_BACK_TO_START_BUTTON_LABEL = "清除回起點"
+CLEAR_BACK_TO_START_DIALOG_TITLE = "確定清除回起點？"
+CLEAR_BACK_TO_START_CONFIRM_LABEL = "確認清除"
+CLEAR_BACK_TO_START_CANCEL_LABEL = "取消"
 COMMITTED_COMPANY_FILENAME = "committed_company"
 LEGACY_RUNTIME_NAMES: tuple[str, ...] = ("working.csv", "train.csv", "test.csv")
 UI_SNAPSHOT_FILENAME = "startup_challenge_ui.py"
@@ -41,6 +45,13 @@ def company_switch_dialog_body(new_company: str) -> str:
     return (
         "切換後會改看該公司的資料、畫面與對話，不會刪檔。再切回來進度還在。"
         f"確定改為 **{new_company}**？"
+    )
+
+
+def clear_back_to_start_dialog_body() -> str:
+    return (
+        "會刪這間公司的工作、訓練、測試與畫面快照，模型區回到空殼。"
+        "起點檔與其他公司、對話都還在。確定清除？"
     )
 
 
@@ -318,6 +329,39 @@ def clear_challenge_runtime(paths: ChallengePaths) -> None:
     invalidate_challenge_split(paths)
 
 
+def clear_back_to_start_available(
+    paths: ChallengePaths,
+    *,
+    empty_shell: Path | None = None,
+) -> bool:
+    if (
+        paths.working_csv.is_file()
+        or paths.train_csv.is_file()
+        or paths.test_csv.is_file()
+        or read_artifact_present(paths)
+    ):
+        return True
+    snapshot = ui_snapshot_path(paths)
+    if not snapshot.is_file():
+        return False
+    if empty_shell is None or not empty_shell.is_file():
+        return True
+    return snapshot.read_bytes() != empty_shell.read_bytes()
+
+
+def apply_clear_back_to_start(
+    *,
+    paths: ChallengePaths,
+    live_ui: Path,
+    empty_shell: Path,
+) -> None:
+    clear_challenge_runtime(paths)
+    snapshot = ui_snapshot_path(paths)
+    if snapshot.is_file():
+        snapshot.unlink()
+    restore_startup_challenge_ui(empty_shell, live_ui)
+
+
 def sync_split_if_working_stale(paths: ChallengePaths) -> bool:
     """working 比切分檔新時刪除 train／test。回傳是否作廢了切分。"""
     if not paths.working_csv.is_file():
@@ -407,6 +451,7 @@ def challenge_host_context(
 - 覆寫 Challenge 起點 CSV。
 - 剧透「老師故意埋了哪些缺陷」；改為引導學生自己檢查。
 - 用 BOARD_* 常數或寫死分數當成果真相。
+- 自行還原專案展示空殼；還原空殼只走頁上的清除回起點確認。
 
 【目前公司】
 {company}
