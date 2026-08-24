@@ -77,8 +77,20 @@ _Avoid_: 一次並排四份表；預設改成訓練資料；把根目錄 train�
 _Avoid_: 焊進類神經網路左欄或線性回歸決策槽；教學頁沒傳 host 就吃這包；與 Challenge host context 或教學頁 host context 叠用；引導建立 ready.csv
 
 **教學頁 host context**:
-監督式、非監督式、深度學習、電腦視覺各頁自己的 Agent `host_context`，不叠 dataset_base_context。本頁用內建範例資料，不准動根目錄 Original／Working，不要讀寫 ready.csv；有寫回協定的頁另接該頁規則。每一輪頁面狀態不叠根目錄 Working 列數／欄位。
-_Avoid_: 沒傳 host 就吃 dataset_base_context；在圖表探索組線性回歸或改 NN 架構；把 Challenge host context 當教學頁 host；跟學生講左欄下拉
+監督式、非監督式、深度學習、電腦視覺各頁自己的 Agent `host_context`，不叠 dataset_base_context。表頁用內建範例資料，電腦視覺頁用內建範例圖片；不准動根目錄 Original／Working，不要讀寫 ready.csv；有寫回協定的頁另接該頁規則。每一輪頁面狀態不叠根目錄 Working 列數／欄位。
+_Avoid_: 沒傳 host 就吃 dataset_base_context；在圖表探索組線性回歸或改 NN 架構；把 Challenge host context 當教學頁 host；跟學生講左欄下拉；把內建範例圖片叫內建範例資料；叫學生先下載才能看 CV 示範圖
+
+**內建範例資料**:
+監督式、非監督式、深度學習教學頁隨殼層附上的表；進頁即用，不提供 ready.csv 切換。各演算法頁另有限定名稱。電腦視覺頁不用這個詞。
+_Avoid_: 把 CV 示範圖叫這個；ready.csv 當教學頁來源；叫學生連網下載才有表
+
+**內建範例圖片**:
+電腦視覺教學頁隨殼層附上的示範影像。進頁即可選、可看，不是學生連網下載的包。缺檔時重跑安裝／更新或改用上傳影像，不在頁上提供「下載範例資料」。
+_Avoid_: 範例資料（當學生要下載的包）；把 CV 示範圖叫內建範例資料；請先下載才能看示範圖
+
+**內建範例圖片（語意分割）**:
+四張：街景（person／car，路為 background）、狗（前景 vs background）、三隻貓（同類像素同色）、騎士與馬（person＋horse）。與實例分割共用前三張以便對照。進頁即可選。
+_Avoid_: desk_objects；cat_and_dog；把路當 VOC 一類；少於或多於四張；下載後才有圖
 
 **Challenge host context**:
 專案展示頁專用的 Agent `host_context`：定角色、挑戰軌道檔案邊界（起點只讀、目前公司的工作副本可寫、訓練／測試由該公司工作副本切出、改該公司 working 即作廢該公司切分）、模型區／成果區完成樣貌，並串上當前挑戰公司的倫理／資料加碼片段；不叠加 dataset_base_context，也不叠教學頁 host context。加碼只強化必講紅線與檢查方向，不剧透教師缺陷清單。倫理紅線只在對話與口頭 Gate，不上頁。禁止拆掉專案展示空殼「無檔則顯示輪廓」的判斷。還原空殼只走清除回起點確認，Agent 不得自行還原。

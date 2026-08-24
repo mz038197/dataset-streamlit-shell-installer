@@ -53,10 +53,10 @@ DETECTION_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
 )
 
 SEMANTIC_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (
-    ("street_scene.jpg", "Street scene — person / car / road regions"),
-    ("desk_objects.jpg", "Desk scene — furniture and object regions"),
-    ("dog.jpg", "Single dog — foreground vs background"),
-    ("cat_and_dog.jpg", "Two animals — same-class pixels merge by label"),
+    ("street_scene.jpg", "街景 — person／car 區域；路為 background"),
+    ("dog.jpg", "狗 — 前景 vs background"),
+    ("three_cats.jpg", "三隻貓 — 同類像素同色"),
+    ("horse_rider.jpg", "騎士與馬 — person＋horse"),
 )
 
 INSTANCE_DEMO_MANIFEST: tuple[tuple[str, str], ...] = (

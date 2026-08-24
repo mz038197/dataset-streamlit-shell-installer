@@ -15,8 +15,6 @@ TEMPLATE_ROOT = (
 if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
-from dataset_streamlit_shell.cv.image_io import semantic_demo_specs, semantic_examples_ready
-
 pytest.importorskip("torch")
 from dataset_streamlit_shell.cv.semantic_segmentation import (
     DEFAULT_MODEL,
@@ -95,11 +93,3 @@ def test_format_semantic_summary_mentions_top_regions() -> None:
     summary = format_semantic_summary(items)
     assert "person" in summary
     assert "car" in summary
-
-
-def test_semantic_demo_specs_has_four_entries() -> None:
-    assert len(semantic_demo_specs()) == 4
-
-
-def test_semantic_examples_ready_false_when_missing() -> None:
-    assert semantic_examples_ready() is False

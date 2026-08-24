@@ -7,7 +7,6 @@ import streamlit as st
 
 from dataset_streamlit_shell.cv.image_io import (
     EXAMPLES_DIR,
-    download_sample_data,
     load_image_bytes,
     load_image_path,
     pil_to_rgb_array,
@@ -50,23 +49,11 @@ def render_semantic_segmentation_page() -> None:
 def _render_download_panel() -> bool:
     if semantic_examples_ready():
         return True
-    st.info("首次使用請先下載教學用示範圖（需網路連線）。")
-    if st.button("下載範例資料", key="cv_semantic_download_samples"):
-        progress = st.progress(0.0, text="準備下載…")
-        status = st.empty()
-
-        def _callback(message: str, value: float) -> None:
-            progress.progress(value, text=message)
-            status.caption(message)
-
-        try:
-            download_sample_data(progress_callback=_callback)
-            st.success("範例資料已下載並快取於本機。")
-            st.rerun()
-        except Exception as exc:  # noqa: BLE001 - surface download issues in UI
-            st.error(f"下載失敗：{exc}")
-            st.warning("你仍可使用「上傳影像」進行語意分割。")
-    return semantic_examples_ready()
+    st.warning(
+        "找不到內建範例圖。請重新執行 add-dataset-streamlit-shell --update，"
+        "或改用上傳影像。"
+    )
+    return False
 
 
 def _resolve_image(
@@ -120,8 +107,8 @@ def _render_concept_tab() -> None:
         )
     with st.expander("與物件偵測的差異", expanded=False):
         st.write(
-            "偵測框只能框住物件外圍；語意分割能標出道路、天空、人等區域的像素歸屬，"
-            "適合街景與場景理解。"
+            "偵測框只能框住物件外圍；語意分割能標出 person、car 等區域的像素歸屬，"
+            "路與天空通常落在 background。"
         )
     st.caption(f"本頁使用 {DEFAULT_MODEL}（COCO 預訓練）。")
 
@@ -150,7 +137,7 @@ def _render_inference_tab() -> None:
                 key="cv_semantic_example",
             )
         else:
-            st.warning("請先下載範例資料，或改用上傳影像。")
+            st.warning("找不到內建範例圖，請改用上傳影像。")
     else:
         uploaded = st.file_uploader(
             "上傳影像",
