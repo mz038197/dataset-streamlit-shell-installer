@@ -28,7 +28,8 @@ def test_dataset_base_context_keeps_prep_rules_without_teaching_writeback() -> N
     src = (UI / "data_ui.py").read_text(encoding="utf-8")
     text = _def_block(src, "dataset_base_context")
     assert "Working 工作資料路徑" in text
-    assert "Ready 分析就緒資料路徑" in text
+    assert "Ready 分析就緒資料路徑" not in text
+    assert "不要建立 ready.csv" in text
     assert "commit_dual_table_merge" in text
     assert "【類神經網路頁】" not in text
     assert "【線性回歸頁】" not in text
@@ -46,7 +47,7 @@ def test_teaching_page_host_context_forbids_root_working_and_accepts_fragment() 
     text = _def_block(src, "teaching_page_host_context")
     assert "內建範例資料" in text
     assert "working.csv" in text
-    assert "ready.csv" in text
+    assert "不要讀寫 ready.csv" in text or "不要建立 ready.csv" in text
     assert "original.csv" in text
     assert "join(fragment" in text
     assert "commit_dual_table_merge" not in text

@@ -364,12 +364,15 @@ def save_dataset(df: pd.DataFrame, *, working: bool = False) -> None:
     _ensure_workspace_dir()
     target = WORKING_DATASET_PATH if working else ORIGINAL_DATASET_PATH
     df.to_csv(target, index=False)
-    if not working:
-        st.session_state["dataset_df"] = df
-        st.session_state.pop("working_dataset_df", None)
-        st.session_state.pop("selected_columns", None)
-        st.session_state.pop("filter_columns", None)
-        st.session_state.pop("filter_signature", None)
+    if working:
+        discard_leftover_ready()
+        clear_split_datasets()
+        return
+    st.session_state["dataset_df"] = df
+    st.session_state.pop("working_dataset_df", None)
+    st.session_state.pop("selected_columns", None)
+    st.session_state.pop("filter_columns", None)
+    st.session_state.pop("filter_signature", None)
 
 
 def refresh_working_dataset_cache() -> None:
@@ -391,6 +394,8 @@ def load_dataset() -> pd.DataFrame | None:
 
 
 def load_working_dataset() -> pd.DataFrame | None:
+    discard_leftover_ready()
+    sync_split_if_working_stale()
     if WORKING_DATASET_PATH.exists():
         df = pd.read_csv(WORKING_DATASET_PATH)
         st.session_state["working_dataset_df"] = df
@@ -398,19 +403,12 @@ def load_working_dataset() -> pd.DataFrame | None:
     return load_dataset()
 
 
-def load_ready_dataset() -> pd.DataFrame | None:
-    if READY_DATASET_PATH.exists():
-        df = pd.read_csv(READY_DATASET_PATH)
-        st.session_state["ready_dataset_df"] = df
-        return df
-    return None
-
-
 def reset_working_dataset() -> None:
     st.session_state.pop("working_dataset_df", None)
     if WORKING_DATASET_PATH.exists():
         WORKING_DATASET_PATH.unlink()
-    reset_ready_dataset()
+    discard_leftover_ready()
+    clear_split_datasets()
     reset_cleaning_log()
 
 
@@ -420,11 +418,23 @@ def clear_split_datasets() -> None:
             path.unlink()
 
 
-def reset_ready_dataset() -> None:
+def discard_leftover_ready() -> None:
     refresh_ready_dataset_cache()
     if READY_DATASET_PATH.exists():
         READY_DATASET_PATH.unlink()
+
+
+def sync_split_if_working_stale() -> bool:
+    if not WORKING_DATASET_PATH.exists():
+        return False
+    split_files = [path for path in SPLIT_DATASET_PATHS if path.exists()]
+    if not split_files:
+        return False
+    working_mtime = WORKING_DATASET_PATH.stat().st_mtime
+    if not any(working_mtime > path.stat().st_mtime for path in split_files):
+        return False
     clear_split_datasets()
+    return True
 
 
 def working_dataset_file_exists() -> bool:
@@ -432,7 +442,7 @@ def working_dataset_file_exists() -> bool:
 
 
 def clear_to_dual_start() -> None:
-    """清除 working／ready／切分產物／original／雙表工作副本，回到雙表起點。"""
+    """清除 working／切分產物／original／雙表工作副本與遺留 ready.csv，回到雙表起點。"""
     clear_split_datasets()
     reset_working_dataset()
     st.session_state.pop("dataset_df", None)
@@ -457,7 +467,6 @@ def reset_working_dataset_from_source() -> bool:
         return False
     save_dataset(source, working=True)
     st.session_state["working_dataset_df"] = source
-    reset_ready_dataset()
     append_cleaning_log(
         action="重置工作資料",
         columns=source.columns,
@@ -466,13 +475,6 @@ def reset_working_dataset_from_source() -> bool:
         actor="ui",
     )
     return True
-
-
-def create_ready_dataset(df: pd.DataFrame) -> None:
-    _ensure_workspace_dir()
-    clear_split_datasets()  # 重建 Ready 作廢既有切分產物
-    df.to_csv(READY_DATASET_PATH, index=False)
-    st.session_state["ready_dataset_df"] = df
 
 
 def save_split_datasets(
@@ -528,10 +530,9 @@ def load_cleaning_log(limit: int = 8) -> list[dict[str, object]]:
 
 
 def dataset_base_context() -> str:
-    """整理／分析頁 host_context：雙表、Working、Ready、腳本。不含教學頁寫回。"""
+    """整理／分析頁 host_context：雙表、Working、腳本。不含教學頁寫回。"""
     source = _display_path(ORIGINAL_DATASET_PATH)
     working = _display_path(WORKING_DATASET_PATH)
-    ready = _display_path(READY_DATASET_PATH)
     cleaning_log = _display_path(CLEANING_LOG_PATH)
     scripts = _display_path(SHELL_ROOT / "scripts")
     copies = _display_path(WORKSPACE_DIR / "integration")
@@ -541,6 +542,9 @@ def dataset_base_context() -> str:
         "合併完成前不存在；僅在資料整合時可與 Working 同批寫入，此外請勿覆蓋。"
         f"Working 工作資料路徑：{working}。"
         "資料整合成功時與 Original 一併寫入；Working 為之後整理用副本。"
+        "圖表探索、PCA、資料切分都讀 Working。"
+        "寫回 Working 會作廢 train／val／test，並刪掉遺留 ready.csv。"
+        "不要建立 ready.csv，也不要把它當分析來源。"
         f"雙表工作副本目錄：{copies}（workspace/integration/passengers.csv、voyage.csv）。"
         "雙表起點進頁時已寫出這兩份；請直接改航程表副本的 passenger_id 為 PassengerId，不要另存新檔。"
         "內建雙表教材不得覆寫。"
@@ -551,7 +555,6 @@ def dataset_base_context() -> str:
         "（可用 commit_dual_table_merge）。"
         "寫入後請告訴學生按「重新讀取工作資料」。"
         "未解鎖或未對齊鍵名時拒絕合併。"
-        f"Ready 分析就緒資料路徑：{ready}，由工作資料凍結後供圖表探索、降維等分析頁使用。"
         "回答資料問題時，請使用你的 read_file 或 exec 工具實際讀取 CSV 後再回答。"
         f"如果使用者要求補值、清理資料、計算欄位或新增欄位，且 Working 已存在，請預設讀取並更新 {working}，不要覆蓋 {source}。"
         f"如果需要撰寫 Python 腳本來整理或檢查資料，請只建立在 {scripts} 底下，"
@@ -570,8 +573,9 @@ def dataset_base_context() -> str:
 def teaching_page_host_context(*fragments: str) -> str:
     """教學頁 host_context：內建範例邊界，可接該頁寫回 fragment。不叠 dataset_base_context。"""
     boundary = (
-        "【教學頁】本頁使用內建範例資料，不是根目錄 Working／Ready／Original。"
-        "不准讀寫或覆寫根目錄 original.csv、working.csv、ready.csv。"
+        "【教學頁】本頁使用內建範例資料，不是根目錄 Working／Original。"
+        "不准讀寫或覆寫根目錄 original.csv、working.csv。"
+        "不要讀寫 ready.csv。"
         "不要引導雙表合併，也不要改 cleaning_log。"
     )
     extra = "".join(fragment for fragment in fragments if fragment)

@@ -1,4 +1,4 @@
-"""Ready 資料切分：訓練／驗證／測試。"""
+"""工作資料切分：訓練／驗證／測試。"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def split_ready_frame(
     stratify_column: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if ready is None or ready.empty:
-        raise ValueError("Ready 資料為空，無法切分")
+        raise ValueError("工作資料為空，無法切分")
     if not ratios_sum_to_one(train_ratio, val_ratio, test_ratio):
         raise ValueError("訓練／驗證／測試比例加總必須為 100%")
     if any(ratio < 0 for ratio in (train_ratio, val_ratio, test_ratio)):

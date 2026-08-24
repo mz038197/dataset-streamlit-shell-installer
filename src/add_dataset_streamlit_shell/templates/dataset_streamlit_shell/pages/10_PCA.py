@@ -80,4 +80,4 @@ def _render_pca(df: pd.DataFrame) -> None:
     st.dataframe(loading.style.format("{:.3f}"), width="stretch")
 
 
-render_analysis_shell("PCA 主成分分析", "以 Ready 分析就緒資料進行主成分分析與條件檢查。", _render_pca)
+render_analysis_shell("PCA 主成分分析", "以 Working 工作資料進行主成分分析與條件檢查。", _render_pca)

@@ -18,13 +18,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataset_streamlit_shell.ui.data_ui import (
-    READY_DATASET_PATH,
+    WORKING_DATASET_PATH,
     _display_path,
     brand_page_icon,
     inject_style,
-    load_ready_dataset,
+    load_working_dataset,
     render_chat_panel,
     render_dataset_metrics,
+    working_dataset_file_exists,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
@@ -77,15 +78,20 @@ def _all_columns(df: pd.DataFrame) -> list[str]:
 
 
 def _load_chart_dataset() -> tuple[pd.DataFrame | None, str, Path | None, str | None]:
-    """圖表探索只讀 Ready 分析就緒資料。"""
-    dataset = load_ready_dataset()
+    """圖表探索只讀 Working 工作資料。"""
+    if not working_dataset_file_exists():
+        return (
+            None,
+            "Working 工作資料",
+            None,
+            "尚未建立工作資料。請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。",
+        )
+    dataset = load_working_dataset()
     return (
         dataset,
-        "Ready 分析就緒資料",
-        READY_DATASET_PATH if dataset is not None else None,
-        None
-        if dataset is not None
-        else "尚未建立 Ready 分析就緒資料，請先到「建立 Ready 分析就緒資料」頁產生 ready.csv。",
+        "Working 工作資料",
+        WORKING_DATASET_PATH,
+        None,
     )
 
 
@@ -501,7 +507,7 @@ def _show_summary(items: dict[str, str | int | None]) -> None:
 def _warn_if_empty(df: pd.DataFrame) -> bool:
     if df.empty:
         st.warning(
-            "目前資料來源沒有可繪圖資料。請到「建立 Ready 分析就緒資料」確認已產生可用的 ready.csv。"
+            "目前資料來源沒有可繪圖資料。請先到「欄位與資料整合」確認已有可用的工作資料。"
         )
         return True
     return False
@@ -1295,7 +1301,7 @@ def run_page() -> None:
         st.title("圖表探索")
         st.caption(
             "選圖＝先問清楚要比較什麼（類別／比例／時間／關係）。"
-            "本頁六題對應講義 CONCEPT 02；先選對圖種，再用 Ready 資料畫圖。可問右側 Agent。"
+            "本頁六題對應講義 CONCEPT 02；先選對圖種，再用 Working 工作資料畫圖。可問右側 Agent。"
         )
 
         df, source_label, source_path, source_warning = _load_chart_dataset()
@@ -1304,10 +1310,10 @@ def run_page() -> None:
             st.warning(source_warning)
 
         if df is None:
-            st.info("請先到「建立 Ready 分析就緒資料」頁產生 ready.csv。")
+            st.info("請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。")
         elif not _warn_if_empty(df):
             render_dataset_metrics(df)
-            st.caption(f"目前使用：{source_label}（本頁只讀 Ready）")
+            st.caption(f"目前使用：{source_label}（本頁只讀 Working）")
             if source_path:
                 with st.expander("技術資訊", expanded=False):
                     st.caption(f"資料檔：`{_display_path(source_path)}`")

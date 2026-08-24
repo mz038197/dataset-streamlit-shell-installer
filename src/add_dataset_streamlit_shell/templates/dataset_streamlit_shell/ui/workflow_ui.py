@@ -35,19 +35,15 @@ from dataset_streamlit_shell.ml.split import (
 )
 from dataset_streamlit_shell.ui.data_ui import (
     CLEANING_LOG_PATH,
-    READY_DATASET_PATH,
     SHELL_ROOT,
     TEST_DATASET_PATH,
     TRAIN_DATASET_PATH,
     VAL_DATASET_PATH,
-    WORKING_DATASET_PATH,
     WORKSPACE_DIR,
     _display_path,
     append_cleaning_log,
     clear_to_dual_start,
-    create_ready_dataset,
     load_cleaning_log,
-    load_ready_dataset,
     load_working_dataset,
     refresh_working_dataset_cache,
     render_chat_panel,
@@ -173,7 +169,6 @@ def _action_label(value: str, note: str = "") -> str:
         "rename_columns_traditional_chinese": "欄位改成繁體中文",
         "rename_columns_to_traditional_chinese": "欄位改成繁體中文",
         "reset_working_dataset": "重置工作資料",
-        "create_ready_dataset": "建立分析就緒資料",
         "remove_duplicate_rows": "刪除重複資料列",
         "drop_duplicate_rows": "刪除重複資料列",
         "fill_missing_values": "處理缺失值",
@@ -356,7 +351,7 @@ def render_missing_page() -> None:
         if missing_total:
             st.error(
                 f"紅燈：目前還有 {missing_total:,} 個缺失儲存格，"
-                "建議先請 Agent 處理後再建立 Ready 分析就緒資料。"
+                "建議先請 Agent 處理後再繼續整理。"
             )
         else:
             st.success("綠燈：目前沒有缺失儲存格，可以進入下一個整理步驟。")
@@ -994,7 +989,7 @@ def render_correlation_page() -> None:
 
     _page_shell(
         "數值相關性",
-        "在建立 Ready 分析就緒資料之前，檢查學生選取欄位之間的數值關係。",
+        "檢查學生選取欄位之間的數值關係。",
         body,
         extra_context_builder=_correlation_extra_context,
     )
@@ -1178,7 +1173,7 @@ def _feature_scaling_extra_context(df: pd.DataFrame) -> str:
         parts.append("目前選取的欄位都不符合此方法的前提。")
     if invalid_notes:
         parts.append("不適用欄位：" + "；".join(invalid_notes) + "。")
-    parts.append("請在 working.csv 新增縮放欄位並保留原欄位，不要修改 ready.csv。")
+    parts.append("請在 working.csv 新增縮放欄位並保留原欄位，不要建立 ready.csv。")
     return "".join(parts)
 
 
@@ -1267,70 +1262,14 @@ def render_feature_scaling_page() -> None:
 
     _page_shell(
         "特徵縮放（Feature Scaling）",
-        "選擇縮放方式與欄位，由 Agent 新增縮放欄位；建立 Ready 前完成。",
+        "選擇縮放方式與欄位，由 Agent 新增縮放欄位。",
         body,
         extra_context_builder=_feature_scaling_extra_context,
     )
 
 
-def text_or_category_columns(df: pd.DataFrame) -> list[str]:
-    return [
-        str(column)
-        for column in df.select_dtypes(include=["object", "string", "category"]).columns
-    ]
-
-
 def render_encoding_correlation_page() -> None:
     render_encoding_page()
-
-
-def render_ready_page() -> None:
-    def body(df: pd.DataFrame) -> None:
-        st.markdown("##### 建立 Ready 分析就緒資料")
-        st.caption(
-            "將目前 Working 工作資料凍結為穩定的 `ready.csv`，"
-            "供圖表探索、降維等分析頁使用；監督式與非監督式教學頁使用各頁內建範例資料。"
-        )
-        missing_total = int(df.isna().sum().sum())
-        text_columns = text_or_category_columns(df)
-        duplicate_rows = int(df.duplicated().sum())
-        numeric_cols = len(df.select_dtypes(include="number").columns)
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("列數", f"{len(df):,}")
-        c2.metric("數值欄位", f"{numeric_cols:,}")
-        c3.metric("缺失儲存格", f"{missing_total:,}")
-        c4.metric("重複列", f"{duplicate_rows:,}")
-        if text_columns:
-            st.warning(
-                f"仍有 {len(text_columns)} 個文字/類別欄位："
-                + "、".join(f"`{column}`" for column in text_columns)
-                + "。後續分析頁可能需要先做編碼，或在分析頁只選數值欄位。"
-            )
-        if missing_total:
-            st.warning("仍有缺失值。後續分析前建議先完成缺失值處理。")
-        if st.button("建立 ready.csv", type="primary", width="stretch"):
-            create_ready_dataset(df)
-            append_cleaning_log(
-                action="create_ready_dataset",
-                columns=df.columns,
-                rows=len(df),
-                note="由 working.csv 凍結為 ready.csv。",
-                actor="ui",
-            )
-            st.success(f"已建立 `{_display_path(READY_DATASET_PATH)}`。")
-        ready = load_ready_dataset()
-        if ready is not None:
-            st.markdown("###### 目前 Ready 分析就緒資料")
-            render_dataset_metrics(ready)
-            st.download_button(
-                "下載 ready.csv",
-                data=ready.to_csv(index=False).encode("utf-8-sig"),
-                file_name="ready.csv",
-                mime="text/csv",
-                width="stretch",
-            )
-
-    _page_shell("建立 Ready 分析就緒資料", "把 Working 工作資料凍結成後續分析使用的穩定資料表。", body)
 
 
 def pca_status(df: pd.DataFrame) -> dict[str, object]:
@@ -1349,9 +1288,12 @@ def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.Da
     with teaching:
         st.title(title)
         st.caption(caption)
-        df = load_ready_dataset()
+        if not working_dataset_file_exists():
+            st.warning("尚未建立工作資料。請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。")
+            return
+        df = load_working_dataset()
         if df is None:
-            st.warning("尚未建立 Ready 分析就緒資料。請先到「建立 Ready 分析就緒資料」頁完成匯出。")
+            st.warning("尚未建立工作資料。請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。")
             return
         render_main(df)
     with agent:
@@ -1440,19 +1382,26 @@ def render_transform_page() -> None:
 
 def render_split_page() -> None:
     title = "資料切分"
+    working: pd.DataFrame | None = None
     teaching, agent = open_content_dual_pane()
     with teaching:
         st.title(title)
-        st.caption("把 Ready 分析就緒資料拆成訓練／驗證／測試三份並寫出檔案。")
-        ready = load_ready_dataset()
-        if ready is None:
+        st.caption("把 Working 工作資料拆成訓練／驗證／測試三份並寫出檔案。")
+        if not working_dataset_file_exists():
             st.warning(
-                "尚未建立 Ready 分析就緒資料。"
-                "請先到「建立 Ready 分析就緒資料」頁產生 ready.csv。"
+                "尚未建立工作資料。"
+                "請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。"
+            )
+            return
+        working = load_working_dataset()
+        if working is None:
+            st.warning(
+                "尚未建立工作資料。"
+                "請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。"
             )
             return
 
-        st.metric("Ready 列數", f"{len(ready):,}")
+        st.metric("Working 列數", f"{len(working):,}")
         c1, c2, c3 = st.columns(3)
         train_pct = c1.number_input(
             "訓練 %",
@@ -1487,13 +1436,13 @@ def render_split_page() -> None:
         )
 
         stratify_column: str | None = None
-        can_stratify = "Survived" in ready.columns
+        can_stratify = "Survived" in working.columns
         if can_stratify:
             use_stratify = st.checkbox("分層切分（依 Survived）", value=True)
             if use_stratify:
                 stratify_column = "Survived"
         else:
-            st.caption("目前 Ready 沒有 Survived，改用隨機切分。")
+            st.caption("目前 Working 沒有 Survived，改用隨機切分。")
 
         ratio_ok = ratios_sum_to_one(train_ratio, val_ratio, test_ratio)
         if not ratio_ok:
@@ -1503,7 +1452,7 @@ def render_split_page() -> None:
         if ratio_ok:
             try:
                 train_df, val_df, test_df = split_ready_frame(
-                    ready,
+                    working,
                     train_ratio=train_ratio,
                     val_ratio=val_ratio,
                     test_ratio=test_ratio,
@@ -1534,8 +1483,8 @@ def render_split_page() -> None:
                 save_split_datasets(train_df, val_df, test_df)
                 append_cleaning_log(
                     action="split_dataset",
-                    columns=ready.columns,
-                    rows=len(ready),
+                    columns=working.columns,
+                    rows=len(working),
                     note=(
                         f"train={len(train_df)}, val={len(val_df)}, test={len(test_df)}, "
                         f"stratify={stratify_column or 'none'}"
@@ -1551,7 +1500,7 @@ def render_split_page() -> None:
     with agent:
         render_chat_panel(
             extra_context=(
-                f"資料切分頁。Ready 列數={len(ready) if ready is not None else 0}。"
+                f"資料切分頁。Working 列數={len(working) if working is not None else 0}。"
                 f"預設比例 "
                 f"{int(DEFAULT_TRAIN_RATIO*100)}/"
                 f"{int(DEFAULT_VAL_RATIO*100)}/"

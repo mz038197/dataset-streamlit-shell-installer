@@ -1,6 +1,6 @@
 # Dataset Streamlit Shell
 
-教學用 Streamlit 資料實驗室殼層：自雙表起點經整合與整理建立 Ready，並以內建範例走通監督式與非監督式演算法頁；另含 AI 新創工作坊的專案展示軌道。
+教學用 Streamlit 資料實驗室殼層：自雙表起點經整合與整理 Working，圖表探索／資料切分／PCA 讀 Working，並以內建範例走通監督式與非監督式演算法頁；另含 AI 新創工作坊的專案展示軌道。
 
 ## Language
 
@@ -69,11 +69,11 @@ _Avoid_: 教師用缺陷說明、劇透缺陷清單；把說明書全文貼進�
 _Avoid_: 一次並排四份表；預設改成訓練資料；把根目錄 train／test 算進來
 
 **dataset_base_context**:
-總覽、AI 協作資料整理與降維分析專用的 Agent `host_context`。內容為雙表工作副本、Original、Working、Ready、腳本目錄與 cleaning_log 規則。不含教學頁寫回規則。
-_Avoid_: 焊進類神經網路左欄或線性回歸決策槽；教學頁沒傳 host 就吃這包；與 Challenge host context 或教學頁 host context 叠用
+總覽、AI 協作資料整理與降維分析專用的 Agent `host_context`。內容為雙表工作副本、Original、Working、腳本目錄與 cleaning_log 規則。不含教學頁寫回規則，亦不含 Ready。
+_Avoid_: 焊進類神經網路左欄或線性回歸決策槽；教學頁沒傳 host 就吃這包；與 Challenge host context 或教學頁 host context 叠用；引導建立 ready.csv
 
 **教學頁 host context**:
-監督式、非監督式、深度學習、電腦視覺各頁自己的 Agent `host_context`，不叠 dataset_base_context。本頁用內建範例資料，不准動根目錄 Original／Working／Ready；有寫回協定的頁另接該頁規則。每一輪頁面狀態不叠根目錄 Working 列數／欄位。
+監督式、非監督式、深度學習、電腦視覺各頁自己的 Agent `host_context`，不叠 dataset_base_context。本頁用內建範例資料，不准動根目錄 Original／Working，不要讀寫 ready.csv；有寫回協定的頁另接該頁規則。每一輪頁面狀態不叠根目錄 Working 列數／欄位。
 _Avoid_: 沒傳 host 就吃 dataset_base_context；在圖表探索組線性回歸或改 NN 架構；把 Challenge host context 當教學頁 host；跟學生講左欄下拉
 
 **Challenge host context**:
@@ -441,20 +441,24 @@ _Avoid_: ready.csv 作為本頁資料來源；第一版就強制兩頁分叉資�
 _Avoid_: 目標欄、標籤欄（未加「教學用／真實群」易與監督式 y 混淆）、y；一進頁就強制並排真實群主視覺；等到收斂才准對照；用同一色表把演算法群號與真實群號直接疊加當成對齊
 
 **圖表探索**:
-前處理側欄頁；以選對圖種關卡練習視覺化，資料來源固定為 Ready 分析就緒資料。
-_Avoid_: 本頁切換 Working／Original；以 train／val／test 當本頁資料來源
+前處理側欄頁；以選對圖種關卡練習視覺化，資料來源固定為 Working 工作資料。側欄仍在特徵縮放之後、資料切分之前。沒有 Working 時空狀態，指向欄位與資料整合；有缺失或未編碼欄仍可畫。
+_Avoid_: Ready；本頁切換 Original；以 train／val／test 當本頁資料來源；沒清理完就鎖頁；為邊清邊看而前移側欄
+
+**PCA 主成分分析**:
+降維分析側欄頁；以 Working 工作資料做主成分分析與條件檢查。沒有 Working 時空狀態，指向欄位與資料整合；欄位或樣本不足時警告並停算，不是 Ready 鎖。
+_Avoid_: 鎖 ready.csv；以切分產物當本頁來源；把分群教學頁掛回 Working
 
 **資料切分**:
-前處理側欄頁的正式名稱；把 Ready 分析就緒資料拆成訓練／驗證／測試三份並寫出檔案。側欄在圖表探索之後（圖表仍只讀 Ready，不讀切分產物）。預設比例為訓練 60%／驗證 20%／測試 20%。有類別目標欄時預設做分層切分（鐵達尼為 Survived），使各份類別比例接近整體。與決策樹頁內的「訓練／驗證切分」不是同一概念。重建 Ready 會作廢既有切分產物（須重新切分）。「清除回雙表起點」亦一併清除切分產物。
-_Avoid_: 訓練／驗證切分（指決策樹頁內靜默 holdout）、資料集切分、train-test split（作頁標題）；重建 Ready 或回雙表後仍沿用舊 train／val／test；暗示圖表探索讀的是 train／val／test；預設暗示為 70／15／15
+前處理側欄頁的正式名稱；把 Working 工作資料拆成訓練／驗證／測試三份並寫出檔案。側欄在圖表探索之後（圖表仍只讀 Working，不讀切分產物）。預設比例為訓練 60%／驗證 20%／測試 20%。有類別目標欄時預設做分層切分（鐵達尼為 Survived），使各份類別比例接近整體。與決策樹頁內的「訓練／驗證切分」不是同一概念。寫回 Working 會作廢既有切分產物。「清除回雙表起點」亦一併清除切分產物。沒有 Working 時空狀態；不因缺失或未編碼而鎖頁。
+_Avoid_: 訓練／驗證切分（指決策樹頁內靜默 holdout）、資料集切分、train-test split（作頁標題）；Ready 切分；改 Working 或回雙表後仍沿用舊 train／val／test；暗示圖表探索讀的是 train／val／test；預設暗示為 70／15／15
 
 **分層切分**:
-資料切分時依目標類別比例抽樣，使訓練／驗證／測試中各類占比接近 Ready 整體。本專案前處理線於資料切分頁提供；有目標欄時預設開啟。
+資料切分時依目標類別比例抽樣，使訓練／驗證／測試中各類占比接近 Working 整體。本專案前處理線於資料切分頁提供；有目標欄時預設開啟。
 _Avoid_: 分層抽樣（可作口語）、stratify（作頁標題主文）；無目標欄時仍強制分層
 
 **雙表起點**:
-課堂整合線的起始狀態與協作區入口狀態：無 working／ready／切分產物。進「欄位與資料整合」時從內建雙表教材寫出雙表工作副本。「清除回雙表起點」刪除 Working／Original／切分／副本後回到此狀態。不提供單表 CSV 上傳進 Original／Working。
-_Avoid_: 僅刪 working 卻留下 ready、train／val／test 或雙表工作副本仍稱為回到起點；以「資料上傳與預覽」或上傳 CSV 作為協作線起點；側欄再設僅名為「資料整合」的獨立頁才算起點完成
+課堂整合線的起始狀態與協作區入口狀態：無 working／切分產物。進「欄位與資料整合」時從內建雙表教材寫出雙表工作副本。「清除回雙表起點」刪除 Working／Original／切分／副本與遺留 ready.csv 後回到此狀態。不提供單表 CSV 上傳進 Original／Working。
+_Avoid_: 僅刪 working 卻留下 train／val／test 或雙表工作副本仍稱為回到起點；以「資料上傳與預覽」或上傳 CSV 作為協作線起點；側欄再設僅名為「資料整合」的獨立頁才算起點完成；把舊 ready.csv 當成起點還沒收乾淨的條件
 
 **內建雙表教材**:
 課堂只讀的乘客表／航程表 CSV（`built-in-data/integration/`）。不得覆寫。進雙表起點頁時複製為雙表工作副本。
@@ -479,6 +483,18 @@ _Avoid_: 解鎖套用（舊按鈕語意）；關卡通過前禁止改鍵名；�
 **Original 原始資料**:
 資料整合寫入時與 Working 同批建立的重置來源；不直接修改。合併完成前不存在。
 _Avoid_: 上傳後保留（舊說法）；暗示仍有單表上傳頁建立 Original；把尚未合併的單表或雙表工作副本當成 Original
+
+**Working 工作資料**:
+雙表整理線根目錄的可變工作副本；資料整合時與 Original 同批寫入，之後清理、圖表探索、PCA、資料切分都讀這份，寫回即作廢切分產物並刪掉遺留 ready.csv。總覽可下載目前這份。與 Challenge 工作資料不是同一份。
+_Avoid_: Ready；把 Challenge 工作資料叫 Working；圖表或切分改吃 Original 或 train／val／test；為下載而留 Ready 頁
+
+**Ready 分析就緒資料**:
+已廢止。舊協作線把 Working 凍結成獨立分析表，圖表探索、PCA、資料切分曾鎖該檔。上述頁改讀 Working 工作資料。寫回 Working 與清除回雙表起點時刪掉磁碟遺留檔，不當分析來源。
+_Avoid_: 當作現行生命週期；分析頁鎖 ready.csv；把遺留檔當分析來源
+
+**建立 Ready 分析就緒資料**:
+已廢止的舊側欄頁：把 Working 凍結成 Ready。分析頁不經此頁；側欄只刪此頁、不前移圖表探索。
+_Avoid_: 當作現行側欄頁；分析前必須先凍結；為下載而留此頁
 
 **乘客表**:
 鐵達尼整合教材的左表（畫面名稱）；對應內建乘客側欄位，含身分與 Survived 等。

@@ -43,15 +43,17 @@ def test_app_nav_order_for_integration_transform_split() -> None:
     assert "1_Database.py" not in src
     assert "資料上傳與預覽" not in src
     assert "15_Data_Integration.py" not in src
+    assert "8_Ready.py" not in src
+    assert "建立 Ready 分析就緒資料" not in src
     collab = src.index('"AI 協作資料整理"')
     quality = src.index("3_Field_Quality.py")
     transform = src.index("17_Data_Transform.py")
     duplicates = src.index("4_Duplicates.py")
-    ready = src.index("8_Ready.py")
+    scaling = src.index("13_Feature_Scaling.py")
     charts = src.index("2_Charts.py")
     split = src.index("20_Data_Split.py")
     assert collab < quality < transform < duplicates
-    assert ready < charts < split
+    assert scaling < charts < split
     assert 'title="欄位與資料整合"' in src
     assert 'title="資料整合"' not in src
 
@@ -67,7 +69,8 @@ def test_guidance_strings_point_to_field_quality_not_upload() -> None:
     assert "欄位與資料整合" in workflow
     assert "欄位與資料整合" in app
     assert "欄位與資料概覽" not in workflow
-    assert "建立 Ready 分析就緒資料" in charts
+    assert "建立 Ready 分析就緒資料" not in charts
+    assert "欄位與資料整合" in charts
 
 
 def test_quality_page_supports_dual_and_clear() -> None:
@@ -94,10 +97,49 @@ def test_quality_page_supports_dual_and_clear() -> None:
     assert "ensure_dual_table_copies" in src
 
 
-def test_charts_page_reads_ready_only() -> None:
+def test_charts_page_reads_working_only() -> None:
     src = (PAGES / "2_Charts.py").read_text(encoding="utf-8")
-    assert "load_ready_dataset" in src
+    assert "load_working_dataset" in src
+    assert "load_ready_dataset" not in src
     assert "chart_data_source" not in src
-    assert "Working 工作資料" not in src
+    assert "Working 工作資料" in src
     assert "Original 原始資料" not in src
-    assert "本頁只讀 Ready" in src
+    assert "本頁只讀 Ready" not in src
+    assert "本頁只讀 Working" in src
+
+
+def test_split_page_reads_working() -> None:
+    src = (UI / "workflow_ui.py").read_text(encoding="utf-8")
+    assert "render_split_page" in src
+    split = src[src.index("def render_split_page") :]
+    assert "load_working_dataset" in split
+    assert "load_ready_dataset" not in split
+    assert "Working 工作資料" in split or "工作資料" in split
+    assert "尚未建立 Ready" not in split
+
+
+def test_pca_shell_reads_working() -> None:
+    pca = (PAGES / "10_PCA.py").read_text(encoding="utf-8")
+    workflow = (UI / "workflow_ui.py").read_text(encoding="utf-8")
+    shell = workflow[workflow.index("def render_analysis_shell") :]
+    next_def = shell.find("\ndef ", 1)
+    shell = shell[: next_def if next_def != -1 else len(shell)]
+    assert "load_working_dataset" in shell
+    assert "load_ready_dataset" not in shell
+    assert "Ready 分析就緒資料" not in pca
+    assert "Working 工作資料" in pca
+
+
+def test_ready_page_is_removed() -> None:
+    assert not (PAGES / "8_Ready.py").exists()
+    workflow = (UI / "workflow_ui.py").read_text(encoding="utf-8")
+    assert "def render_ready_page" not in workflow
+    assert "create_ready_dataset" not in workflow
+
+
+def test_overview_downloads_working_not_ready() -> None:
+    src = APP.read_text(encoding="utf-8")
+    assert "下載 Working" in src
+    assert "load_ready_dataset" not in src
+    assert "READY_DATASET_PATH" not in src
+    assert "建立 Ready 分析就緒資料" not in src
