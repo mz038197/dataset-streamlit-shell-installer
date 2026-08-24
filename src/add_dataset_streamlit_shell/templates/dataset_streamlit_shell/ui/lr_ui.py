@@ -24,6 +24,7 @@ from dataset_streamlit_shell.ml.regression import (
     predict_from_artifact,
     predict_line_on_original_x,
     predict_with_parameters,
+    prediction_axis_limits,
 )
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 from dataset_streamlit_shell.ui import multiple_regression_quiz as multi_quiz
@@ -154,7 +155,7 @@ def render_linear_regression_page() -> None:
         st.title(LR_PAGE_TITLE)
         st.caption(
             "框名是決策槽，框上是目前選擇。請資料 Agent 欄組模型；"
-            "點框看只讀選擇明細。訓練畫面只有回歸線與訓練／測試 Cost。"
+            "點框看只讀選擇明細。訓練畫面是回歸線、訓練／測試 Cost，下方為測試集預測對照。"
         )
         st.markdown(DECISION_SLOT_CSS, unsafe_allow_html=True)
         stage_label = st.radio(
@@ -434,6 +435,7 @@ def _render_simple_stage(state: dict) -> None:
     chart_left, chart_right = st.columns(2)
     line_placeholder = chart_left.empty()
     cost_placeholder = chart_right.empty()
+    pred_placeholder = st.empty()
     status_placeholder = st.empty()
 
     if training_active:
@@ -445,6 +447,7 @@ def _render_simple_stage(state: dict) -> None:
             anim_key=anim_key,
             line_placeholder=line_placeholder,
             cost_placeholder=cost_placeholder,
+            pred_placeholder=pred_placeholder,
             status_placeholder=status_placeholder,
         )
         stored = st.session_state.get(result_key)
@@ -463,10 +466,12 @@ def _render_simple_stage(state: dict) -> None:
                 result_key=result_key,
                 line_placeholder=line_placeholder,
                 cost_placeholder=cost_placeholder,
+                pred_placeholder=pred_placeholder,
                 status_placeholder=status_placeholder,
+                state=state,
             )
         else:
-            status_placeholder.caption("訓練後這裡只會出現回歸線與訓練／測試 Cost。")
+            status_placeholder.caption("訓練後這裡會出現回歸線、訓練／測試 Cost 與測試集預測對照。")
 
     _set_simple_agent_context(
         working,
@@ -501,7 +506,6 @@ def _queue_training(
     scaler = create_feature_scaler(train_df, features, method)
     scaled_train = apply_feature_scaler(train_df, scaler)
     scaled_test = apply_feature_scaler(test_df, scaler)
-    scaled_all = apply_feature_scaler(working, scaler)
     learning_rate = float(state["alpha"])
     epochs = int(state["epochs"])
     steps = attach_test_costs(
@@ -524,7 +528,10 @@ def _queue_training(
         "model_kind": model_kind,
         "features": list(features),
         "target": target,
-        "scaled": scaled_all,
+        "train_frame": train_df,
+        "test_frame": test_df,
+        "scaled_train": scaled_train,
+        "scaled_test": scaled_test,
     }
     st.session_state.pop(result_key, None)
 
@@ -538,6 +545,7 @@ def _run_simple_training(
     anim_key: str,
     line_placeholder,
     cost_placeholder,
+    pred_placeholder,
     status_placeholder,
 ) -> None:
     anim = st.session_state.get(anim_key)
@@ -546,6 +554,8 @@ def _run_simple_training(
     steps: list[GradientDescentStep] = list(anim["steps"])
     sampled: list[GradientDescentStep] = list(anim["sampled"])
     scaler = anim["scaler"]
+    train_df = anim["train_frame"]
+    test_df = anim["test_frame"]
     if not sampled:
         anim["finished"] = True
         return
@@ -566,9 +576,12 @@ def _run_simple_training(
             step,
             line_placeholder,
             scaler=scaler,
+            train_df=train_df,
+            test_df=test_df,
         )
         history = [item for item in steps if item.iteration <= step.iteration]
         _render_cost_history_plot(history, cost_placeholder)
+        _render_step_test_prediction(anim, step, pred_placeholder)
         status_placeholder.caption(caption)
         time.sleep(0.015)
 
@@ -601,11 +614,18 @@ def _show_simple_result(
     result_key: str,
     line_placeholder,
     cost_placeholder,
+    pred_placeholder,
     status_placeholder,
+    state: dict,
 ) -> None:
     if artifact.scaler is None:
         status_placeholder.warning("訓練結果缺少 scaler，請重新訓練。")
         return
+    split = _train_test_frames(working, state)
+    if split is None:
+        status_placeholder.warning("訓練結果缺少切分，請重新訓練。")
+        return
+    train_df, test_df = split
     _render_simple_step_plot(
         working,
         feature,
@@ -618,11 +638,15 @@ def _show_simple_result(
         ),
         line_placeholder,
         scaler=artifact.scaler,
+        train_df=train_df,
+        test_df=test_df,
     )
     result_bundle = st.session_state.get(result_key)
     cached_steps = result_bundle.get("steps") if isinstance(result_bundle, dict) else None
     if isinstance(cached_steps, list) and cached_steps:
         _render_cost_history_plot(cached_steps, cost_placeholder)
+    test_prediction = predict_from_artifact(artifact, test_df[artifact.features])
+    _render_test_prediction_plot(test_df[target], test_prediction, target, pred_placeholder)
     status_placeholder.caption(
         live_fit_caption(
             iteration=int(cached_steps[-1].iteration) if cached_steps else 0,
@@ -730,18 +754,19 @@ def _render_multiple_stage(state: dict) -> None:
         training_active = True
 
     chart_left, chart_right = st.columns(2)
-    pred_placeholder = chart_left.empty()
+    pred_left_placeholder = chart_left.empty()
     cost_placeholder = chart_right.empty()
+    pred_placeholder = st.empty()
     status_placeholder = st.empty()
 
     if training_active:
         _run_multiple_training(
-            working,
             target=target,
             result_key=result_key,
             anim_key=anim_key,
-            pred_placeholder=pred_placeholder,
+            pred_left_placeholder=pred_left_placeholder,
             cost_placeholder=cost_placeholder,
+            pred_placeholder=pred_placeholder,
             status_placeholder=status_placeholder,
         )
         stored = st.session_state.get(result_key)
@@ -752,26 +777,19 @@ def _render_multiple_stage(state: dict) -> None:
 
     if not training_active:
         if artifact is not None:
-            prediction = predict_from_artifact(artifact, working[artifact.features])
-            _render_actual_prediction_plot(working[target], prediction, target, pred_placeholder)
-            result_bundle = st.session_state.get(result_key)
-            cached_steps = (
-                result_bundle.get("steps") if isinstance(result_bundle, dict) else None
-            )
-            if isinstance(cached_steps, list) and cached_steps:
-                _render_cost_history_plot(cached_steps, cost_placeholder)
-            status_placeholder.caption(
-                live_fit_caption(
-                    iteration=int(cached_steps[-1].iteration) if cached_steps else 0,
-                    total_iterations=int(cached_steps[-1].iteration) if cached_steps else 0,
-                    weights=artifact.weights,
-                    intercept=float(artifact.intercept),
-                    cost=float(artifact.training_cost),
-                    test_cost=artifact.test_cost,
-                )
+            _show_multiple_result(
+                working,
+                target=target,
+                artifact=artifact,
+                result_key=result_key,
+                pred_left_placeholder=pred_left_placeholder,
+                cost_placeholder=cost_placeholder,
+                pred_placeholder=pred_placeholder,
+                status_placeholder=status_placeholder,
+                state=state,
             )
         else:
-            status_placeholder.caption("訓練後這裡只會出現預測對照與訓練／測試 Cost。")
+            status_placeholder.caption("訓練後這裡會出現實際 vs 預測、訓練／測試 Cost 與測試集預測對照。")
 
     _set_multiple_agent_context(
         working,
@@ -786,14 +804,58 @@ def _render_multiple_stage(state: dict) -> None:
     )
 
 
-def _run_multiple_training(
+def _show_multiple_result(
     working: pd.DataFrame,
+    *,
+    target: str,
+    artifact: LinearModelArtifact,
+    result_key: str,
+    pred_left_placeholder,
+    cost_placeholder,
+    pred_placeholder,
+    status_placeholder,
+    state: dict,
+) -> None:
+    split = _train_test_frames(working, state)
+    if split is None:
+        status_placeholder.warning("訓練結果缺少切分，請重新訓練。")
+        return
+    train_df, test_df = split
+    train_prediction = predict_from_artifact(artifact, train_df[artifact.features])
+    test_prediction = predict_from_artifact(artifact, test_df[artifact.features])
+    _render_left_prediction_plot(
+        train_df[target],
+        train_prediction,
+        test_df[target],
+        test_prediction,
+        target,
+        pred_left_placeholder,
+    )
+    result_bundle = st.session_state.get(result_key)
+    cached_steps = result_bundle.get("steps") if isinstance(result_bundle, dict) else None
+    if isinstance(cached_steps, list) and cached_steps:
+        _render_cost_history_plot(cached_steps, cost_placeholder)
+    _render_test_prediction_plot(test_df[target], test_prediction, target, pred_placeholder)
+    status_placeholder.caption(
+        live_fit_caption(
+            iteration=int(cached_steps[-1].iteration) if cached_steps else 0,
+            total_iterations=int(cached_steps[-1].iteration) if cached_steps else 0,
+            weights=artifact.weights,
+            intercept=float(artifact.intercept),
+            cost=float(artifact.training_cost),
+            test_cost=artifact.test_cost,
+        )
+    )
+
+
+def _run_multiple_training(
     *,
     target: str,
     result_key: str,
     anim_key: str,
-    pred_placeholder,
+    pred_left_placeholder,
     cost_placeholder,
+    pred_placeholder,
     status_placeholder,
 ) -> None:
     anim = st.session_state.get(anim_key)
@@ -801,7 +863,6 @@ def _run_multiple_training(
         return
     steps: list[GradientDescentStep] = list(anim["steps"])
     sampled: list[GradientDescentStep] = list(anim["sampled"])
-    scaled = anim["scaled"]
     features = list(anim["features"])
     scaler = anim["scaler"]
     if not sampled:
@@ -817,10 +878,10 @@ def _run_multiple_training(
             cost=step.cost,
             test_cost=step.test_cost,
         )
-        prediction = predict_with_parameters(scaled, step.weights, step.intercept)
-        _render_actual_prediction_plot(working[target], prediction, target, pred_placeholder)
+        _render_step_left_prediction(anim, step, pred_left_placeholder)
         history = [item for item in steps if item.iteration <= step.iteration]
         _render_cost_history_plot(history, cost_placeholder)
+        _render_step_test_prediction(anim, step, pred_placeholder)
         status_placeholder.caption(caption)
         time.sleep(0.015)
 
@@ -852,6 +913,8 @@ def _render_simple_step_plot(
     placeholder,
     *,
     scaler: dict,
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
 ) -> None:
     x_values = frame[feature]
     line_x = np.linspace(float(x_values.min()), float(x_values.max()), 100)
@@ -863,8 +926,23 @@ def _render_simple_step_plot(
         scaler=scaler,
     )
     fig, ax = plt.subplots(figsize=LR_TRAINING_CHART_FIGSIZE, constrained_layout=True)
-    ax.scatter(frame[feature], frame[target], alpha=0.75, label="資料點")
-    ax.plot(line_x, line_y, color="red", label="回歸線")
+    ax.scatter(
+        train_df[feature],
+        train_df[target],
+        color="C0",
+        alpha=0.75,
+        label="訓練點",
+        zorder=3,
+    )
+    ax.scatter(
+        test_df[feature],
+        test_df[target],
+        color="0.45",
+        alpha=0.4,
+        label="測試點",
+        zorder=2,
+    )
+    ax.plot(line_x, line_y, color="red", label="回歸線", zorder=4)
     ax.set_xlabel(feature)
     ax.set_ylabel(target)
     ax.set_title(f"回歸線（iteration {step.iteration}）")
@@ -893,16 +971,70 @@ def _render_cost_history_plot(steps: list[GradientDescentStep], placeholder) -> 
     plt.close(fig)
 
 
-def _render_actual_prediction_plot(
-    actual: pd.Series,
-    prediction: pd.Series,
+def _render_step_test_prediction(anim: dict, step: GradientDescentStep, placeholder) -> None:
+    test_df = anim["test_frame"]
+    target = str(anim["target"])
+    prediction = predict_with_parameters(
+        anim["scaled_test"],
+        step.weights,
+        step.intercept,
+    )
+    _render_test_prediction_plot(test_df[target], prediction, target, placeholder)
+
+
+def _render_step_left_prediction(anim: dict, step: GradientDescentStep, placeholder) -> None:
+    train_df = anim["train_frame"]
+    test_df = anim["test_frame"]
+    target = str(anim["target"])
+    train_prediction = predict_with_parameters(
+        anim["scaled_train"],
+        step.weights,
+        step.intercept,
+    )
+    test_prediction = predict_with_parameters(
+        anim["scaled_test"],
+        step.weights,
+        step.intercept,
+    )
+    _render_left_prediction_plot(
+        train_df[target],
+        train_prediction,
+        test_df[target],
+        test_prediction,
+        target,
+        placeholder,
+    )
+
+
+def _render_left_prediction_plot(
+    train_actual: pd.Series,
+    train_prediction: pd.Series,
+    test_actual: pd.Series,
+    test_prediction: pd.Series,
     target: str,
     placeholder,
 ) -> None:
     fig, ax = plt.subplots(figsize=LR_TRAINING_CHART_FIGSIZE, constrained_layout=True)
-    ax.scatter(actual, prediction, alpha=0.75)
-    lower = float(min(actual.min(), prediction.min()))
-    upper = float(max(actual.max(), prediction.max()))
+    ax.scatter(
+        train_actual,
+        train_prediction,
+        color="C0",
+        alpha=0.75,
+        label="訓練點",
+        zorder=3,
+    )
+    ax.scatter(
+        test_actual,
+        test_prediction,
+        color="0.45",
+        alpha=0.4,
+        label="測試點",
+        zorder=2,
+    )
+    actual_values = pd.concat([train_actual, test_actual])
+    prediction_values = pd.concat([train_prediction, test_prediction])
+    lower = float(min(actual_values.min(), prediction_values.min()))
+    upper = float(max(actual_values.max(), prediction_values.max()))
     if lower == upper:
         lower -= 1.0
         upper += 1.0
@@ -912,7 +1044,28 @@ def _render_actual_prediction_plot(
     ax.set_aspect("equal")
     ax.set_xlabel(f"實際 {target}")
     ax.set_ylabel(f"預測 {target}")
-    ax.set_title("實際值 vs 預測值")
+    ax.set_title(f"實際 {target} vs 預測 {target}")
+    ax.legend()
+    placeholder.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
+
+def _render_test_prediction_plot(
+    actual: pd.Series,
+    prediction: pd.Series,
+    target: str,
+    placeholder,
+) -> None:
+    fig, ax = plt.subplots(figsize=LR_TRAINING_CHART_FIGSIZE, constrained_layout=True)
+    ax.scatter(actual, prediction, color="C0", alpha=0.75)
+    lower, upper = prediction_axis_limits(actual)
+    ax.plot([lower, upper], [lower, upper], color="red", linestyle="--", label="完全預測正確")
+    ax.set_xlim(lower, upper)
+    ax.set_ylim(lower, upper)
+    ax.set_aspect("equal")
+    ax.set_xlabel(f"實際 {target}")
+    ax.set_ylabel(f"預測 {target}")
+    ax.set_title("測試集預測對照")
     ax.legend()
     placeholder.pyplot(fig, clear_figure=True)
     plt.close(fig)

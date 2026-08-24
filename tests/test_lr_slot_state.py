@@ -284,6 +284,7 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "choices.split" in text
     assert "沒有下拉選單" in text
     assert "不要叫學生自己選" in text
+    assert "測試集預測對照" in text
     assert "打勾符號" in text
     assert "✅" not in text
 

@@ -606,6 +606,7 @@ def lr_host_context_fragment(
         "可改的有 split（1–99）與 scale（maxdiv／minmax／mean／zscore）與 alpha、epochs。"
         "data／linear／loss／opt 是鎖定槽，種類拒絕改成其他值。"
         "頁上沒有切分旋鈕或％輸入框。"
+        "訓練畫面是回歸線與訓練／測試 Cost，下方為測試集預測對照；開訓後三張圖逐幀一起更新。"
         "write_file 時必須保留另一學習階段的鍵，不要清掉另一側。"
         "若要讓主教學欄播放與「開始訓練」相同的動畫，另寫 "
         f'{request_path}，內容為 {{"requested": true}}。'

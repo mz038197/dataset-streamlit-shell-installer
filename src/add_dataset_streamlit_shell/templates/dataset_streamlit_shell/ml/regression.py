@@ -70,6 +70,22 @@ def compute_cost_j(actual: pd.Series | np.ndarray, prediction: pd.Series | np.nd
     return float(np.sum(errors**2) / (2 * actual_array.size))
 
 
+def prediction_axis_limits(actual: pd.Series | np.ndarray) -> tuple[float, float]:
+    values = np.asarray(actual, dtype=float)
+    if values.size == 0:
+        raise ValueError("actual must not be empty")
+    lower = float(np.min(values))
+    upper = float(np.max(values))
+    if lower > 0.0:
+        lower = 0.0
+    if upper < 0.0:
+        upper = 0.0
+    if lower == upper:
+        lower -= 1.0
+        upper += 1.0
+    return lower, upper
+
+
 def predict_with_parameters(
     feature_frame: pd.DataFrame | np.ndarray,
     weights: list[float] | np.ndarray,

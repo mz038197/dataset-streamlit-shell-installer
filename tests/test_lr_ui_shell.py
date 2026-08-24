@@ -99,9 +99,84 @@ def test_training_charts_share_near_square_canvas() -> None:
     assert width >= 6
     simple = _def_block(src, "_render_simple_step_plot")
     cost = _def_block(src, "_render_cost_history_plot")
-    actual = _def_block(src, "_render_actual_prediction_plot")
-    for body in (simple, cost, actual):
+    actual = _def_block(src, "_render_test_prediction_plot")
+    left = _def_block(src, "_render_left_prediction_plot")
+    for body in (simple, cost, actual, left):
         assert "figsize=LR_TRAINING_CHART_FIGSIZE" in body
         assert "figsize=(8, 4.8)" not in body
         assert "figsize=(6.6, 5.2)" not in body
     assert 'set_aspect("equal")' in actual or "set_aspect('equal')" in actual
+    assert 'set_aspect("equal")' in left or "set_aspect('equal')" in left
+
+
+def test_test_prediction_plot_locks_limits_when_predictions_explode() -> None:
+    import sys
+
+    import pandas as pd
+
+    template = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "add_dataset_streamlit_shell"
+        / "templates"
+    )
+    if str(template) not in sys.path:
+        sys.path.insert(0, str(template))
+    from dataset_streamlit_shell.ui.lr_ui import _render_test_prediction_plot
+
+    class _Hold:
+        fig = None
+
+        def pyplot(self, fig, clear_figure=True):
+            self.fig = fig
+
+    holder = _Hold()
+    _render_test_prediction_plot(
+        pd.Series([2.0, 8.0]),
+        pd.Series([0.0, 999.0]),
+        "獲利",
+        holder,
+    )
+    ax = holder.fig.axes[0]
+    assert ax.get_title() == "測試集預測對照"
+    assert ax.get_xlabel() == "實際 獲利"
+    assert ax.get_ylabel() == "預測 獲利"
+    assert ax.get_xlim() == (0.0, 8.0)
+    assert ax.get_ylim() == (0.0, 8.0)
+
+
+def test_training_layout_adds_test_prediction_plot_below() -> None:
+    src = (UI / "lr_ui.py").read_text(encoding="utf-8")
+    assert "測試集預測對照" in src
+    assert "訓練畫面只有回歸線與訓練／測試 Cost。" not in src
+    simple_stage = _def_block(src, "_render_simple_stage")
+    multiple_stage = _def_block(src, "_render_multiple_stage")
+    for body in (simple_stage, multiple_stage):
+        assert "chart_left, chart_right = st.columns(2)" in body
+        assert "pred_placeholder = st.empty()" in body
+        assert "訓練後這裡只會出現回歸線與訓練／測試 Cost。" not in body
+        assert "測試集預測對照" in body
+    simple_train = _def_block(src, "_run_simple_training")
+    multiple_train = _def_block(src, "_run_multiple_training")
+    for body in (simple_train, multiple_train):
+        assert "_render_step_test_prediction(" in body
+        assert "_render_cost_history_plot(" in body
+
+
+def test_left_scatter_marks_held_out_points() -> None:
+    src = (UI / "lr_ui.py").read_text(encoding="utf-8")
+    simple = _def_block(src, "_render_simple_step_plot")
+    multiple = _def_block(src, "_render_left_prediction_plot")
+    for body in (simple, multiple):
+        assert 'label="訓練點"' in body
+        assert 'label="測試點"' in body
+    assert "alpha=0.4" in simple or "alpha=0.40" in simple
+    test_plot = _def_block(src, "_render_test_prediction_plot")
+    assert 'label="測試點"' not in test_plot
+    assert 'set_title("測試集預測對照")' in test_plot
+    assert 'set_xlabel(f"實際 {target}")' in test_plot
+    assert 'set_ylabel(f"預測 {target}")' in test_plot
+    assert "prediction_axis_limits" in test_plot
+    assert "min(actual.min(), prediction.min())" not in test_plot
+    assert 'label="完全預測正確"' in test_plot
+    assert "figsize=LR_TRAINING_CHART_FIGSIZE" in test_plot

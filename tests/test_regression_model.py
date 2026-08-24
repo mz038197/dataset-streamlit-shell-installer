@@ -32,6 +32,7 @@ from dataset_streamlit_shell.ml.regression import (
     predict_line_on_original_x,
     predict_with_parameters,
     predict_from_artifact,
+    prediction_axis_limits,
     save_model_artifact,
 )
 from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
@@ -44,6 +45,15 @@ def test_compute_cost_j_uses_course_formula() -> None:
     prediction = np.array([12.0, 17.0, 36.0])
 
     assert compute_cost_j(actual, prediction) == 49 / 6
+
+
+def test_prediction_axis_limits_lock_to_actual_and_include_zero() -> None:
+    assert prediction_axis_limits(np.array([2.0, 8.0])) == (0.0, 8.0)
+    assert prediction_axis_limits(np.array([-5.0, -1.0])) == (-5.0, 0.0)
+    assert prediction_axis_limits(np.array([-2.0, 5.0])) == (-2.0, 5.0)
+    assert prediction_axis_limits(np.array([0.0, 4.0])) == (0.0, 4.0)
+    assert prediction_axis_limits(np.array([3.0, 3.0])) == (0.0, 3.0)
+    assert prediction_axis_limits(np.array([0.0, 0.0])) == (-1.0, 1.0)
 
 
 def test_predict_line_on_original_x_applies_zscore_then_weights() -> None:
