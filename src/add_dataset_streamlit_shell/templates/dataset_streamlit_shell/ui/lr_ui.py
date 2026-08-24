@@ -96,6 +96,7 @@ HOUSE_PRICES_PATH = REGRESSION_DEMO_DIR / "house_prices.csv"
 
 LR_PAGE_TITLE = "線性回歸"
 LR_CONTEXT_KEY = f"{LR_PAGE_TITLE}_agent_context"
+LR_TRAINING_CHART_FIGSIZE = (6.5, 6.5)
 
 
 def _lr_host() -> str:
@@ -861,7 +862,7 @@ def _render_simple_step_plot(
         feature=feature,
         scaler=scaler,
     )
-    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=LR_TRAINING_CHART_FIGSIZE, constrained_layout=True)
     ax.scatter(frame[feature], frame[target], alpha=0.75, label="資料點")
     ax.plot(line_x, line_y, color="red", label="回歸線")
     ax.set_xlabel(feature)
@@ -873,7 +874,7 @@ def _render_simple_step_plot(
 
 
 def _render_cost_history_plot(steps: list[GradientDescentStep], placeholder) -> None:
-    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=LR_TRAINING_CHART_FIGSIZE, constrained_layout=True)
     iterations = [step.iteration for step in steps]
     ax.plot(iterations, [step.cost for step in steps], color="orange", label="訓練 Cost")
     test_costs = [step.test_cost for step in steps if step.test_cost is not None]
@@ -898,11 +899,17 @@ def _render_actual_prediction_plot(
     target: str,
     placeholder,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(6.6, 5.2), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=LR_TRAINING_CHART_FIGSIZE, constrained_layout=True)
     ax.scatter(actual, prediction, alpha=0.75)
     lower = float(min(actual.min(), prediction.min()))
     upper = float(max(actual.max(), prediction.max()))
+    if lower == upper:
+        lower -= 1.0
+        upper += 1.0
     ax.plot([lower, upper], [lower, upper], color="red", linestyle="--", label="完全預測正確")
+    ax.set_xlim(lower, upper)
+    ax.set_ylim(lower, upper)
+    ax.set_aspect("equal")
     ax.set_xlabel(f"實際 {target}")
     ax.set_ylabel(f"預測 {target}")
     ax.set_title("實際值 vs 預測值")

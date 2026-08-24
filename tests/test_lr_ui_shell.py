@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 UI = (
@@ -84,3 +85,23 @@ def test_training_animation_replays_frames_in_one_request() -> None:
         assert 'anim["index"] = index + 1' not in body
     assert "st.rerun()" not in maybe_start
     assert "if train_clicked and allowed:\n        _start()\n        st.rerun()" not in src
+
+
+def test_training_charts_share_near_square_canvas() -> None:
+    src = (UI / "lr_ui.py").read_text(encoding="utf-8")
+    match = re.search(
+        r"LR_TRAINING_CHART_FIGSIZE = \(([\d.]+),\s*([\d.]+)\)",
+        src,
+    )
+    assert match is not None
+    width, height = float(match.group(1)), float(match.group(2))
+    assert width == height
+    assert width >= 6
+    simple = _def_block(src, "_render_simple_step_plot")
+    cost = _def_block(src, "_render_cost_history_plot")
+    actual = _def_block(src, "_render_actual_prediction_plot")
+    for body in (simple, cost, actual):
+        assert "figsize=LR_TRAINING_CHART_FIGSIZE" in body
+        assert "figsize=(8, 4.8)" not in body
+        assert "figsize=(6.6, 5.2)" not in body
+    assert 'set_aspect("equal")' in actual or "set_aspect('equal')" in actual
