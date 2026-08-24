@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -11,6 +11,7 @@ import pandas as pd
 
 from dataset_streamlit_shell.ml.regression import (
     GradientDescentStep,
+    apply_feature_scaler,
     apply_standard_scaler,
     create_standard_scaler,
 )
@@ -75,6 +76,7 @@ class RegularizedLogisticModelArtifact:
     lambda_: float
     training_cost: float
     data_source: str
+    scaler: dict[str, Any] | None = None
     schema_version: int = 1
     created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
@@ -355,6 +357,7 @@ def artifact_from_payload(
             lambda_=float(payload["lambda_"]),
             training_cost=float(payload["training_cost"]),
             data_source=str(payload["data_source"]),
+            scaler=payload.get("scaler"),
             schema_version=int(payload.get("schema_version", 1)),
             created_at=str(payload.get("created_at", datetime.now().isoformat(timespec="seconds"))),
         )
@@ -367,7 +370,7 @@ def predict_proba_from_logistic_artifact(
 ) -> pd.Series:
     numeric = frame[artifact.features].apply(pd.to_numeric, errors="coerce")
     if artifact.scaler is not None:
-        numeric = apply_standard_scaler(numeric, artifact.scaler)
+        numeric = apply_feature_scaler(numeric, artifact.scaler)
     return predict_proba(numeric, artifact.weights, artifact.intercept)
 
 
@@ -375,8 +378,33 @@ def predict_proba_from_regularized_artifact(
     artifact: RegularizedLogisticModelArtifact,
     frame: pd.DataFrame,
 ) -> pd.Series:
-    mapped, _ = map_feature(frame, artifact.base_features, degree=artifact.map_degree)
+    numeric = frame[artifact.base_features].apply(pd.to_numeric, errors="coerce")
+    if artifact.scaler is not None:
+        numeric = apply_feature_scaler(numeric, artifact.scaler)
+    mapped, _ = map_feature(numeric, artifact.base_features, degree=artifact.map_degree)
     return predict_proba(mapped[artifact.mapped_features], artifact.weights, artifact.intercept)
+
+
+def attach_logistic_test_costs(
+    steps: list[GradientDescentStep],
+    test_features: pd.DataFrame | np.ndarray,
+    test_target: pd.Series | np.ndarray,
+    *,
+    lambda_: float = 0.0,
+    regularized: bool = False,
+) -> list[GradientDescentStep]:
+    annotated: list[GradientDescentStep] = []
+    for step in steps:
+        if regularized:
+            test_cost = compute_cost_logistic_reg(
+                test_features, test_target, step.weights, step.intercept, lambda_
+            )
+        else:
+            test_cost = compute_cost_logistic(
+                test_features, test_target, step.weights, step.intercept
+            )
+        annotated.append(replace(step, test_cost=test_cost))
+    return annotated
 
 
 def build_classification_agent_context(
@@ -420,14 +448,17 @@ def build_classification_agent_context(
                 for feature, weight in zip(artifact.features, artifact.weights)
             )
             parts.append(f"weights：{weights}。")
-            if artifact.scaler is not None:
-                parts.append("本模型使用 Z-score 特徵縮放。")
         else:
             parts.append(
                 "base features："
                 + "、".join(artifact.base_features)
                 + f"；映射後 {len(artifact.mapped_features)} 維。"
             )
+        scaler = artifact.scaler
+        if scaler is not None:
+            method = scaler.get("method")
+            if method:
+                parts.append(f"本模型特徵縮放方法：{method}。")
     if threshold is not None:
         parts.append(f"目前 UI 分類 threshold：{threshold:g}（僅影響類別預測，不參與訓練）。")
     if note:

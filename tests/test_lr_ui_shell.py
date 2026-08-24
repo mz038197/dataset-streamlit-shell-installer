@@ -44,14 +44,13 @@ def test_workflow_ui_no_longer_owns_linear_regression_page() -> None:
     assert "梯度演算板" not in src
 
 
-def test_logistic_page_still_uses_teaching_flow() -> None:
+def test_logistic_page_uses_decision_slots_not_teaching_flow() -> None:
     src = (UI / "logistic_regression_ui.py").read_text(encoding="utf-8")
-    assert "目前查看" in src
-    assert "逐步模式" in src
-    assert "梯度演算板" in src
-    assert "樣本運算表" in src
-    assert "decision slot" not in src.lower()
-    assert "決策槽" not in src
+    assert "決策槽" in src
+    assert "目前查看" not in src
+    assert "逐步模式" not in src
+    assert "梯度演算板" not in src
+    assert "樣本運算表" not in src
 
 
 def test_dataset_base_context_does_not_embed_lr_host_fragment() -> None:

@@ -42,33 +42,46 @@ def test_logistic_model_formula_splits_z_and_sigmoid() -> None:
     assert "MODEL_FORMULA_LATEX" not in ui_src
 
 
-def test_logistic_ui_imports_micro_update() -> None:
+def test_logistic_ui_uses_decision_slots_not_teaching_flow() -> None:
     ui_src = UI_PATH.read_text(encoding="utf-8")
-    assert "    MICRO_UPDATE," in ui_src
-
-
-def test_logistic_ui_uses_classification_teaching_shell() -> None:
-    ui_src = UI_PATH.read_text(encoding="utf-8")
-    assert "classification_flow_svg" in ui_src
-    assert "TEACHING_FLOW_CSS" in ui_src
-    assert "目前查看" in ui_src
-    assert "分類模型" in ui_src
-    assert "回歸模型" not in ui_src
-    assert "micro_stepper_html" in ui_src
-    assert "梯度演算板" in ui_src
-    assert "樣本運算表" in ui_src
-    assert "逐步模式" in ui_src
-    assert "logistic_sample_ops_table_rows" in ui_src
-    assert "regularized_compact_board_lines" in ui_src
-    assert '"ŷ"' in ui_src
+    assert "決策槽" in ui_src
+    assert "slot_button_label" in ui_src
+    assert "st.columns(6)" in ui_src
+    assert "模型程式碼預覽" in ui_src
+    assert "after_reply=" in ui_src
+    assert "consume_train_request" in ui_src
+    assert "測試集機率對照" in ui_src
     assert "predicted_class" in ui_src
     assert "ŷ=0.5" in ui_src
+    assert "Sigmoid 函數視覺化" in ui_src
+    assert "classification_flow_svg" not in ui_src
+    assert "TEACHING_FLOW_CSS" not in ui_src
+    assert "目前查看" not in ui_src
+    assert "逐步模式" not in ui_src
+    assert "梯度演算板" not in ui_src
+    assert "樣本運算表" not in ui_src
+    assert "micro_stepper_html" not in ui_src
+    assert "render_dataset_metrics" not in ui_src
+    assert "number_input" not in ui_src
 
 
-def test_logistic_cost_expander_matches_linear_regression_layout() -> None:
+def test_logistic_cost_formula_still_available() -> None:
     ui_src = UI_PATH.read_text(encoding="utf-8")
-    assert '成本與梯度下降' in ui_src
     assert "COST_J_LOGISTIC_LATEX" in ui_src
-    assert "COST_GD_W_LATEX" in ui_src or "COST_GD_W_LOGISTIC_LATEX" in ui_src
+    assert "COST_GD_W_LOGISTIC_LATEX" in ui_src or "COST_GD_W_LATEX" in ui_src
     assert "導數項" in ui_src
     assert "梯度下降演算法" in ui_src
+
+
+def test_training_animation_replays_frames_in_one_request() -> None:
+    src = UI_PATH.read_text(encoding="utf-8")
+    marker = "def _run_training("
+    start = src.index(marker)
+    body = []
+    for line in src[start:].splitlines()[1:]:
+        if line.startswith("def "):
+            break
+        body.append(line)
+    text = "\n".join(body)
+    assert "for step in sampled:" in text
+    assert "st.rerun()" not in text

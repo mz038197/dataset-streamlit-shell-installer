@@ -34,8 +34,11 @@ def test_dataset_base_context_keeps_prep_rules_without_teaching_writeback() -> N
     assert "【線性回歸頁】" not in text
     assert "nn_host_context_fragment" not in text
     assert "lr_host_context_fragment" not in text
+    assert "logistic_host_context_fragment" not in text
     assert "nn_form.json" not in text
     assert "lr_slots.json" not in text
+    assert "logistic_slots.json" not in text
+    assert "logistic_host_context_fragment" not in text
 
 
 def test_teaching_page_host_context_forbids_root_working_and_accepts_fragment() -> None:
@@ -74,6 +77,12 @@ def test_teaching_pages_pass_own_host_and_skip_working_snapshot() -> None:
 def test_linear_regression_host_uses_slot_fragment() -> None:
     src = (UI / "lr_ui.py").read_text(encoding="utf-8")
     assert "lr_host_context_fragment" in src
+    assert "skip_working_snapshot=True" in src
+
+
+def test_logistic_regression_host_uses_slot_fragment() -> None:
+    src = (UI / "logistic_regression_ui.py").read_text(encoding="utf-8")
+    assert "logistic_host_context_fragment" in src
     assert "skip_working_snapshot=True" in src
 
 

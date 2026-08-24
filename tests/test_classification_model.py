@@ -23,6 +23,7 @@ from dataset_streamlit_shell.ml.classification import (
     LogisticModelArtifact,
     RegularizedLogisticModelArtifact,
     artifact_from_payload,
+    attach_logistic_test_costs,
     build_classification_agent_context,
     compute_cost_logistic,
     compute_cost_logistic_reg,
@@ -37,6 +38,7 @@ from dataset_streamlit_shell.ml.classification import (
     training_accuracy,
     validate_binary_target,
 )
+from dataset_streamlit_shell.ml.regression import apply_feature_scaler, create_feature_scaler
 
 ADMISSION_PATH = (
     TEMPLATE_ROOT
@@ -204,6 +206,31 @@ def test_build_classification_agent_context() -> None:
     assert "threshold" in context
 
 
+def test_agent_context_reports_scaler_method_not_hardcoded_zscore() -> None:
+    artifact = LogisticModelArtifact(
+        model_kind=MODEL_KIND_LOGISTIC,
+        features=["考試1分數", "考試2分數"],
+        target="是否錄取",
+        weights=[0.1, -0.2],
+        intercept=0.0,
+        scaler={"method": "minmax", "features": ["考試1分數", "考試2分數"]},
+        training_cost=0.4,
+        data_source="test",
+    )
+    context = build_classification_agent_context(
+        page_name="邏輯迴歸",
+        data_source="內建",
+        features=["考試1分數", "考試2分數"],
+        target="是否錄取",
+        learning_rate=0.001,
+        epochs=10000,
+        row_count=100,
+        artifact=artifact,
+    )
+    assert "minmax" in context
+    assert "Z-score 特徵縮放" not in context
+
+
 def test_regularized_gd_penalizes_weights_not_intercept() -> None:
     frame = pd.DataFrame({"x": [0.0, 1.0], "y": [0, 1]})
     kwargs = {
@@ -243,3 +270,45 @@ def test_logistic_gd_steps_include_micro_step_fields() -> None:
     assert update.delta_b is not None
     assert len(update.dj_dw) == 1
     assert len(update.delta_w) == 1
+
+
+def test_attach_logistic_test_costs_fills_each_step() -> None:
+    train = pd.DataFrame({"x": [0.0, 1.0], "y": [0, 1]})
+    test = pd.DataFrame({"x": [0.2, 0.8], "y": [0, 1]})
+    steps = logistic_gradient_descent_steps(
+        train[["x"]],
+        train["y"],
+        learning_rate=0.1,
+        epochs=2,
+    )
+    annotated = attach_logistic_test_costs(steps, test[["x"]], test["y"])
+    assert all(step.test_cost is not None for step in annotated)
+    expected = compute_cost_logistic(test[["x"]], test["y"], steps[-1].weights, steps[-1].intercept)
+    assert annotated[-1].test_cost == pytest.approx(expected)
+
+
+def test_regularized_artifact_scales_then_maps() -> None:
+    base = ["檢測分數1", "檢測分數2"]
+    frame = pd.DataFrame({base[0]: [0.4, 1.2], base[1]: [-0.2, 0.6]})
+    scaler = create_feature_scaler(frame, base, "zscore")
+    mapped_scaled, mapped_features = map_feature(
+        apply_feature_scaler(frame, scaler),
+        base,
+        degree=6,
+    )
+    artifact = RegularizedLogisticModelArtifact(
+        model_kind=MODEL_KIND_REGULARIZED,
+        base_features=base,
+        mapped_features=mapped_features,
+        target="是否通過",
+        weights=[0.01] * len(mapped_features),
+        intercept=0.2,
+        map_degree=6,
+        lambda_=0.01,
+        training_cost=0.5,
+        data_source="test",
+        scaler=scaler,
+    )
+    direct = predict_proba(mapped_scaled[mapped_features], artifact.weights, artifact.intercept)
+    via_artifact = predict_proba_from_regularized_artifact(artifact, frame)
+    assert list(via_artifact) == pytest.approx(list(direct))
