@@ -345,6 +345,19 @@ def slot_button_label(slot_id: str, state: dict[str, Any], stage: str) -> str:
     return f"{title}\n{slot_label(slot_id, state, stage)}"
 
 
+def resolve_inspect_slot(
+    stage: str,
+    stored: str | None,
+    *,
+    key_present: bool,
+) -> str | None:
+    if key_present:
+        return stored
+    if stage == STAGE_SIMPLE:
+        return "data"
+    return None
+
+
 def scale_inspect(method: str | None) -> dict[str, str]:
     if method not in SCALE_INSPECT:
         return {"formula": "", "range": "", "condition": "", "code": ""}
@@ -761,6 +774,7 @@ def lr_host_context_fragment(
         "對學生講六個決策槽：輸入資料、訓練／測試切分、特徵縮放、線性層、損失函數、優化器。"
         "輸入資料進頁即完成。其餘各格只在學生對該格提出要求後才寫入；不要叫學生在頁上自己選。"
         "主教學欄沒有下拉選單，也不要用打勾符號標完成；完成是綠框、第二行目前選擇；點框只看只讀選擇明細。"
+        "單變量輸入資料選擇明細含全表原尺度散點（只有點，無回歸線）；題1依那張散點判斷斜率，不要叫學生看訓後左圖。"
         f"決策槽狀態在共享 JSON：{slots_path}，鍵為 simple／multiple 兩學習階段，"
         "每階段含 choices（data、split、scale、linear、loss、opt）與 alpha、epochs。"
         "輸入資料進頁即為該階段鎖定值（單變量 restaurant、多變量 housing），載入時也回成該值；"

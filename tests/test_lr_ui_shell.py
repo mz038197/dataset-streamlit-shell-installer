@@ -183,6 +183,72 @@ def test_left_scatter_marks_held_out_points() -> None:
     assert "figsize=LR_TRAINING_CHART_FIGSIZE" in test_plot
 
 
+def test_inspect_scatter_is_points_only_on_original_scale() -> None:
+    import sys
+
+    import pandas as pd
+
+    template = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "add_dataset_streamlit_shell"
+        / "templates"
+    )
+    if str(template) not in sys.path:
+        sys.path.insert(0, str(template))
+    from dataset_streamlit_shell.ui.lr_ui import _render_inspect_scatter
+
+    class _Hold:
+        fig = None
+        kwargs: dict = {}
+
+        def pyplot(self, fig, clear_figure=True, **kwargs):
+            self.fig = fig
+            self.kwargs = kwargs
+
+    frame = pd.DataFrame(
+        {
+            "城市人口_萬人": [1.0, 2.0, 3.0],
+            "餐廳獲利_萬美元": [4.0, 5.0, 8.0],
+        }
+    )
+    holder = _Hold()
+    _render_inspect_scatter(
+        frame,
+        "城市人口_萬人",
+        "餐廳獲利_萬美元",
+        holder,
+    )
+    ax = holder.fig.axes[0]
+    assert ax.get_xlabel() == "城市人口_萬人"
+    assert ax.get_ylabel() == "餐廳獲利_萬美元"
+    assert ax.get_title() == ""
+    assert ax.get_legend() is None
+    assert len(ax.lines) == 0
+    offsets = ax.collections[0].get_offsets()
+    assert len(offsets) == 3
+    assert list(offsets[:, 0]) == [1.0, 2.0, 3.0]
+    assert list(offsets[:, 1]) == [4.0, 5.0, 8.0]
+    assert holder.kwargs.get("width") == "content"
+
+
+def test_simple_data_inspect_draws_scatter_before_preview() -> None:
+    src = (UI / "lr_ui.py").read_text(encoding="utf-8")
+    row = _def_block(src, "_render_slot_row")
+    assert "resolve_inspect_slot" in row
+    inspect = _def_block(src, "_render_inspect")
+    assert "_render_inspect_scatter(" in inspect
+    assert "STAGE_SIMPLE" in inspect
+    assert inspect.index("_render_inspect_scatter(") < inspect.index("st.dataframe(")
+    scatter = _def_block(src, "_render_inspect_scatter")
+    assert 'width="content"' in scatter
+    assert "LR_INSPECT_SCATTER_FIGSIZE" in scatter
+    multiple = _def_block(src, "_render_multiple_stage")
+    assert "_render_inspect_scatter(" not in multiple
+    quiz = _def_block(src, "_render_simple_quiz")
+    assert "_render_inspect_scatter(" not in quiz
+
+
 def test_code_preview_expander_downloads_model_project_when_slots_complete() -> None:
     src = (UI / "lr_ui.py").read_text(encoding="utf-8")
     body = _def_block(src, "_render_code_preview")

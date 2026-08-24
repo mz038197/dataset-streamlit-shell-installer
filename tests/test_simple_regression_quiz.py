@@ -118,6 +118,7 @@ def test_hint_summary_uses_frame_without_answer_leak() -> None:
     assert "實際用於本頁的資料筆數：4" in text
     assert "城市人口_萬人" in text
     assert "餐廳獲利_萬美元" in text
+    assert "輸入資料選擇明細" in text
     assert SLOPE_POSITIVE not in text
     assert SLOPE_NEGATIVE not in text
     assert SLOPE_NEAR_ZERO not in text
@@ -140,6 +141,7 @@ def test_hint_cooldown_and_appendix_no_answer_leak() -> None:
     assert "勿直接告訴學生" in text or "不要直接" in text or "請勿直接" in text
     assert ALPHA_EXPLODE not in text
     assert "訓練是否已解鎖：否" in text
+    assert "輸入資料選擇明細" in text
 
 
 def test_unlocked_quiz_still_cannot_write_train_request_when_slots_empty() -> None:

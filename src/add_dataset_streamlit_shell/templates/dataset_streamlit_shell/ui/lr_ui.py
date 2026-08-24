@@ -64,6 +64,7 @@ from dataset_streamlit_shell.ui.lr_slot_state import (
     slot_is_filled,
     slot_signature,
     slots_are_complete,
+    resolve_inspect_slot,
     train_request_is_set,
 )
 from dataset_streamlit_shell.ui.simple_regression_quiz import (
@@ -100,6 +101,7 @@ HOUSE_PRICES_PATH = REGRESSION_DEMO_DIR / "house_prices.csv"
 LR_PAGE_TITLE = "線性回歸"
 LR_CONTEXT_KEY = f"{LR_PAGE_TITLE}_agent_context"
 LR_TRAINING_CHART_FIGSIZE = (6.5, 6.5)
+LR_INSPECT_SCATTER_FIGSIZE = (5.2, 3.6)
 
 
 def _lr_host() -> str:
@@ -222,7 +224,11 @@ def _after_lr_chat() -> None:
 
 def _render_slot_row(state: dict, *, stage: str) -> str | None:
     inspect_key = f"{INSPECT_KEY}_{stage}"
-    current = st.session_state.get(inspect_key)
+    key_present = inspect_key in st.session_state
+    stored = st.session_state.get(inspect_key)
+    if not isinstance(stored, str):
+        stored = None
+    current = resolve_inspect_slot(stage, stored, key_present=key_present)
     cols = st.columns(6)
     for column, slot_id in zip(cols, SLOT_IDS):
         filled = slot_is_filled(slot_id, state)
@@ -238,7 +244,7 @@ def _render_slot_row(state: dict, *, stage: str) -> str | None:
                 ):
                     st.session_state[inspect_key] = None if current == slot_id else slot_id
                     st.rerun()
-    return st.session_state.get(inspect_key)
+    return current
 
 
 def _render_inspect(
@@ -267,6 +273,8 @@ def _render_inspect(
         )
         if open_slot != "data" or frame is None or not features or not target:
             return
+        if stage == STAGE_SIMPLE:
+            _render_inspect_scatter(frame, features[0], target, st)
         preview_cols = [column for column in [*features, target] if column in frame.columns]
         if not preview_cols:
             return
@@ -918,6 +926,20 @@ def _run_multiple_training(
         "steps": steps,
     }
     anim["finished"] = True
+
+
+def _render_inspect_scatter(
+    frame: pd.DataFrame,
+    feature: str,
+    target: str,
+    placeholder,
+) -> None:
+    fig, ax = plt.subplots(figsize=LR_INSPECT_SCATTER_FIGSIZE, constrained_layout=True)
+    ax.scatter(frame[feature], frame[target], color="C0", alpha=0.75)
+    ax.set_xlabel(feature)
+    ax.set_ylabel(target)
+    placeholder.pyplot(fig, clear_figure=True, width="content")
+    plt.close(fig)
 
 
 def _render_simple_step_plot(

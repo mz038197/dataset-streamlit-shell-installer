@@ -138,6 +138,7 @@ def build_regression_frame_hint_summary(
             f"{low_y:g} vs {high_y:g}。"
         ),
         "請用上述摘要與散點直覺給線索；不要說出應選的選項文字。",
+        "散點在輸入資料選擇明細，不是訓練畫面的回歸線圖。",
     ]
     return "\n".join(lines)
 
@@ -182,7 +183,7 @@ def build_quiz_agent_appendix(
         f"目前焦點題：{focus}。feature={feature}，target={target}，α={learning_rate:g}。",
         f"訓練是否已解鎖：{'是' if unlocked else '否'}。",
         "未解鎖前請勿直接告訴學生應選哪一個選項；只給觀察散點或梯度更新的線索。",
-        "可提醒學生看散點大致往哪個方向，或想像 α 太大時參數更新步長的影響。",
+        "可提醒學生看輸入資料選擇明細的散點大致往哪個方向，或想像 α 太大時參數更新步長的影響。",
     ]
     return "\n".join(lines)
 
@@ -192,7 +193,7 @@ def hint_user_text(qid: str, *, feature: str, target: str, learning_rate: float)
         return (
             f"我在單變量線性回歸的訓練前預測第1題（斜率方向）。"
             f"目前 feature=`{feature}`、target=`{target}`。"
-            "請依散點給我判斷斜率正負／接近0的觀察线索，不要直接講正解選項。"
+            "請依輸入資料選擇明細的散點給我判斷斜率正負／接近0的觀察线索，不要直接講正解選項。"
         )
     return (
         f"我在單變量線性回歸的訓練前預測第2題（α過大時Cost）。"

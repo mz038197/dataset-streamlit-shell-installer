@@ -44,6 +44,7 @@ from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
     model_download_files,
     model_sequential_compile_preview,
     normalize_slot_state,
+    resolve_inspect_slot,
     save_workspace_state,
     scale_inspect,
     scale_method_errors,
@@ -398,6 +399,8 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "不要宣稱頁面 exec" in text or "不要宣稱頁面在跑" in text
     assert "不必過關" in text
     assert "不必先訓" in text
+    assert "單變量輸入資料選擇明細含全表原尺度散點" in text
+    assert "無回歸線" in text
 
 
 def test_slot_button_label_shows_current_choice_only_when_complete() -> None:
@@ -445,6 +448,14 @@ def test_data_selection_detail_shows_builtin_table_and_row_count_before_assemble
     )
     assert housing["目前選擇"] == "內建房價四特徵"
     assert housing["列數"] == "47"
+
+
+def test_resolve_inspect_slot_opens_data_only_on_first_simple_visit() -> None:
+    assert resolve_inspect_slot(STAGE_SIMPLE, None, key_present=False) == "data"
+    assert resolve_inspect_slot(STAGE_SIMPLE, None, key_present=True) is None
+    assert resolve_inspect_slot(STAGE_SIMPLE, "split", key_present=True) == "split"
+    assert resolve_inspect_slot(STAGE_MULTIPLE, None, key_present=False) is None
+    assert resolve_inspect_slot(STAGE_MULTIPLE, "data", key_present=True) == "data"
 
 
 def test_normalize_backfills_locked_data_when_json_has_null() -> None:
