@@ -197,7 +197,16 @@ def test_host_fragment_matches_slot_contract() -> None:
         slots_path="logistic_slots.json",
         request_path="logistic_train_request.json",
     )
-    assert "組模型預設不要寫 split" in text
+    assert "只說組模型" in text
+    assert "當輪不寫入" in text
+    assert "只講訓練／測試切分占比時只寫 choices.split" in text
+    assert "其餘／剩下用預設" in text
+    assert "回覆須點名各格寫入值" in text
+    assert "Z分數正規化" in text
+    assert "Dense(1, linear)" in text
+    assert "學生同一句要求多格時可一次寫入" in text
+    assert "寫入該階段預設" not in text
+    assert "poly 預設 lambda_=0.01" not in text
     assert "boundary" in text
     assert "poly" in text
     assert "logloss" in text

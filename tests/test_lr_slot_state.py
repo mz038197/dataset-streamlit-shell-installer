@@ -373,10 +373,19 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "不必為了槽齊而寫 data" in text
     assert "六個決策槽" in text
     assert "訓練／測試切分" in text
-    assert "組模型預設不要寫 split" in text
+    assert "只說組模型" in text
+    assert "當輪不寫入" in text
+    assert "只講訓練／測試切分占比時只寫 choices.split" in text
+    assert "其餘／剩下用預設" in text
+    assert "回覆須點名各格寫入值" in text
+    assert "Z分數正規化" in text
+    assert "Dense(1, linear)" in text
+    assert "學生同一句要求多格時可一次寫入" in text
+    assert "寫入該階段預設" not in text
+    assert "其餘五個由你寫入" not in text
     assert "choices.split" in text
     assert "沒有下拉選單" in text
-    assert "不要叫學生自己選" in text
+    assert "不要叫學生在頁上自己選" in text
     assert "測試集預測對照" in text
     assert "打勾符號" in text
     assert "✅" not in text

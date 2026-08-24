@@ -158,7 +158,7 @@ def render_logistic_regression_page() -> None:
     with teaching:
         st.title(PAGE_TITLE)
         st.caption(
-            "框名是決策槽，框上是目前選擇。請資料 Agent 欄組模型；"
+            "框名是決策槽，框上是目前選擇。跟資料 Agent 欄討論各格再寫入；"
             "點框看只讀選擇明細。訓練畫面是決策邊界、訓練／測試 Cost，下方為測試集混淆矩陣與其下 precision／recall／F1。"
         )
         st.markdown(DECISION_SLOT_CSS, unsafe_allow_html=True)

@@ -56,6 +56,8 @@ def test_logistic_ui_uses_decision_slots_not_teaching_flow() -> None:
     assert "predicted_class" in ui_src
     assert "ŷ=0.5" in ui_src
     assert "Sigmoid 函數視覺化" in ui_src
+    assert "跟資料 Agent 欄討論各格再寫入" in ui_src
+    assert "請資料 Agent 欄組模型" not in ui_src
     assert "classification_flow_svg" not in ui_src
     assert "TEACHING_FLOW_CSS" not in ui_src
     assert "目前查看" not in ui_src

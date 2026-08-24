@@ -35,6 +35,8 @@ def test_linear_regression_page_uses_decision_slots_not_old_skeleton() -> None:
     assert "st.columns(6)" in src
     assert "split_frame_by_train_pct" in src
     assert "test_cost" in src
+    assert "跟資料 Agent 欄討論各格再寫入" in src
+    assert "請資料 Agent 欄組模型" not in src
 
 
 def test_workflow_ui_no_longer_owns_linear_regression_page() -> None:
