@@ -428,6 +428,46 @@ def confusion_matrix_counts(
     return n00, n01, n10, n11
 
 
+def precision_recall_f1_from_counts(
+    n00: int,
+    n01: int,
+    n10: int,
+    n11: int,
+) -> tuple[float | None, float | None, float | None]:
+    _ = n00
+    predicted_pos = n11 + n01
+    actual_pos = n11 + n10
+    precision = (100.0 * n11 / predicted_pos) if predicted_pos else None
+    recall = (100.0 * n11 / actual_pos) if actual_pos else None
+    if precision is None or recall is None:
+        f1 = None
+    elif precision + recall == 0:
+        f1 = 0.0
+    else:
+        f1 = 2.0 * precision * recall / (precision + recall)
+    return precision, recall, f1
+
+
+def format_pct_or_dash(value: float | None) -> str:
+    if value is None:
+        return "—"
+    return f"{value:.1f}%"
+
+
+def precision_recall_f1_caption(
+    n00: int,
+    n01: int,
+    n10: int,
+    n11: int,
+) -> str:
+    precision, recall, f1 = precision_recall_f1_from_counts(n00, n01, n10, n11)
+    return (
+        f"precision {format_pct_or_dash(precision)}  "
+        f"recall {format_pct_or_dash(recall)}  "
+        f"F1 {format_pct_or_dash(f1)}"
+    )
+
+
 def build_classification_agent_context(
     *,
     page_name: str,
@@ -487,6 +527,7 @@ def build_classification_agent_context(
                 "測試集混淆矩陣（列實際 y=0/1，欄預測 0/1）："
                 f"0→0={n00}，0→1={n01}，1→0={n10}，1→1={n11}。"
             )
+            parts.extend(_precision_recall_f1_agent_parts(n00, n01, n10, n11))
         if train_accuracy is not None:
             parts.append(f"訓練正確率：{train_accuracy:g}%。")
         if test_accuracy is not None:
@@ -513,6 +554,27 @@ def build_classification_agent_context(
     if note:
         parts.append(note)
     return "".join(parts)
+
+
+def _precision_recall_f1_agent_parts(n00: int, n01: int, n10: int, n11: int) -> list[str]:
+    precision, recall, f1 = precision_recall_f1_from_counts(n00, n01, n10, n11)
+    no_pred = n11 + n01 == 0
+    no_actual = n11 + n10 == 0
+    if no_pred and no_actual:
+        f1_reason = "（沒有預測為 y=1，沒有實際 y=1）"
+    elif no_pred:
+        f1_reason = "（沒有預測為 y=1）"
+    elif no_actual:
+        f1_reason = "（沒有實際 y=1）"
+    else:
+        f1_reason = ""
+    pred_reason = "（沒有預測為 y=1）" if no_pred else ""
+    actual_reason = "（沒有實際 y=1）" if no_actual else ""
+    return [
+        f"測試集 precision：{format_pct_or_dash(precision)}{pred_reason}。",
+        f"測試集 recall：{format_pct_or_dash(recall)}{actual_reason}。",
+        f"測試集 F1：{format_pct_or_dash(f1)}{f1_reason if f1 is None else ''}。",
+    ]
 
 
 def _as_feature_matrix(feature_frame: pd.DataFrame | np.ndarray) -> np.ndarray:

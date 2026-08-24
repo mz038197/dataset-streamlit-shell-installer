@@ -608,6 +608,19 @@ def _download_train_script(state: dict[str, Any], *, stage: str, csv_name: str, 
         "logits_t = model.predict(x_test, verbose=0).reshape(-1)\n"
         "pred_t = (tf.sigmoid(logits_t).numpy() >= 0.5).astype(int)\n"
         'print("test accuracy:", float((pred_t == y_test).mean()))\n'
+        "y_true = y_test.astype(int)\n"
+        "y_hat = pred_t.astype(int)\n"
+        "tp = int(((y_true == 1) & (y_hat == 1)).sum())\n"
+        "fp = int(((y_true == 0) & (y_hat == 1)).sum())\n"
+        "fn = int(((y_true == 1) & (y_hat == 0)).sum())\n"
+        "precision = (100.0 * tp / (tp + fp)) if (tp + fp) else None\n"
+        "recall = (100.0 * tp / (tp + fn)) if (tp + fn) else None\n"
+        "f1 = None if precision is None or recall is None else (\n"
+        "    0.0 if precision + recall == 0 else 2.0 * precision * recall / (precision + recall)\n"
+        ")\n"
+        'print("test precision:", f"{precision:.1f}%" if precision is not None else "—")\n'
+        'print("test recall:", f"{recall:.1f}%" if recall is not None else "—")\n'
+        'print("test F1:", f"{f1:.1f}%" if f1 is not None else "—")\n'
         "weights, intercept = model.layers[-1].get_weights()\n"
         'print("w:", weights.reshape(-1).tolist())\n'
         'print("b:", float(intercept.reshape(-1)[0]))\n'
@@ -803,13 +816,17 @@ def logistic_host_context_fragment(
         "模型程式碼預覽與下載的 compile 才是 BinaryCrossentropy(from_logits=True)，線性層 Dense(1, linear)。"
         "poly 先縮放原始兩特徵再做 degree=6 映射；degree 鎖定。"
         "頁上沒有切分旋鈕、α／epochs／λ 旋鈕。"
-        "訓練畫面是決策邊界或 contour、訓練／測試 Cost，下方為測試集混淆矩陣；開訓後三張圖逐幀一起更新。"
-        "快照含與動畫同一套的訓練／測試 Cost 曲線（約 80 點）與最後數字、測試集混淆矩陣四格計數、訓練／測試正確率。"
+        "訓練畫面是決策邊界或 contour、訓練／測試 Cost，下方為測試集混淆矩陣與其下 precision／recall／F1；"
+        "開訓後三張圖與這三個數逐幀一起更新。"
+        "快照含與動畫同一套的訓練／測試 Cost 曲線（約 80 點）與最後數字、測試集混淆矩陣四格計數、"
+        "測試集 precision／recall／F1 與訓練／測試正確率。"
         "禁止說看不到測試 Cost。"
+        "禁止說看不到測試集 precision／recall／F1。"
         "階段「多項式與 λ」的訓練 Cost 含課堂 λ/(2m)||w||²；測試 Cost 只算對數損失、不含 λ。"
         "階段「多項式與 λ」的訓練 Cost 含 λ 項，通常會高過測試 Cost；看分叉與測試是否回升，不要只比誰比較小。"
         "測試 Cost 相對訓練上升或分叉時，可用課堂說法講過擬合傾向。"
-        "分類 threshold 不是決策槽，訓後才出現，只改測試集混淆矩陣與表，不重畫決策邊界。"
+        "測試集 precision／recall／F1 以 y=1 為正類，百分比一位小數；無法計算為 —。"
+        "分類 threshold 不是決策槽，訓後才出現，只改測試集混淆矩陣與其下三數與表，不重畫決策邊界。"
         "write_file 時必須保留另一學習階段的鍵，不要清掉另一側。"
         "若要讓主教學欄播放與「開始訓練」相同的動畫，另寫 "
         f'{request_path}，內容為 {{"requested": true}}。'

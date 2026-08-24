@@ -28,6 +28,7 @@ from dataset_streamlit_shell.ml.classification import (
     confusion_matrix_counts,
     logistic_gradient_descent_steps,
     map_feature,
+    precision_recall_f1_caption,
     predict_class_from_proba,
     predict_proba,
     predict_proba_from_logistic_artifact,
@@ -158,7 +159,7 @@ def render_logistic_regression_page() -> None:
         st.title(PAGE_TITLE)
         st.caption(
             "框名是決策槽，框上是目前選擇。請資料 Agent 欄組模型；"
-            "點框看只讀選擇明細。訓練畫面是決策邊界、訓練／測試 Cost，下方為測試集混淆矩陣。"
+            "點框看只讀選擇明細。訓練畫面是決策邊界、訓練／測試 Cost，下方為測試集混淆矩陣與其下 precision／recall／F1。"
         )
         st.markdown(DECISION_SLOT_CSS, unsafe_allow_html=True)
         stage_label = st.radio(
@@ -520,7 +521,7 @@ def _render_stage(
             )
         else:
             status_placeholder.caption(
-                "訓練後這裡會出現決策邊界、訓練／測試 Cost 與測試集混淆矩陣。"
+                "訓練後這裡會出現決策邊界、訓練／測試 Cost 與測試集混淆矩陣（其下為 precision／recall／F1）。"
             )
 
     _set_agent_context(
@@ -909,6 +910,7 @@ def _render_confusion_matrix(
     ax.set_yticks([0, 1])
     ax.set_yticklabels(["實際 y=0", "實際 y=1"])
     ax.set_title("測試集混淆矩陣")
+    ax.set_xlabel(precision_recall_f1_caption(n00, n01, n10, n11))
     for i in range(2):
         for j in range(2):
             value = int(mat[i, j])
@@ -940,7 +942,7 @@ def _classification_threshold_slider(stage: str, *, enabled: bool) -> float:
             step=0.01,
             key=f"logistic_threshold_{stage}",
             disabled=not enabled,
-            help="圖上決策邊界／contour 維持 ŷ=0.5；threshold 只切測試集表與測試集混淆矩陣。",
+            help="圖上決策邊界／contour 維持 ŷ=0.5；threshold 只切測試集表、測試集混淆矩陣與其下 precision／recall／F1。",
         )
     )
 

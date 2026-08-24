@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -160,6 +161,10 @@ def test_model_download_files_poly_includes_regularizer_and_phi() -> None:
     assert "map_feature" in script or "degree=6" in script
     assert "BinaryCrossentropy(from_logits=True)" in script
     assert "train_test_split" in script
+    assert "test precision" in script
+    assert "test recall" in script
+    assert "test F1" in script
+    ast.parse(script)
 
 
 def test_model_download_missing_when_incomplete() -> None:
@@ -200,7 +205,9 @@ def test_host_fragment_matches_slot_contract() -> None:
     assert "BinaryCrossentropy(from_logits=True)" in text
     assert "測試集混淆矩陣" in text
     assert "測試集機率對照" not in text
+    assert "測試集 precision／recall／F1" in text
     assert "禁止說看不到測試 Cost" in text
+    assert "禁止說看不到測試集 precision／recall／F1" in text
     assert "測試 Cost 只算對數損失" in text
 
 

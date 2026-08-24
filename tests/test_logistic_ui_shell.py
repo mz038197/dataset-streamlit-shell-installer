@@ -52,6 +52,7 @@ def test_logistic_ui_uses_decision_slots_not_teaching_flow() -> None:
     assert "consume_train_request" in ui_src
     assert "測試集混淆矩陣" in ui_src
     assert "測試集機率對照" not in ui_src
+    assert "precision_recall_f1_caption" in ui_src
     assert "predicted_class" in ui_src
     assert "ŷ=0.5" in ui_src
     assert "Sigmoid 函數視覺化" in ui_src

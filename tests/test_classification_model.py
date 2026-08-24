@@ -28,7 +28,10 @@ from dataset_streamlit_shell.ml.classification import (
     compute_cost_logistic,
     compute_cost_logistic_reg,
     confusion_matrix_counts,
+    format_pct_or_dash,
     logistic_gradient_descent_steps,
+    precision_recall_f1_caption,
+    precision_recall_f1_from_counts,
     map_feature,
     predict_class_from_proba,
     predict_proba,
@@ -315,6 +318,38 @@ def test_confusion_matrix_counts_is_actual_by_predicted() -> None:
     assert confusion_matrix_counts(actual, predicted) == (1, 1, 1, 2)
 
 
+def test_precision_recall_f1_uses_y1_as_positive() -> None:
+    precision, recall, f1 = precision_recall_f1_from_counts(1, 1, 1, 2)
+    assert precision == pytest.approx(200.0 / 3.0)
+    assert recall == pytest.approx(200.0 / 3.0)
+    assert f1 == pytest.approx(200.0 / 3.0)
+    assert format_pct_or_dash(precision) == "66.7%"
+    assert format_pct_or_dash(None) == "—"
+    assert precision_recall_f1_caption(1, 1, 1, 2) == "precision 66.7%  recall 66.7%  F1 66.7%"
+
+
+def test_precision_recall_f1_undefined_when_denominator_is_zero() -> None:
+    precision, recall, f1 = precision_recall_f1_from_counts(2, 0, 1, 0)
+    assert precision is None
+    assert recall == pytest.approx(0.0)
+    assert f1 is None
+    precision, recall, f1 = precision_recall_f1_from_counts(1, 1, 0, 0)
+    assert precision == pytest.approx(0.0)
+    assert recall is None
+    assert f1 is None
+    precision, recall, f1 = precision_recall_f1_from_counts(2, 0, 0, 0)
+    assert precision is None
+    assert recall is None
+    assert f1 is None
+
+
+def test_f1_is_zero_when_precision_and_recall_are_zero() -> None:
+    precision, recall, f1 = precision_recall_f1_from_counts(0, 1, 1, 0)
+    assert precision == pytest.approx(0.0)
+    assert recall == pytest.approx(0.0)
+    assert f1 == pytest.approx(0.0)
+
+
 def test_sample_gradient_steps_keeps_last_and_caps_length() -> None:
     from dataset_streamlit_shell.ml.regression import GradientDescentStep
 
@@ -368,6 +403,36 @@ def test_agent_context_includes_test_cost_curve_and_confusion() -> None:
     assert "0→0=3" in context
     assert "訓練正確率：80%" in context
     assert "測試正確率：70%" in context
+    assert "測試集 precision：80.0%" in context
+    assert "測試集 recall：66.7%" in context
+    assert "測試集 F1：72.7%" in context
+
+
+def test_agent_context_prf_dash_includes_reason() -> None:
+    artifact = LogisticModelArtifact(
+        model_kind=MODEL_KIND_LOGISTIC,
+        features=["考試1分數", "考試2分數"],
+        target="是否錄取",
+        weights=[0.1, -0.2],
+        intercept=0.0,
+        scaler={"method": "minmax", "features": ["考試1分數", "考試2分數"]},
+        training_cost=0.4,
+        data_source="test",
+    )
+    context = build_classification_agent_context(
+        page_name="邏輯迴歸",
+        data_source="內建",
+        features=["考試1分數", "考試2分數"],
+        target="是否錄取",
+        learning_rate=0.001,
+        epochs=10000,
+        row_count=100,
+        artifact=artifact,
+        confusion=(2, 0, 1, 0),
+    )
+    assert "測試集 precision：—（沒有預測為 y=1）" in context
+    assert "測試集 recall：0.0%" in context
+    assert "測試集 F1：—（沒有預測為 y=1）" in context
 
 
 def test_regularized_artifact_scales_then_maps() -> None:
