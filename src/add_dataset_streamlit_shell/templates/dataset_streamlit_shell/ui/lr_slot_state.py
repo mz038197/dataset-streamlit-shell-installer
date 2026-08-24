@@ -1,10 +1,20 @@
-"""線性回歸決策槽狀態、模型程式碼預覽與訓練請求（對齊類神經網路寫檔協議）。"""
+"""線性回歸決策槽狀態、模型程式碼預覽、模型下載程式碼與訓練請求。"""
 
 from __future__ import annotations
 
+import csv
+import io
 import json
+import zipfile
 from pathlib import Path
 from typing import Any
+
+from dataset_streamlit_shell.ml.regression import (
+    MULTIPLE_REGRESSION_FEATURES,
+    MULTIPLE_REGRESSION_TARGET,
+    SIMPLE_REGRESSION_FEATURE,
+    SIMPLE_REGRESSION_TARGET,
+)
 
 STAGE_SIMPLE = "simple"
 STAGE_MULTIPLE = "multiple"
@@ -436,6 +446,157 @@ def model_code_preview(state: dict[str, Any], *, stage: str) -> str:
     return "\n".join(lines)
 
 
+_REGRESSION_DATA_DIR = Path(__file__).resolve().parents[1] / "built-in-data" / "regression"
+_DOWNLOAD_CSV = {
+    STAGE_SIMPLE: "restaurant_profit.csv",
+    STAGE_MULTIPLE: "house_prices.csv",
+}
+
+_DOWNLOAD_PYPROJECT = """\
+[project]
+name = "lr-model-download"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas",
+    "scikit-learn",
+    "tensorflow-cpu",
+]
+"""
+
+_DOWNLOAD_README = """\
+# 模型下載程式碼
+
+這份專案可在本頁以外執行。主教學欄動畫走頁面自己的梯度下降，不是跑這支程式。
+
+```
+uv sync
+uv run python train.py
+```
+"""
+
+
+def _download_columns(stage: str) -> tuple[list[str], str]:
+    if stage == STAGE_SIMPLE:
+        return [SIMPLE_REGRESSION_FEATURE], SIMPLE_REGRESSION_TARGET
+    return list(MULTIPLE_REGRESSION_FEATURES), MULTIPLE_REGRESSION_TARGET
+
+
+def _csv_data_row_count(csv_path: Path) -> int:
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        return sum(1 for _ in csv.DictReader(handle))
+
+
+def _download_scale_block(method: str) -> tuple[str, str]:
+    if method == SCALE_MINMAX:
+        return (
+            "from sklearn.preprocessing import MinMaxScaler\n",
+            "scaler = MinMaxScaler()\n"
+            "x = scaler.fit_transform(x_train)\n"
+            "x_test = scaler.transform(x_test)\n",
+        )
+    if method == SCALE_MAXDIV:
+        return (
+            "",
+            "x_train_n = x_train.to_numpy(dtype=float)\n"
+            "x_test_n = x_test.to_numpy(dtype=float)\n"
+            "xmax = x_train_n.max(axis=0)\n"
+            "x = x_train_n / xmax\n"
+            "x_test = x_test_n / xmax\n",
+        )
+    if method == SCALE_MEAN:
+        return (
+            "",
+            "x_train_n = x_train.to_numpy(dtype=float)\n"
+            "x_test_n = x_test.to_numpy(dtype=float)\n"
+            "mean = x_train_n.mean(axis=0)\n"
+            "span = x_train_n.max(axis=0) - x_train_n.min(axis=0)\n"
+            "x = (x_train_n - mean) / span\n"
+            "x_test = (x_test_n - mean) / span\n",
+        )
+    return (
+        "from sklearn.preprocessing import StandardScaler\n",
+        "scaler = StandardScaler()\n"
+        "x = scaler.fit_transform(x_train)\n"
+        "x_test = scaler.transform(x_test)\n",
+    )
+
+
+def _download_train_script(state: dict[str, Any], *, stage: str, csv_name: str, row_count: int) -> str:
+    features, target = _download_columns(stage)
+    train_pct = parse_train_pct((state.get("choices") or {}).get("split"))
+    assert train_pct is not None
+    train_n, _ = train_test_row_counts(row_count, train_pct)
+    method = str(state["choices"]["scale"])
+    scale_import, scale_block = _download_scale_block(method)
+    preview = model_code_preview(state, stage=stage)
+    sequential = "\n".join(preview.splitlines()[1:])
+    feature_list = ", ".join(repr(name) for name in features)
+    epochs = int(state["epochs"])
+    return (
+        "# 模型下載程式碼：可在本頁以外執行。\n"
+        "# 主教學欄動畫走本頁梯度下降，與這支 Keras 程式不同運算。\n"
+        "# 印出的是 Keras loss=\"mse\"，不是頁面的 Cost J，也不複製教學圖。\n"
+        "import pandas as pd\n"
+        "from sklearn.model_selection import train_test_split\n"
+        f"{scale_import}"
+        "from tensorflow.keras.layers import Dense, Input\n"
+        "from tensorflow.keras.models import Sequential\n"
+        "from tensorflow.keras.optimizers import SGD\n"
+        "\n"
+        f'df = pd.read_csv("{csv_name}")\n'
+        f"features = [{feature_list}]\n"
+        f"target = {target!r}\n"
+        "x_all = df[features]\n"
+        "y_all = df[target]\n"
+        "x_train, x_test, y_train, y_test = train_test_split(\n"
+        f"    x_all, y_all, train_size={train_n}, random_state={SPLIT_RANDOM_STATE}, shuffle=True\n"
+        ")\n"
+        f"{scale_block}"
+        "y = y_train.to_numpy(dtype=float)\n"
+        "y_test = y_test.to_numpy(dtype=float)\n"
+        "\n"
+        f"{sequential}\n"
+        f"model.fit(x, y, epochs={epochs}, verbose=0)\n"
+        'print("train MSE:", float(model.evaluate(x, y, verbose=0)))\n'
+        'print("test MSE:", float(model.evaluate(x_test, y_test, verbose=0)))\n'
+        "weights, intercept = model.layers[-1].get_weights()\n"
+        'print("w:", weights.reshape(-1).tolist())\n'
+        'print("b:", float(intercept.reshape(-1)[0]))\n'
+    )
+
+
+def model_download_files(state: dict[str, Any], *, stage: str) -> dict[str, bytes] | None:
+    if stage not in STAGES or not slots_are_complete(state):
+        return None
+    csv_name = _DOWNLOAD_CSV[stage]
+    csv_path = _REGRESSION_DATA_DIR / csv_name
+    row_count = _csv_data_row_count(csv_path)
+    script = _download_train_script(state, stage=stage, csv_name=csv_name, row_count=row_count)
+    return {
+        "pyproject.toml": _DOWNLOAD_PYPROJECT.encode("utf-8"),
+        "README.md": _DOWNLOAD_README.encode("utf-8"),
+        "train.py": script.encode("utf-8"),
+        csv_name: csv_path.read_bytes(),
+    }
+
+
+def model_download_zip_name(stage: str) -> str:
+    label = "單變量" if stage == STAGE_SIMPLE else "多變量"
+    return f"模型下載程式碼-{label}.zip"
+
+
+def model_download_zip_bytes(state: dict[str, Any], *, stage: str) -> bytes | None:
+    files = model_download_files(state, stage=stage)
+    if files is None:
+        return None
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in files.items():
+            archive.writestr(name, payload)
+    return buffer.getvalue()
+
+
 def scale_method_errors(method: str | None, frame: Any, features: list[str]) -> list[str]:
     if method != SCALE_MAXDIV:
         return []
@@ -613,6 +774,10 @@ def lr_host_context_fragment(
         "決策槽未齊、訓練前預測未過關、或正規化（除以最大）遇上負值時，不准寫訓練請求。"
         "不要自行 exec 訓練、不要假裝已訓完、不要代填訓練前預測選項。"
         "不要改 nn_form.json 或類神經網路的訓練請求。"
+        "六槽齊後主教學欄預覽 expander 可下載該階段模型下載程式碼"
+        "（獨立 Keras 專案，含內建表；不是模型程式碼預覽，也不是已訓權重）。"
+        "可告訴學生何時能下、以及與預覽／本頁梯度下降的差別。"
+        "不要另貼一份程式，不要宣稱頁面 exec 或在跑模型下載程式碼，也不要把它寫進 workspace。"
     )
 
 

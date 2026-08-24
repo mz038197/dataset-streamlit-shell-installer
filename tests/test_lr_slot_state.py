@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
 import sys
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -34,9 +36,12 @@ from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
     empty_workspace_state,
     load_workspace_state,
     lr_host_context_fragment,
+    model_download_zip_bytes,
+    model_download_zip_name,
     lr_slots_path,
     lr_train_request_path,
     model_code_preview,
+    model_download_files,
     normalize_slot_state,
     save_workspace_state,
     scale_inspect,
@@ -140,6 +145,93 @@ def test_apply_slot_write_accepts_scale_and_alpha_rejects_locked_kinds() -> None
     assert changed["alpha"] == pytest.approx(0.2)
     assert changed["epochs"] == 80
     assert slot_signature(changed) != slot_signature(assembled)
+
+
+def test_model_download_files_missing_when_slots_incomplete() -> None:
+    assert model_download_files(empty_slot_state(STAGE_SIMPLE), stage=STAGE_SIMPLE) is None
+    assert model_download_files(default_slot_state(STAGE_SIMPLE), stage=STAGE_SIMPLE) is None
+
+
+def test_model_download_files_is_current_stage_uv_project() -> None:
+    files = model_download_files(_complete(), stage=STAGE_SIMPLE)
+    assert files is not None
+    assert set(files) == {
+        "pyproject.toml",
+        "README.md",
+        "train.py",
+        "restaurant_profit.csv",
+    }
+    toml = files["pyproject.toml"].decode("utf-8")
+    assert "tensorflow-cpu" in toml
+    assert "pandas" in toml
+    assert "scikit-learn" in toml
+    assert "streamlit" not in toml
+    assert "uv.lock" not in files
+    readme = files["README.md"].decode("utf-8")
+    assert "uv sync" in readme
+    assert "uv run python train.py" in readme
+    table = files["restaurant_profit.csv"].decode("utf-8")
+    assert "城市人口_萬人" in table
+    multiple = model_download_files(_complete(STAGE_MULTIPLE), stage=STAGE_MULTIPLE)
+    assert multiple is not None
+    assert "house_prices.csv" in multiple
+    assert "restaurant_profit.csv" not in multiple
+
+
+def test_model_download_train_script_follows_slots_and_page_split() -> None:
+    simple = _complete(train_pct=80)
+    files = model_download_files(simple, stage=STAGE_SIMPLE)
+    assert files is not None
+    script = files["train.py"].decode("utf-8")
+    preview = model_code_preview(simple, stage=STAGE_SIMPLE)
+    sequential = "\n".join(preview.splitlines()[1:])
+    assert sequential in script
+    assert "本頁動畫" in script or "梯度下降" in script
+    assert "不同運算" in script
+    assert "train_test_split" in script
+    assert "train_size=78" in script
+    assert "random_state=42" in script
+    assert "restaurant_profit.csv" in script
+    assert "城市人口_萬人" in script
+    assert "餐廳獲利_萬美元" in script
+    assert "epochs=1500" in script
+    assert "train MSE" in script
+    assert "test MSE" in script
+    assert "print(" in script and "w" in script
+    assert "matplotlib" not in script
+    assert "測試集預測對照" not in script
+    assert "pyplot" not in script
+
+    minmax = apply_slot_write(simple, {"choices": {"scale": SCALE_MINMAX}}, stage=STAGE_SIMPLE)
+    minmax_script = model_download_files(minmax, stage=STAGE_SIMPLE)["train.py"].decode("utf-8")
+    assert "MinMaxScaler" in minmax_script
+    assert "StandardScaler" not in minmax_script
+
+    multiple = model_download_files(_complete(STAGE_MULTIPLE, train_pct=70), stage=STAGE_MULTIPLE)
+    multi_script = multiple["train.py"].decode("utf-8")
+    assert "house_prices.csv" in multi_script
+    assert "Input(shape=(4,))" in multi_script
+    assert "train_size=" in multi_script
+    assert "面積_平方英尺" in multi_script
+
+
+def test_model_download_zip_is_flat_project_without_lock() -> None:
+    assert model_download_zip_bytes(empty_slot_state(), stage=STAGE_SIMPLE) is None
+    payload = model_download_zip_bytes(_complete(), stage=STAGE_SIMPLE)
+    assert payload is not None
+    assert model_download_zip_name(STAGE_SIMPLE) == "模型下載程式碼-單變量.zip"
+    assert model_download_zip_name(STAGE_MULTIPLE) == "模型下載程式碼-多變量.zip"
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        names = set(archive.namelist())
+    assert names == {
+        "pyproject.toml",
+        "README.md",
+        "train.py",
+        "restaurant_profit.csv",
+    }
+    assert "uv.lock" not in names
+    assert ".venv" not in names
+    assert not any(name.startswith(".venv/") for name in names)
 
 
 def test_model_code_preview_follows_scale_and_feature_count() -> None:
@@ -287,6 +379,11 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "測試集預測對照" in text
     assert "打勾符號" in text
     assert "✅" not in text
+    assert "模型下載程式碼" in text
+    assert "六槽齊" in text
+    assert "模型程式碼預覽" in text
+    assert "不要另貼" in text
+    assert "不要宣稱頁面 exec" in text or "不要宣稱頁面在跑" in text
 
 
 def test_slot_button_label_shows_current_choice_only_when_complete() -> None:

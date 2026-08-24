@@ -52,6 +52,8 @@ from dataset_streamlit_shell.ui.lr_slot_state import (
     lr_slots_path,
     lr_train_request_path,
     model_code_preview,
+    model_download_zip_bytes,
+    model_download_zip_name,
     parse_train_pct,
     scale_method_errors,
     split_frame_by_train_pct,
@@ -279,6 +281,19 @@ def _render_code_preview(state: dict, *, stage: str) -> None:
     with st.expander("模型程式碼預覽", expanded=False):
         st.code(model_code_preview(state, stage=stage), language="python")
         st.caption("只讀預覽，對應目前決策槽狀態。主教學欄訓練走本頁梯度下降，不是 exec 這段。")
+        if not slots_are_complete(state):
+            return
+        payload = model_download_zip_bytes(state, stage=stage)
+        if payload is None:
+            return
+        st.download_button(
+            "下載模型下載程式碼",
+            data=payload,
+            file_name=model_download_zip_name(stage),
+            mime="application/zip",
+            width="stretch",
+            key=f"lr_model_download_{stage}",
+        )
 
 
 def _training_frame(df: pd.DataFrame, features: list[str], target: str) -> pd.DataFrame:

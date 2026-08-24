@@ -180,3 +180,17 @@ def test_left_scatter_marks_held_out_points() -> None:
     assert "min(actual.min(), prediction.min())" not in test_plot
     assert 'label="完全預測正確"' in test_plot
     assert "figsize=LR_TRAINING_CHART_FIGSIZE" in test_plot
+
+
+def test_code_preview_expander_downloads_model_project_when_slots_complete() -> None:
+    src = (UI / "lr_ui.py").read_text(encoding="utf-8")
+    body = _def_block(src, "_render_code_preview")
+    assert 'st.expander("模型程式碼預覽"' in body
+    assert "st.code(model_code_preview" in body
+    assert "st.download_button" in body
+    assert "model_download_zip_bytes" in body
+    assert "model_download_zip_name" in body
+    assert "slots_are_complete" in body
+    assert "模型下載程式碼" in body
+    assert "WORKSPACE_DIR" not in body
+    assert "exec(" not in body
