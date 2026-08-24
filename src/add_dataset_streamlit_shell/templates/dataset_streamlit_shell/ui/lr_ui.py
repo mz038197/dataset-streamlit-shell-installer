@@ -292,7 +292,7 @@ def _render_code_preview(state: dict, *, stage: str) -> None:
             file_name=model_download_zip_name(stage),
             mime="application/zip",
             width="stretch",
-            key=f"lr_model_download_{stage}",
+            key=f"lr_model_download_{stage}_{slot_signature(state)}",
         )
 
 

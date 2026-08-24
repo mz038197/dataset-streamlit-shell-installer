@@ -191,6 +191,7 @@ def test_code_preview_expander_downloads_model_project_when_slots_complete() -> 
     assert "model_download_zip_bytes" in body
     assert "model_download_zip_name" in body
     assert "slots_are_complete" in body
+    assert "slot_signature" in body
     assert "模型下載程式碼" in body
     assert "WORKSPACE_DIR" not in body
     assert "exec(" not in body

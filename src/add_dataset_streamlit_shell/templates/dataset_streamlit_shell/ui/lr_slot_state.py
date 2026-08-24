@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import csv
 import io
 import json
 import zipfile
 from pathlib import Path
 from typing import Any
+
+import pandas as pd
 
 from dataset_streamlit_shell.ml.regression import (
     MULTIPLE_REGRESSION_FEATURES,
@@ -425,25 +426,31 @@ def slot_inspect_rows(
     ]
 
 
+def model_sequential_compile_preview(state: dict[str, Any], *, stage: str) -> str:
+    if not slots_are_complete(state):
+        return ""
+    n_features = 1 if stage == STAGE_SIMPLE else 4
+    alpha = float(state["alpha"])
+    return "\n".join(
+        [
+            "model = Sequential([",
+            f"    Input(shape=({n_features},)),",
+            '    Dense(1, activation="linear"),',
+            "])",
+            "model.compile(",
+            '    loss="mse",',
+            f"    optimizer=SGD(learning_rate={alpha:g}),",
+            ")",
+        ]
+    )
+
+
 def model_code_preview(state: dict[str, Any], *, stage: str) -> str:
     if not slots_are_complete(state):
         return "# 決策槽還沒選齊，沒有模型程式碼預覽。"
-    n_features = 1 if stage == STAGE_SIMPLE else 4
     scale = str(state["choices"]["scale"])
     info = scale_inspect(scale)
-    alpha = float(state["alpha"])
-    lines = [
-        info["code"],
-        "model = Sequential([",
-        f"    Input(shape=({n_features},)),",
-        '    Dense(1, activation="linear"),',
-        "])",
-        "model.compile(",
-        '    loss="mse",',
-        f"    optimizer=SGD(learning_rate={alpha:g}),",
-        ")",
-    ]
-    return "\n".join(lines)
+    return f"{info['code']}\n{model_sequential_compile_preview(state, stage=stage)}"
 
 
 _REGRESSION_DATA_DIR = Path(__file__).resolve().parents[1] / "built-in-data" / "regression"
@@ -482,9 +489,10 @@ def _download_columns(stage: str) -> tuple[list[str], str]:
     return list(MULTIPLE_REGRESSION_FEATURES), MULTIPLE_REGRESSION_TARGET
 
 
-def _csv_data_row_count(csv_path: Path) -> int:
-    with csv_path.open(encoding="utf-8", newline="") as handle:
-        return sum(1 for _ in csv.DictReader(handle))
+def _csv_training_row_count(csv_path: Path, features: list[str], target: str) -> int:
+    frame = pd.read_csv(csv_path)
+    working = frame[features + [target]].apply(pd.to_numeric, errors="coerce").dropna()
+    return len(working)
 
 
 def _download_scale_block(method: str) -> tuple[str, str]:
@@ -529,8 +537,7 @@ def _download_train_script(state: dict[str, Any], *, stage: str, csv_name: str, 
     train_n, _ = train_test_row_counts(row_count, train_pct)
     method = str(state["choices"]["scale"])
     scale_import, scale_block = _download_scale_block(method)
-    preview = model_code_preview(state, stage=stage)
-    sequential = "\n".join(preview.splitlines()[1:])
+    sequential = model_sequential_compile_preview(state, stage=stage)
     feature_list = ", ".join(repr(name) for name in features)
     epochs = int(state["epochs"])
     return (
@@ -571,7 +578,8 @@ def model_download_files(state: dict[str, Any], *, stage: str) -> dict[str, byte
         return None
     csv_name = _DOWNLOAD_CSV[stage]
     csv_path = _REGRESSION_DATA_DIR / csv_name
-    row_count = _csv_data_row_count(csv_path)
+    features, target = _download_columns(stage)
+    row_count = _csv_training_row_count(csv_path, features, target)
     script = _download_train_script(state, stage=stage, csv_name=csv_name, row_count=row_count)
     return {
         "pyproject.toml": _DOWNLOAD_PYPROJECT.encode("utf-8"),
@@ -776,6 +784,7 @@ def lr_host_context_fragment(
         "不要改 nn_form.json 或類神經網路的訓練請求。"
         "六槽齊後主教學欄預覽 expander 可下載該階段模型下載程式碼"
         "（獨立 Keras 專案，含內建表；不是模型程式碼預覽，也不是已訓權重）。"
+        "下載不必過關、不必先訓；訓練請求仍要過關。"
         "可告訴學生何時能下、以及與預覽／本頁梯度下降的差別。"
         "不要另貼一份程式，不要宣稱頁面 exec 或在跑模型下載程式碼，也不要把它寫進 workspace。"
     )

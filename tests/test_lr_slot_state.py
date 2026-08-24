@@ -42,6 +42,7 @@ from dataset_streamlit_shell.ui.lr_slot_state import (  # noqa: E402
     lr_train_request_path,
     model_code_preview,
     model_download_files,
+    model_sequential_compile_preview,
     normalize_slot_state,
     save_workspace_state,
     scale_inspect,
@@ -183,9 +184,9 @@ def test_model_download_train_script_follows_slots_and_page_split() -> None:
     files = model_download_files(simple, stage=STAGE_SIMPLE)
     assert files is not None
     script = files["train.py"].decode("utf-8")
-    preview = model_code_preview(simple, stage=STAGE_SIMPLE)
-    sequential = "\n".join(preview.splitlines()[1:])
+    sequential = model_sequential_compile_preview(simple, stage=STAGE_SIMPLE)
     assert sequential in script
+    assert sequential in model_code_preview(simple, stage=STAGE_SIMPLE)
     assert "本頁動畫" in script or "梯度下降" in script
     assert "不同運算" in script
     assert "train_test_split" in script
@@ -384,6 +385,8 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "模型程式碼預覽" in text
     assert "不要另貼" in text
     assert "不要宣稱頁面 exec" in text or "不要宣稱頁面在跑" in text
+    assert "不必過關" in text
+    assert "不必先訓" in text
 
 
 def test_slot_button_label_shows_current_choice_only_when_complete() -> None:
