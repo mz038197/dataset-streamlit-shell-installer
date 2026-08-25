@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import sys
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from dataset_streamlit_shell.ui.logistic_slot_state import (  # noqa: E402
     empty_slot_state,
     empty_workspace_state,
     logistic_host_context_fragment,
+    logistic_slots_path,
     load_workspace_state,
     model_code_preview,
     model_download_files,
@@ -220,6 +222,12 @@ def test_host_fragment_matches_slot_contract() -> None:
     assert "禁止說看不到測試 Cost" in text
     assert "禁止說看不到測試集 precision／recall／F1" in text
     assert "測試 Cost 只算對數損失" in text
+    assert "打回尚未選擇" in text
+    assert '"unset": true' in text
+    assert "只寫目前學習階段" in text
+    assert "不要重開關卡" in text
+    assert "不要寫單格 null" in text
+    assert "λ" in text
 
 
 def test_linear_inspect_has_phi_row_only_on_poly_stage() -> None:
@@ -240,3 +248,73 @@ def test_download_zip_is_stage_scoped() -> None:
     toml = files["pyproject.toml"].decode("utf-8")
     assert "tensorflow-cpu" in toml
     assert "streamlit" not in toml
+
+
+def test_apply_slot_write_null_does_not_unset_one_slot() -> None:
+    filled = _complete(STAGE_POLY)
+    bounced = apply_slot_write(
+        filled,
+        {"choices": {"scale": None, "loss": None}, "lambda_": None, "alpha": None},
+        stage=STAGE_POLY,
+    )
+    assert bounced["choices"]["scale"] == SCALE_ZSCORE
+    assert bounced["choices"]["loss"] == LOSS_LOGLOSS
+    assert bounced["lambda_"] == pytest.approx(DEFAULT_LAMBDA)
+    assert bounced["alpha"] == pytest.approx(0.01)
+
+
+def test_apply_slot_write_unset_returns_poly_stage_to_empty() -> None:
+    filled = _complete(STAGE_POLY)
+    unfilled = apply_slot_write(filled, {"unset": True, "lambda_": 0.5}, stage=STAGE_POLY)
+    assert unfilled == empty_slot_state(STAGE_POLY)
+    assert unfilled["choices"]["data"] == "microchip"
+    assert unfilled["lambda_"] is None
+    assert slot_is_filled("loss", unfilled) is False
+    assert slots_are_complete(unfilled) is False
+
+
+def test_load_consumes_unset_and_keeps_other_stage(tmp_path: Path) -> None:
+    previous = empty_workspace_state()
+    previous[STAGE_BOUNDARY] = _complete(STAGE_BOUNDARY)
+    previous[STAGE_POLY] = _complete(STAGE_POLY)
+    save_workspace_state(tmp_path, previous)
+    logistic_slots_path(tmp_path).write_text(
+        json.dumps(
+            {
+                STAGE_POLY: {"unset": True},
+                STAGE_BOUNDARY: previous[STAGE_BOUNDARY],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    loaded = load_workspace_state(tmp_path, previous)
+    assert loaded[STAGE_POLY] == empty_slot_state(STAGE_POLY)
+    assert loaded[STAGE_BOUNDARY]["choices"]["split"] == 80
+    on_disk = json.loads(logistic_slots_path(tmp_path).read_text(encoding="utf-8"))
+    assert "unset" not in on_disk[STAGE_POLY]
+    assert on_disk[STAGE_POLY]["lambda_"] is None
+    assert on_disk[STAGE_BOUNDARY]["choices"]["split"] == 80
+
+
+def test_load_ignores_unset_when_both_stages_request_it(tmp_path: Path) -> None:
+    previous = empty_workspace_state()
+    previous[STAGE_BOUNDARY] = _complete(STAGE_BOUNDARY)
+    previous[STAGE_POLY] = _complete(STAGE_POLY)
+    save_workspace_state(tmp_path, previous)
+    logistic_slots_path(tmp_path).write_text(
+        json.dumps(
+            {
+                STAGE_BOUNDARY: {"unset": True},
+                STAGE_POLY: {"unset": True},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    loaded = load_workspace_state(tmp_path, previous)
+    assert loaded[STAGE_BOUNDARY]["choices"]["split"] == 80
+    assert loaded[STAGE_POLY]["lambda_"] == pytest.approx(DEFAULT_LAMBDA)
+    on_disk = json.loads(logistic_slots_path(tmp_path).read_text(encoding="utf-8"))
+    assert "unset" not in on_disk[STAGE_POLY]
+    assert on_disk[STAGE_POLY]["lambda_"] == pytest.approx(DEFAULT_LAMBDA)

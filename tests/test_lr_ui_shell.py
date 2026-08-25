@@ -37,6 +37,7 @@ def test_linear_regression_page_uses_decision_slots_not_old_skeleton() -> None:
     assert "test_cost" in src
     assert "跟資料 Agent 欄討論各格再寫入" in src
     assert "請資料 Agent 欄組模型" not in src
+    assert "打回尚未選擇" not in src
 
 
 def test_workflow_ui_no_longer_owns_linear_regression_page() -> None:
@@ -53,6 +54,7 @@ def test_logistic_page_uses_decision_slots_not_teaching_flow() -> None:
     assert "逐步模式" not in src
     assert "梯度演算板" not in src
     assert "樣本運算表" not in src
+    assert "打回尚未選擇" not in src
 
 
 def test_dataset_base_context_does_not_embed_lr_host_fragment() -> None:

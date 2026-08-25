@@ -44,6 +44,7 @@ LOSS_MSE = "mse"
 OPT_SGD = "sgd"
 
 CHOICE_UNSET = "尚未選擇"
+UNSET_KEY = "unset"
 DATA_PREVIEW_ROWS = 10
 
 SCALE_LABELS = {
@@ -224,6 +225,22 @@ def normalize_slot_state(raw: dict[str, Any] | None, *, stage: str) -> dict[str,
     return base
 
 
+def incoming_unsets_stage(incoming: dict[str, Any] | None) -> bool:
+    return isinstance(incoming, dict) and incoming.get(UNSET_KEY) is True
+
+
+def stage_write_for_merge(
+    incoming: Any,
+    *,
+    allow_unset: bool,
+) -> Any:
+    if allow_unset or not incoming_unsets_stage(incoming):
+        return incoming
+    stripped = dict(incoming)
+    stripped.pop(UNSET_KEY, None)
+    return stripped
+
+
 def apply_slot_write(
     previous: dict[str, Any] | None,
     incoming: dict[str, Any] | None,
@@ -231,8 +248,10 @@ def apply_slot_write(
     stage: str,
 ) -> dict[str, Any]:
     """套用 Agent 寫入：可改切分占比、特徵縮放與 α／epochs；鎖定槽種類拒改。"""
-    current = normalize_slot_state(previous, stage=stage)
     raw = incoming if isinstance(incoming, dict) else {}
+    if incoming_unsets_stage(raw):
+        return empty_slot_state(stage)
+    current = normalize_slot_state(previous, stage=stage)
     choices = raw.get("choices") if isinstance(raw.get("choices"), dict) else {}
 
     next_state = {
@@ -687,7 +706,10 @@ def load_workspace_state(
     raw = _read_raw_workspace(workspace_dir)
     if raw is None:
         return previous if previous is not None else empty_workspace_state()
-    return merge_workspace_write(previous or empty_workspace_state(), raw)
+    merged = merge_workspace_write(previous or empty_workspace_state(), raw)
+    if any(incoming_unsets_stage(raw.get(stage)) for stage in STAGES):
+        save_workspace_state(workspace_dir, merged)
+    return merged
 
 
 def merge_workspace_write(
@@ -695,12 +717,13 @@ def merge_workspace_write(
     incoming: dict[str, Any] | None,
 ) -> dict[str, Any]:
     raw = incoming if isinstance(incoming, dict) else {}
+    allow_unset = sum(incoming_unsets_stage(raw.get(stage)) for stage in STAGES) <= 1
     merged = {}
     for stage in STAGES:
         if stage in raw:
             merged[stage] = apply_slot_write(
                 previous.get(stage),
-                raw.get(stage),
+                stage_write_for_merge(raw.get(stage), allow_unset=allow_unset),
                 stage=stage,
             )
         else:
@@ -796,6 +819,11 @@ def lr_host_context_fragment(
         "頁上沒有切分旋鈕或％輸入框。"
         "訓練畫面是回歸線與訓練／測試 Cost，下方為測試集預測對照；開訓後三張圖逐幀一起更新。"
         "write_file 時必須保留另一學習階段的鍵，不要清掉另一側。"
+        "打回尚未選擇：學生說「打回尚未選擇」或「這個學習階段打回尚未選擇」時，"
+        "只寫目前學習階段 {\"unset\": true}，當輪寫入；回覆須點名變回尚未選擇的各格"
+        "（切分、特徵縮放、線性層、損失函數、優化器，含 α／epochs）。"
+        "只說清掉／重來／重置、點名另一側或兩個階段：列出即將打回的範圍，當輪不寫。"
+        "不要寫單格 null 冒充打回。同一檔不要寫兩個 unset。不要重開關卡，不要清對話。頁上沒有打回鈕。"
         "若要讓主教學欄播放與「開始訓練」相同的動畫，另寫 "
         f'{request_path}，內容為 {{"requested": true}}。'
         "決策槽未齊、訓練前預測未過關、或正規化（除以最大）遇上負值時，不准寫訓練請求。"

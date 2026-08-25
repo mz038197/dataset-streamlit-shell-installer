@@ -397,6 +397,11 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "模型程式碼預覽" in text
     assert "不要另貼" in text
     assert "不要宣稱頁面 exec" in text or "不要宣稱頁面在跑" in text
+    assert "打回尚未選擇" in text
+    assert '"unset": true' in text
+    assert "只動目前學習階段" in text or "只寫目前學習階段" in text
+    assert "不要重開關卡" in text
+    assert "單格 null" in text or "不要寫單格 null" in text
     assert "不必過關" in text
     assert "不必先訓" in text
     assert "單變量輸入資料選擇明細含全表原尺度散點" in text
@@ -564,3 +569,82 @@ def test_stages_keep_independent_split() -> None:
     )
     assert workspace[STAGE_SIMPLE]["choices"]["split"] == 50
     assert workspace[STAGE_MULTIPLE]["choices"]["split"] is None
+
+
+def test_apply_slot_write_null_does_not_unset_one_slot() -> None:
+    filled = _complete()
+    bounced = apply_slot_write(
+        filled,
+        {"choices": {"scale": None, "split": None, "linear": None}, "alpha": None},
+        stage=STAGE_SIMPLE,
+    )
+    assert bounced["choices"]["scale"] == SCALE_ZSCORE
+    assert bounced["choices"]["split"] == 80
+    assert bounced["choices"]["linear"] == "dense1"
+    assert bounced["alpha"] == pytest.approx(0.01)
+
+
+def test_apply_slot_write_unset_returns_stage_to_empty() -> None:
+    filled = _complete()
+    unfilled = apply_slot_write(
+        filled,
+        {"unset": True, "choices": {"split": 90}},
+        stage=STAGE_SIMPLE,
+    )
+    assert unfilled == empty_slot_state(STAGE_SIMPLE)
+    assert slots_are_complete(unfilled) is False
+    assert slot_is_filled("data", unfilled) is True
+    assert slot_is_filled("split", unfilled) is False
+    assert slot_is_filled("linear", unfilled) is False
+    assert unfilled["alpha"] is None
+    assert unfilled["epochs"] is None
+    assert slot_signature(unfilled) != slot_signature(filled)
+
+
+def test_load_consumes_unset_and_keeps_other_stage(tmp_path: Path) -> None:
+    previous = empty_workspace_state()
+    previous[STAGE_SIMPLE] = _complete()
+    previous[STAGE_MULTIPLE] = _complete(STAGE_MULTIPLE, train_pct=70)
+    save_workspace_state(tmp_path, previous)
+    lr_slots_path(tmp_path).write_text(
+        json.dumps(
+            {
+                STAGE_SIMPLE: {"unset": True},
+                STAGE_MULTIPLE: previous[STAGE_MULTIPLE],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    loaded = load_workspace_state(tmp_path, previous)
+    assert loaded[STAGE_SIMPLE] == empty_slot_state(STAGE_SIMPLE)
+    assert loaded[STAGE_MULTIPLE]["choices"]["split"] == 70
+    on_disk = json.loads(lr_slots_path(tmp_path).read_text(encoding="utf-8"))
+    assert "unset" not in on_disk[STAGE_SIMPLE]
+    assert on_disk[STAGE_SIMPLE]["choices"]["split"] is None
+    assert on_disk[STAGE_SIMPLE]["choices"]["data"] == "restaurant"
+    assert on_disk[STAGE_MULTIPLE]["choices"]["split"] == 70
+
+
+def test_load_ignores_unset_when_both_stages_request_it(tmp_path: Path) -> None:
+    previous = empty_workspace_state()
+    previous[STAGE_SIMPLE] = _complete()
+    previous[STAGE_MULTIPLE] = _complete(STAGE_MULTIPLE, train_pct=70)
+    save_workspace_state(tmp_path, previous)
+    lr_slots_path(tmp_path).write_text(
+        json.dumps(
+            {
+                STAGE_SIMPLE: {"unset": True},
+                STAGE_MULTIPLE: {"unset": True},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    loaded = load_workspace_state(tmp_path, previous)
+    assert loaded[STAGE_SIMPLE]["choices"]["split"] == 80
+    assert loaded[STAGE_MULTIPLE]["choices"]["split"] == 70
+    on_disk = json.loads(lr_slots_path(tmp_path).read_text(encoding="utf-8"))
+    assert "unset" not in on_disk[STAGE_SIMPLE]
+    assert "unset" not in on_disk[STAGE_MULTIPLE]
+    assert on_disk[STAGE_SIMPLE]["choices"]["split"] == 80
