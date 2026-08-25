@@ -90,10 +90,29 @@ def inject_dual_pane_chrome() -> None:
     min-width: 0 !important;
   }}
   .dss-dual-pane-row {{
+    position: relative !important;
     align-items: stretch !important;
     overflow: hidden !important;
     gap: 0.35rem !important;
     min-height: 0 !important;
+  }}
+  /* Pseudo-element: not a DOM sibling of stColumn, so React unmount stays valid. */
+  .dss-dual-pane-row::before {{
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: var(--dss-agent-w, {AGENT_WIDTH_DEFAULT}px);
+    width: 8px;
+    cursor: col-resize;
+    z-index: 8;
+    background: transparent;
+    border-radius: 999px;
+    pointer-events: auto;
+  }}
+  .dss-dual-pane-row::before:hover,
+  body.dss-resizing .dss-dual-pane-row::before {{
+    background: rgba(255, 75, 75, 0.35);
   }}
   /*
    * Flex items default min-height:auto (= content size), which prevents
@@ -120,19 +139,6 @@ def inject_dual_pane_chrome() -> None:
   /* Keep Streamlit page-bottom chat host visible if input lands there. */
   [data-testid="stBottom"] {{
     z-index: 40 !important;
-  }}
-  .dss-resizer {{
-    flex: 0 0 5px !important;
-    width: 5px !important;
-    min-width: 5px !important;
-    cursor: col-resize;
-    align-self: stretch;
-    background: transparent;
-    border-radius: 999px;
-  }}
-  .dss-resizer:hover,
-  body.dss-resizing .dss-resizer {{
-    background: rgba(255, 75, 75, 0.35);
   }}
   body.dss-resizing {{
     cursor: col-resize !important;
@@ -401,6 +407,34 @@ def inject_dual_pane_chrome() -> None:
     }}
   }}
 
+  function bindResizer(row) {{
+    if (row.dataset.dssResizeBound === "1") return;
+    row.dataset.dssResizeBound = "1";
+    row.addEventListener("mousedown", function (e) {{
+      if (e.button !== 0) return;
+      const panes = findPanes();
+      if (!panes) return;
+      const edge = panes.agentCol.getBoundingClientRect().left;
+      if (e.clientX > edge || edge - e.clientX > 8) return;
+      e.preventDefault();
+      document.body.classList.add("dss-resizing");
+      const onMove = function (ev) {{
+        const live = findPanes();
+        if (!live) return;
+        const next = clamp(live.row.getBoundingClientRect().right - ev.clientX);
+        localStorage.setItem(KEY, String(next));
+        applyLayout(next);
+      }};
+      const onUp = function () {{
+        document.body.classList.remove("dss-resizing");
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }};
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    }});
+  }}
+
   function applyLayout(w) {{
     const panes = findPanes();
     if (!panes) return false;
@@ -416,6 +450,7 @@ def inject_dual_pane_chrome() -> None:
     row.style.setProperty("min-height", "0", "important");
     row.style.setProperty("overflow", "hidden", "important");
     row.style.setProperty("align-items", "stretch", "important");
+    row.style.setProperty("--dss-agent-w", w + "px");
 
     agentCol.style.setProperty("flex", "0 0 " + w + "px", "important");
     agentCol.style.setProperty("width", w + "px", "important");
@@ -428,33 +463,7 @@ def inject_dual_pane_chrome() -> None:
 
     pinColumn(mainCol, h, true);
     pinColumn(agentCol, h, false);
-
-    let handle = row.querySelector(":scope > .dss-resizer");
-    if (!handle) {{
-      handle = document.createElement("div");
-      handle.className = "dss-resizer";
-      handle.title = "拖曳調整資料 Agent 欄寬度";
-      row.insertBefore(handle, agentCol);
-      handle.addEventListener("mousedown", function (e) {{
-        e.preventDefault();
-        document.body.classList.add("dss-resizing");
-        const onMove = function (ev) {{
-          const rect = row.getBoundingClientRect();
-          const next = clamp(rect.right - ev.clientX);
-          localStorage.setItem(KEY, String(next));
-          applyLayout(next);
-        }};
-        const onUp = function () {{
-          document.body.classList.remove("dss-resizing");
-          document.removeEventListener("mousemove", onMove);
-          document.removeEventListener("mouseup", onUp);
-        }};
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
-      }});
-    }} else if (handle.nextElementSibling !== agentCol) {{
-      row.insertBefore(handle, agentCol);
-    }}
+    bindResizer(row);
 
     layoutAgentChat(agentCol);
     return true;

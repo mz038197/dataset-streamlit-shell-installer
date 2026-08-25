@@ -163,7 +163,8 @@ def inject_style() -> None:
         margin-left: auto !important;
         order: 2;
     }
-    .data-card {
+    .data-card,
+    [class*="st-key-overview_data_card"] {
         border: 1px solid rgba(250, 250, 250, 0.12);
         border-radius: 18px;
         padding: 1rem 1.1rem;

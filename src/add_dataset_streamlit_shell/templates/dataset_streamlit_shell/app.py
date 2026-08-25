@@ -51,9 +51,8 @@ def overview() -> None:
             )
             return
 
-        st.markdown('<div class="data-card">', unsafe_allow_html=True)
-        render_dataset_metrics(df)
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(key="overview_data_card"):
+            render_dataset_metrics(df)
 
         st.divider()
         st.markdown("##### 資料生命週期")

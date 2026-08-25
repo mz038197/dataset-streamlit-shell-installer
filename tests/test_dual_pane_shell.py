@@ -68,6 +68,30 @@ def test_chat_panel_marks_fill_height_host() -> None:
     assert 'data-dss-chat' in src
 
 
+def test_dual_pane_chrome_does_not_insert_column_sibling() -> None:
+    """Drag handle must be a pseudo-element, not a DOM node in the st.columns row."""
+    chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")
+    assert "insertBefore" not in chrome
+    assert "appendChild" not in chrome
+    assert "createElement" not in chrome
+    assert "dss-resizer" not in chrome
+    assert ".dss-dual-pane-row::before" in chrome
+    assert "--dss-agent-w" in chrome
+    assert "bindResizer" in chrome
+    assert "dssResizeBound" in chrome
+    assert "width: 8px" in chrome
+    assert "edge - e.clientX > 8" in chrome
+
+
+def test_overview_metrics_use_keyed_container_not_split_html() -> None:
+    app = (TEMPLATE / "app.py").read_text(encoding="utf-8")
+    styles = (UI / "data_ui.py").read_text(encoding="utf-8")
+    assert 'st.markdown(\'<div class="data-card">\'' not in app
+    assert "st.markdown(\"</div>\"" not in app
+    assert 'key="overview_data_card"' in app
+    assert "st-key-overview_data_card" in styles
+
+
 def test_dual_pane_chrome_clears_overlay_header() -> None:
     chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")
     styles = (UI / "data_ui.py").read_text(encoding="utf-8")
