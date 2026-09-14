@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -218,14 +219,53 @@ def write_artifact_present(paths: ChallengePaths, present: bool) -> None:
     invalidate_challenge_artifact(paths)
 
 
+def is_zone_function_ui_snapshot(source: str) -> bool:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    if "render_startup_challenge_page" in functions:
+        return False
+    for name in ("render_model_zone", "render_result_zone"):
+        fn = functions.get(name)
+        if fn is None or len(fn.args.args) < 1 or fn.args.args[0].arg != "paths":
+            return False
+    return True
+
+
+def is_zone_function_ui_file(snapshot: Path) -> bool:
+    if not snapshot.is_file():
+        return False
+    return is_zone_function_ui_snapshot(snapshot.read_text(encoding="utf-8"))
+
+
 def save_ui_snapshot(live_ui: Path, snapshot: Path) -> None:
     snapshot.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(live_ui, snapshot)
 
 
 def load_company_ui(live_ui: Path, snapshot: Path, empty_shell: Path) -> None:
-    source = snapshot if snapshot.is_file() else empty_shell
+    source = snapshot if is_zone_function_ui_file(snapshot) else empty_shell
     shutil.copyfile(source, live_ui)
+
+
+def sync_live_from_usable_snapshot(
+    live_ui: Path,
+    snapshot: Path,
+    empty_shell: Path,
+) -> None:
+    if not is_zone_function_ui_file(snapshot):
+        return
+    if not live_ui.is_file() or not empty_shell.is_file():
+        return
+    if live_ui.read_bytes() != empty_shell.read_bytes():
+        return
+    shutil.copyfile(snapshot, live_ui)
 
 
 def apply_confirmed_company(
@@ -342,7 +382,7 @@ def clear_back_to_start_available(
     ):
         return True
     snapshot = ui_snapshot_path(paths)
-    if not snapshot.is_file():
+    if not is_zone_function_ui_file(snapshot):
         return False
     if empty_shell is None or not empty_shell.is_file():
         return True
@@ -357,7 +397,7 @@ def apply_clear_back_to_start(
 ) -> None:
     clear_challenge_runtime(paths)
     snapshot = ui_snapshot_path(paths)
-    if snapshot.is_file():
+    if is_zone_function_ui_file(snapshot):
         snapshot.unlink()
     restore_startup_challenge_ui(empty_shell, live_ui)
 
@@ -408,9 +448,10 @@ def challenge_host_context(
    - 模型區：選型與訓練（名稱、必要旋鈕、開始訓練），不要放成果圖表。
    - 成果區：訓練後的指標、圖與一次演示；沒有 Challenge 模型產物時維持空輪廓。
    一次 coding 可以寫兩區程式，但成果區在尚未訓練前仍應顯示空輪廓。
+   讀檔用傳入區函式的 paths（Challenge 訓練資料／測試資料路徑已在裡面），不要呼叫 challenge_host_context 組路徑。
    訓練成功後請設定 st.session_state["challenge_model_artifact"]（任何非空值即可），成果區才會渲染。切分檔一變，這個產物會被清掉。只改目前公司資料夾，不要改其他公司。
 5) 倫理紅線只在對話與口頭 Gate 處理，不要在頁上加第三塊標題。
-6) 不要拆掉專案展示空殼「無檔則顯示輪廓」的判斷。
+6) 「無檔則顯示輪廓」寫在專案展示頁骨架。不要改 ui/startup_challenge_page.py，也不要拆掉那層判斷。
 
 【檔案規則】
 - Challenge 起點資料：{start_csv}
@@ -426,11 +467,13 @@ def challenge_host_context(
 - 不要上網下載替代資料集，不要改用其他公司的 CSV。
 - 不要修改其他教學頁（邏輯迴歸、決策樹等）的程式，除非學生明確只要修專案展示頁。
 - 若需寫檢查或整理腳本，只放在 {scripts_dir} 下。
-- 不要編輯 ui/startup_challenge_empty_shell.py；那是尚無 Challenge UI 快照時的專案展示空殼。
+- 不要編輯 ui/startup_challenge_page.py；那是專案展示頁骨架。
+- 不要編輯 ui/startup_challenge_empty_shell.py；那是尚無 Challenge UI 快照時的專案展示空殼還原來源。
 - 不要直接改各公司 Challenge UI 快照。
+- 不要在模型區／成果區呼叫 challenge_host_context 當路徑物件。
 
 【允許改動範圍】
-- ui/startup_challenge_ui.py（可填模型區／成果區；不可拆無檔則顯示輪廓）
+- ui/startup_challenge_ui.py（只填模型區／成果區兩個函式）
 - 目前挑戰公司資料夾內的 working.csv、train.csv、test.csv
 - 必要時 scripts/
 

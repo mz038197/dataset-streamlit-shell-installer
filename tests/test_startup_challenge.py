@@ -47,8 +47,10 @@ from dataset_streamlit_shell.ui.startup_challenge_context import (  # noqa: E402
     write_committed_company,
     artifact_matches_current_split,
     invalidate_challenge_split,
+    is_zone_function_ui_snapshot,
     model_zone_unlocked,
     resolve_company_switch,
+    sync_live_from_usable_snapshot,
     COMPANY_SWITCH_CANCEL_LABEL,
     COMPANY_SWITCH_CONFIRM_LABEL,
     COMPANY_SWITCH_DIALOG_TITLE,
@@ -63,6 +65,27 @@ from dataset_streamlit_shell.ui.startup_challenge_context import (  # noqa: E402
 APP = SHELL / "app.py"
 PAGES = SHELL / "pages"
 UI = SHELL / "ui"
+
+_ZONE_UI = (
+    "from dataset_streamlit_shell.ui.startup_challenge_context import ChallengePaths\n"
+    "\n"
+    "def render_model_zone(paths: ChallengePaths) -> None:\n"
+    "    return\n"
+    "\n"
+    "def render_result_zone(paths: ChallengePaths) -> None:\n"
+    "    return\n"
+)
+_FILLED_ZONE_UI = _ZONE_UI.replace("    return\n", "    trained = True\n", 1)
+_LEGACY_PAGE_UI = (
+    "def render_model_zone() -> None:\n"
+    "    return\n"
+    "\n"
+    "def render_result_zone() -> None:\n"
+    "    return\n"
+    "\n"
+    "def render_startup_challenge_page() -> None:\n"
+    "    challenge_host_context()\n"
+)
 
 
 def test_challenge_companies_are_five() -> None:
@@ -281,6 +304,9 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "challenge_model_artifact" in text
     assert "自行還原專案展示空殼" in text
     assert "清除回起點確認" in text
+    assert "不要編輯 ui/startup_challenge_page.py" in text
+    assert "不要編輯 ui/startup_challenge_empty_shell.py" in text
+    assert "不要在模型區／成果區呼叫 challenge_host_context" in text
 
 
 def test_host_context_vitalrisk_fragment() -> None:
@@ -329,31 +355,49 @@ def test_app_nav_has_workshop_section_and_page() -> None:
 def test_page_and_ui_files_exist() -> None:
     assert (PAGES / "30_Startup_Challenge.py").is_file()
     assert (UI / "startup_challenge_ui.py").is_file()
+    assert (UI / "startup_challenge_page.py").is_file()
     assert (UI / "startup_challenge_context.py").is_file()
     assert (UI / "startup_challenge_empty_shell.py").is_file()
+    entry = (PAGES / "30_Startup_Challenge.py").read_text(encoding="utf-8")
+    assert "startup_challenge_page" in entry
+    assert "from dataset_streamlit_shell.ui.startup_challenge_ui import" not in entry
 
 
-def test_empty_shell_is_workflow_page_without_pitch_chrome() -> None:
+_PAGE_CHROME = (
+    "challenge_host_context",
+    "render_chat_panel",
+    "st.dialog",
+    "resolve_company_switch",
+    "COMPANY_SWITCH_DIALOG_TITLE",
+    "apply_confirmed_company",
+    "challenge_agent_scope",
+)
+
+
+def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     ui = (UI / "startup_challenge_ui.py").read_text(encoding="utf-8")
     empty = (UI / "startup_challenge_empty_shell.py").read_text(encoding="utf-8")
+    page = (UI / "startup_challenge_page.py").read_text(encoding="utf-8")
     assert ui == empty
-    assert "模型區" in ui
-    assert "成果區" in ui
-    assert "這裡之後放你們要展示的模型" in ui
-    assert "這裡之後放訓練後的成果" in ui
+    assert is_zone_function_ui_snapshot(ui) is True
+    assert "def render_model_zone(paths" in ui
+    assert "def render_result_zone(paths" in ui
+    assert "render_startup_challenge_page" not in ui
     assert "BOARD_CUSTOMER" not in ui
     assert "TODO(challenge)" not in ui
     assert "上台 Gate" not in ui
     assert "建議問 Agent" not in ui
     assert "我們在解決什麼" not in ui
-    assert "challenge_host_context" in ui
-    assert "agent_scope" in ui or "host_context=" in ui
-    assert "st.dialog" in ui
-    assert "resolve_company_switch" in ui
-    assert "COMPANY_SWITCH_DIALOG_TITLE" in ui
-    assert "apply_confirmed_company" in ui
-    assert "challenge_agent_scope" in ui
-    assert "clear_challenge_runtime" not in ui
+    for marker in _PAGE_CHROME:
+        assert marker not in ui
+        assert marker in page
+    assert "這裡之後放你們要展示的模型" in page
+    assert "這裡之後放訓練後的成果" in page
+    assert "model_zone_unlocked" in page
+    assert "result_zone_unlocked" in page
+    assert "render_model_zone(paths)" in page
+    assert "render_result_zone(paths)" in page
+    assert "clear_challenge_runtime" not in page
     greeting = (
         SHELL / "ui" / "data_ui.py"
     ).read_text(encoding="utf-8")
@@ -431,8 +475,8 @@ def test_apply_confirmed_company_keeps_working_and_swaps_ui_snapshot(
     workspace = tmp_path / "workspace"
     live = tmp_path / "startup_challenge_ui.py"
     empty = tmp_path / "startup_challenge_empty_shell.py"
-    empty.write_text("# empty\n", encoding="utf-8")
-    live.write_text("# vitalrisk ui\n", encoding="utf-8")
+    empty.write_text(_ZONE_UI, encoding="utf-8")
+    live.write_text(_FILLED_ZONE_UI, encoding="utf-8")
     vital = challenge_paths(workspace, "vitalrisk")
     vital.working_csv.parent.mkdir(parents=True)
     vital.working_csv.write_text("cleaned\n", encoding="utf-8")
@@ -449,8 +493,8 @@ def test_apply_confirmed_company_keeps_working_and_swaps_ui_snapshot(
     assert vital.working_csv.read_text(encoding="utf-8") == "cleaned\n"
     assert vital.train_csv.read_text(encoding="utf-8") == "tr\n"
     assert vital.test_csv.read_text(encoding="utf-8") == "te\n"
-    assert ui_snapshot_path(vital).read_text(encoding="utf-8") == "# vitalrisk ui\n"
-    assert live.read_text(encoding="utf-8") == "# empty\n"
+    assert ui_snapshot_path(vital).read_text(encoding="utf-8") == _FILLED_ZONE_UI
+    assert live.read_text(encoding="utf-8") == _ZONE_UI
     assert read_committed_company(workspace / "challenge") == "airsense"
 
     apply_confirmed_company(
@@ -460,7 +504,7 @@ def test_apply_confirmed_company_keeps_working_and_swaps_ui_snapshot(
         live_ui=live,
         empty_shell=empty,
     )
-    assert live.read_text(encoding="utf-8") == "# vitalrisk ui\n"
+    assert live.read_text(encoding="utf-8") == _FILLED_ZONE_UI
 
 
 def test_invalidate_split_also_removes_artifact(tmp_path: Path) -> None:
@@ -484,15 +528,15 @@ def test_save_and_load_ui_snapshot(tmp_path: Path) -> None:
     live = tmp_path / "live.py"
     snap = tmp_path / "company" / "startup_challenge_ui.py"
     empty = tmp_path / "empty.py"
-    live.write_text("# live\n", encoding="utf-8")
-    empty.write_text("# empty\n", encoding="utf-8")
+    live.write_text(_FILLED_ZONE_UI, encoding="utf-8")
+    empty.write_text(_ZONE_UI, encoding="utf-8")
     save_ui_snapshot(live, snap)
     live.write_text("# dirty\n", encoding="utf-8")
     load_company_ui(live, snap, empty)
-    assert live.read_text(encoding="utf-8") == "# live\n"
+    assert live.read_text(encoding="utf-8") == _FILLED_ZONE_UI
     missing = tmp_path / "missing.py"
     load_company_ui(live, missing, empty)
-    assert live.read_text(encoding="utf-8") == "# empty\n"
+    assert live.read_text(encoding="utf-8") == _ZONE_UI
 
 
 def test_clear_back_to_start_confirm_copy() -> None:
@@ -525,11 +569,15 @@ def test_clear_back_to_start_available_when_runtime_or_snapshot_exists(
     artifact_path(paths).write_text("{}\n", encoding="utf-8")
     assert clear_back_to_start_available(paths) is True
     artifact_path(paths).unlink()
-    ui_snapshot_path(paths).write_text("# snap\n", encoding="utf-8")
+    ui_snapshot_path(paths).write_text(_FILLED_ZONE_UI, encoding="utf-8")
     assert clear_back_to_start_available(paths) is True
     empty_shell = tmp_path / "startup_challenge_empty_shell.py"
-    empty_shell.write_text("# empty shell\n", encoding="utf-8")
-    ui_snapshot_path(paths).write_text("# empty shell\n", encoding="utf-8")
+    empty_shell.write_text(_ZONE_UI, encoding="utf-8")
+    ui_snapshot_path(paths).write_text(_ZONE_UI, encoding="utf-8")
+    assert (
+        clear_back_to_start_available(paths, empty_shell=empty_shell) is False
+    )
+    ui_snapshot_path(paths).write_text(_LEGACY_PAGE_UI, encoding="utf-8")
     assert (
         clear_back_to_start_available(paths, empty_shell=empty_shell) is False
     )
@@ -539,8 +587,8 @@ def test_apply_clear_back_to_start_only_touches_that_company(tmp_path: Path) -> 
     workspace = tmp_path / "workspace"
     live = tmp_path / "startup_challenge_ui.py"
     empty = tmp_path / "startup_challenge_empty_shell.py"
-    empty.write_text("# empty shell\n", encoding="utf-8")
-    live.write_text("# filled model zone\n", encoding="utf-8")
+    empty.write_text(_ZONE_UI, encoding="utf-8")
+    live.write_text(_FILLED_ZONE_UI, encoding="utf-8")
 
     edu = challenge_paths(workspace, "edupulse")
     vital = challenge_paths(workspace, "vitalrisk")
@@ -552,10 +600,10 @@ def test_apply_clear_back_to_start_only_touches_that_company(tmp_path: Path) -> 
     edu.train_csv.write_text("tr-edu\n", encoding="utf-8")
     edu.test_csv.write_text("te-edu\n", encoding="utf-8")
     artifact_path(edu).write_text("{}\n", encoding="utf-8")
-    ui_snapshot_path(edu).write_text("# edu snap\n", encoding="utf-8")
+    ui_snapshot_path(edu).write_text(_FILLED_ZONE_UI, encoding="utf-8")
     vital.working_csv.write_text("w-vital\n", encoding="utf-8")
     vital.train_csv.write_text("tr-vital\n", encoding="utf-8")
-    ui_snapshot_path(vital).write_text("# vital snap\n", encoding="utf-8")
+    ui_snapshot_path(vital).write_text(_FILLED_ZONE_UI, encoding="utf-8")
     write_committed_company(workspace / "challenge", "edupulse")
 
     apply_clear_back_to_start(paths=edu, live_ui=live, empty_shell=empty)
@@ -566,24 +614,93 @@ def test_apply_clear_back_to_start_only_touches_that_company(tmp_path: Path) -> 
     assert not edu.test_csv.exists()
     assert not artifact_path(edu).exists()
     assert not ui_snapshot_path(edu).exists()
-    assert live.read_text(encoding="utf-8") == "# empty shell\n"
+    assert live.read_text(encoding="utf-8") == _ZONE_UI
     assert vital.working_csv.read_text(encoding="utf-8") == "w-vital\n"
     assert vital.train_csv.read_text(encoding="utf-8") == "tr-vital\n"
-    assert ui_snapshot_path(vital).read_text(encoding="utf-8") == "# vital snap\n"
+    assert ui_snapshot_path(vital).read_text(encoding="utf-8") == _FILLED_ZONE_UI
     assert vital.start_csv.read_text(encoding="utf-8") == "start-vital\n"
     assert read_committed_company(workspace / "challenge") == "edupulse"
     assert clear_back_to_start_available(edu) is False
 
 
-def test_empty_shell_wires_clear_back_to_start_dialog() -> None:
+def test_page_skeleton_wires_clear_back_to_start_dialog() -> None:
     ui = (UI / "startup_challenge_ui.py").read_text(encoding="utf-8")
     empty = (UI / "startup_challenge_empty_shell.py").read_text(encoding="utf-8")
+    page = (UI / "startup_challenge_page.py").read_text(encoding="utf-8")
     assert ui == empty
-    assert "CLEAR_BACK_TO_START_DIALOG_TITLE" in ui
-    assert "CLEAR_BACK_TO_START_BUTTON_LABEL" in ui
-    assert "apply_clear_back_to_start" in ui
-    assert "clear_back_to_start_available" in ui
-    assert "challenge_confirm_clear_back" in ui
-    assert "challenge_cancel_clear_back" in ui
-    assert "PENDING_CLEAR_KEY] = company" in ui
-    assert "apply_clear_company == committed_for_clear" in ui
+    assert "CLEAR_BACK_TO_START_DIALOG_TITLE" not in ui
+    assert "CLEAR_BACK_TO_START_DIALOG_TITLE" in page
+    assert "CLEAR_BACK_TO_START_BUTTON_LABEL" in page
+    assert "apply_clear_back_to_start" in page
+    assert "clear_back_to_start_available" in page
+    assert "challenge_confirm_clear_back" in page
+    assert "challenge_cancel_clear_back" in page
+    assert "PENDING_CLEAR_KEY] = company" in page
+    assert "apply_clear_company == committed_for_clear" in page
+    assert "sync_live_from_usable_snapshot" in page
+
+
+def test_zone_function_snapshot_rejects_legacy_full_page() -> None:
+    assert is_zone_function_ui_snapshot(_ZONE_UI) is True
+    assert is_zone_function_ui_snapshot(_FILLED_ZONE_UI) is True
+    assert is_zone_function_ui_snapshot(_LEGACY_PAGE_UI) is False
+    assert is_zone_function_ui_snapshot(
+        "def render_model_zone(x):\n    return\n\n"
+        "def render_result_zone(paths):\n    return\n"
+    ) is False
+    assert is_zone_function_ui_snapshot("def render_model_zone():\n    return\n") is False
+    assert is_zone_function_ui_snapshot("not python {") is False
+
+
+def test_load_company_ui_ignores_legacy_full_page_and_keeps_file(
+    tmp_path: Path,
+) -> None:
+    live = tmp_path / "live.py"
+    snap = tmp_path / "company" / "startup_challenge_ui.py"
+    empty = tmp_path / "empty.py"
+    snap.parent.mkdir()
+    snap.write_text(_LEGACY_PAGE_UI, encoding="utf-8")
+    empty.write_text(_ZONE_UI, encoding="utf-8")
+    live.write_text("# dirty\n", encoding="utf-8")
+    load_company_ui(live, snap, empty)
+    assert live.read_text(encoding="utf-8") == _ZONE_UI
+    assert snap.read_text(encoding="utf-8") == _LEGACY_PAGE_UI
+
+
+def test_sync_live_from_usable_snapshot_only_copies_zone_functions(
+    tmp_path: Path,
+) -> None:
+    live = tmp_path / "live.py"
+    usable = tmp_path / "usable.py"
+    legacy = tmp_path / "legacy.py"
+    empty = tmp_path / "empty.py"
+    empty.write_text(_ZONE_UI, encoding="utf-8")
+    live.write_text(_ZONE_UI, encoding="utf-8")
+    usable.write_text(_FILLED_ZONE_UI, encoding="utf-8")
+    sync_live_from_usable_snapshot(live, usable, empty)
+    assert live.read_text(encoding="utf-8") == _FILLED_ZONE_UI
+    live.write_text(_ZONE_UI, encoding="utf-8")
+    legacy.write_text(_LEGACY_PAGE_UI, encoding="utf-8")
+    sync_live_from_usable_snapshot(live, legacy, empty)
+    assert live.read_text(encoding="utf-8") == _ZONE_UI
+    assert legacy.read_text(encoding="utf-8") == _LEGACY_PAGE_UI
+    live.write_text(_FILLED_ZONE_UI.replace("trained = True", "trained = False"), encoding="utf-8")
+    sync_live_from_usable_snapshot(live, usable, empty)
+    assert "trained = False" in live.read_text(encoding="utf-8")
+
+
+def test_apply_clear_leaves_legacy_full_page_on_disk(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    live = tmp_path / "startup_challenge_ui.py"
+    empty = tmp_path / "startup_challenge_empty_shell.py"
+    empty.write_text(_ZONE_UI, encoding="utf-8")
+    live.write_text(_FILLED_ZONE_UI, encoding="utf-8")
+    edu = challenge_paths(workspace, "edupulse")
+    edu.working_csv.parent.mkdir(parents=True)
+    edu.working_csv.write_text("w-edu\n", encoding="utf-8")
+    ui_snapshot_path(edu).write_text(_LEGACY_PAGE_UI, encoding="utf-8")
+    apply_clear_back_to_start(paths=edu, live_ui=live, empty_shell=empty)
+    assert not edu.working_csv.exists()
+    assert ui_snapshot_path(edu).read_text(encoding="utf-8") == _LEGACY_PAGE_UI
+    assert live.read_text(encoding="utf-8") == _ZONE_UI
+    assert clear_back_to_start_available(edu, empty_shell=empty) is False

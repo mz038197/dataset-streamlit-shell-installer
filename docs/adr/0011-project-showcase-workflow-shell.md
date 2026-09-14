@@ -8,4 +8,4 @@ status: accepted
 
 **Considered Options**：保留白板三塊只加資料預覽；換公司只清資料不還原 UI。前者仍是講稿頁；後者在 Agent 已寫入真 UI 後會錯題。當時選定工作流空殼＋還原空殼；還原空殼與共用切分檔已由 ADR-0014 取代。
 
-**Consequences**：`startup_challenge_empty_shell.py` 仍是尚無 Challenge UI 快照時的來源，Agent 不准編輯、也不准拆掉「無檔則顯示輪廓」。改 working 即刪該公司 train／test。倫理紅線不上頁。
+**Consequences**：`startup_challenge_empty_shell.py` 是尚無 Challenge UI 快照時的還原來源。頁骨架與「無檔則顯示輪廓」見 ADR-0028。改 working 即刪該公司 train／test。倫理紅線不上頁。
