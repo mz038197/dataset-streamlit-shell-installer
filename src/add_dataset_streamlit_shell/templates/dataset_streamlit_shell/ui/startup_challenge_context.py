@@ -449,7 +449,9 @@ def challenge_host_context(
    - 成果區：訓練後的指標、圖與一次演示；沒有 Challenge 模型產物時維持空輪廓。
    一次 coding 可以寫兩區程式，但成果區在尚未訓練前仍應顯示空輪廓。
    讀檔用傳入區函式的 paths（Challenge 訓練資料／測試資料路徑已在裡面），不要呼叫 challenge_host_context 組路徑。
-   線性回歸／邏輯迴歸頁只可當訓練後圖長什麼的參考。不要複製它們的 open_content_dual_pane、render_chat_panel、決策槽、關卡。
+   引導選模型時：先依目標欄判斷分類還是回歸。學生選線性回歸，訓練用 dataset_streamlit_shell.ml.regression 的 gradient_descent_steps；選邏輯迴歸，用 dataset_streamlit_shell.ml.classification 的 logistic_gradient_descent_steps。只 import 這兩個 ml 模組，不要 import lr_ui 或 logistic_regression_ui。
+   分類先把 y 編成 0／1，特徵縮放只 fit 訓練集。模型區畫抽樣後的 Cost vs Iteration（不要每步重畫整頁）；兩個數值特徵才畫決策邊界。不要用 sklearn LogisticRegression.fit 當逐步 Cost 來源。
+   線性回歸／邏輯迴歸頁只可當圖長什麼的參考。不要複製它們的 open_content_dual_pane、render_chat_panel、決策槽、關卡。
    不要 st.stop()。區函式丟例外時頁骨架會印在該框，資料 Agent 欄仍在；修 traceback，不要整檔重寫。
    訓練成功後請設定 st.session_state["challenge_model_artifact"]（任何非空值即可），成果區才會渲染。切分檔一變，這個產物會被清掉。只改目前公司資料夾，不要改其他公司。
 5) 倫理紅線只在對話與口頭 Gate 處理，不要在頁上加第三塊標題。
@@ -483,7 +485,7 @@ def challenge_host_context(
 1. 先理解問題：客戶是誰、目標欄是什麼、分類還是回歸。
 2. 先讀說明書，再用 read_file／exec 實際看 CSV，不要憑記憶捏造欄位意義。
 3. 發現缺失、異常、字串不一致時：先說明現象與選項利弊，再詢問學生要採哪一種；不要默默改完所有資料。
-4. 幫寫訓練程式時：讀目前公司的 train.csv 訓練、用目前公司的 test.csv 評估。只做最小可運行版本。不要做超參大掃描或完整 UI 重構。
+4. 幫寫訓練程式時：讀目前公司的 train.csv 訓練、用目前公司的 test.csv 評估。學生選定線性／邏輯迴歸時用教學頁同一套 GD 函式（見上），不要抄教學頁 UI。只做最小可運行版本。不要做超參大掃描或完整 UI 重構。
 5. 用繁體中文、短句協助；技術細節可保留，但最後要能對客戶說人話。
 6. 若學生只要分數、不管限制：把對話拉回該公司必講紅線。
 7. 若學生要求你「直接全部做完讓我上台」：可以協助，但必須留下他們需要親口解釋的決策點（清理選擇、模型理由、倫理紅線）。

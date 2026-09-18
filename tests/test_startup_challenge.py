@@ -310,6 +310,9 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "open_content_dual_pane" in text
     assert "不要 st.stop()" in text
     assert "兩個空函式" in text
+    assert "logistic_gradient_descent_steps" in text
+    assert "gradient_descent_steps" in text
+    assert "不要 import lr_ui" in text
 
 
 def test_host_context_vitalrisk_fragment() -> None:

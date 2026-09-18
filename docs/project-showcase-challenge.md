@@ -38,6 +38,7 @@
 - 成果真相＝Agent **AI coding** 改允許檔案，不以表單 session 當唯一載體
 - 允許改：`ui/startup_challenge_ui.py`、目前公司資料夾內的 working／train／test、必要時 `scripts/`
 - 不准改專案展示頁骨架與空殼還原來源；不准直接改各公司快照；不准在區函式呼叫 Challenge host context 當路徑物件；不准把教學頁雙欄／聊天欄抄進區函式
+- 學生選線性／邏輯迴歸時，訓練用 `ml.regression.gradient_descent_steps`／`ml.classification.logistic_gradient_descent_steps`，只 import `dataset_streamlit_shell.ml`，不要 import 教學頁 UI；不要用 sklearn `LogisticRegression.fit` 當逐步 Cost
 - 頁骨架 lazy 載入 live UI，並把區函式例外印在該框；資料 Agent 欄仍畫。區函式裡的 `st.rerun()` 仍要生效（名稱含 Rerun 的例外要再丟出）
 - 倫理紅線只在對話與口頭 Gate
 
