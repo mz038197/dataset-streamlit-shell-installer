@@ -12,6 +12,7 @@ from dataset_streamlit_shell.ui.data_ui import (
     SHELL_ROOT,
     WORKSPACE_DIR,
     _display_path,
+    prepare_dataframe_for_display,
     render_chat_panel,
     render_dataset_metrics,
 )
@@ -225,11 +226,24 @@ def _render_data_view(paths, *, company: str | None) -> None:
     csv_path = csv_for_view(paths, view)
     if csv_path is None or not csv_path.is_file():
         return
-    frame = pd.read_csv(csv_path)
-    render_dataset_metrics(frame)
-    st.dataframe(_column_overview_frame(frame), width="stretch")
-    with st.expander("資料預覽", expanded=True):
-        st.dataframe(frame.head(20), width="stretch", hide_index=True)
+    try:
+        frame = pd.read_csv(csv_path)
+        render_dataset_metrics(frame)
+        st.dataframe(
+            prepare_dataframe_for_display(_column_overview_frame(frame)),
+            width="stretch",
+        )
+        with st.expander("資料預覽", expanded=True):
+            st.dataframe(
+                prepare_dataframe_for_display(frame.head(20)),
+                width="stretch",
+                hide_index=True,
+            )
+    except Exception as exc:
+        if _is_streamlit_rerun(exc):
+            raise
+        st.error("資料檢視出錯。資料 Agent 欄還在。把下面 traceback 貼給它修。")
+        st.code(traceback.format_exc())
 
 
 def _render_zone(
@@ -399,6 +413,9 @@ def render_startup_challenge_page() -> None:
         train_csv=_display_path(paths.train_csv),
         test_csv=_display_path(paths.test_csv),
         scripts_dir=_display_path(SHELL_ROOT / "scripts"),
+        live_ui=_display_path(LIVE_UI_PATH),
+        page_py=_display_path(SHELL_ROOT / "ui" / "startup_challenge_page.py"),
+        empty_shell=_display_path(EMPTY_SHELL_PATH),
     )
     snapshot = challenge_page_snapshot(
         company=display_company,

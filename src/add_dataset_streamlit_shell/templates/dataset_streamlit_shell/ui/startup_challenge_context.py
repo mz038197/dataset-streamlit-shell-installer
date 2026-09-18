@@ -429,6 +429,9 @@ def challenge_host_context(
     train_csv: str,
     test_csv: str,
     scripts_dir: str,
+    live_ui: str,
+    page_py: str,
+    empty_shell: str,
 ) -> str:
     """專案展示專用 host_context；不叠加 dataset_base_context。"""
     fragment = _COMPANY_FRAGMENTS.get(
@@ -444,19 +447,20 @@ def challenge_host_context(
 1) 先讀說明書、檢查 Challenge 起點資料，再複製成 Challenge 工作資料後清理。起點 CSV 只讀、不可覆寫。
 2) 清理後從工作資料切出 Challenge 訓練資料與 Challenge 測試資料（預設 80／20；有類別目標則分層）。頁上無套用按鈕。模型只吃這兩份，不直接吃 working。
 3) 沒有訓練／測試檔時，模型區與成果區只顯示空輪廓，不可填入。
-4) 與學生討論要呈現的模型與方式後，以 AI coding 改 ui/startup_challenge_ui.py 裡現有的兩個空函式，不要另寫整頁。
+4) 與學生討論要呈現的模型與方式後，以 AI coding 改 {live_ui} 裡現有的兩個空函式，不要另寫整頁。路徑相對專案根目錄，與上面 CSV 同一寫法；不要寫到專案根的 ui/。
    - 模型區：選型與訓練（名稱、必要旋鈕、開始訓練），不要放成果圖表。
    - 成果區：訓練後的指標、圖與一次演示；沒有 Challenge 模型產物時維持空輪廓。
    一次 coding 可以寫兩區程式，但成果區在尚未訓練前仍應顯示空輪廓。
    讀檔用傳入區函式的 paths（Challenge 訓練資料／測試資料路徑已在裡面），不要呼叫 challenge_host_context 組路徑。
    引導選模型時：先依目標欄判斷分類還是回歸。
-   寫 ui/startup_challenge_ui.py 頂層時，保留 ChallengePaths 那行，並依學生選的模型貼上下列 import（可刪沒用到的名字）。不要 from ml.xxx、不要 from .xxx、不要 import lr_ui 或 logistic_regression_ui 或 startup_challenge_page 或 dual_pane_shell 或 data_ui。pandas／streamlit／pyplot 可加。
+   寫 {live_ui} 頂層時，保留 ChallengePaths 那行，並依學生選的模型貼上下列 import（可刪沒用到的名字）。不要 from ml.xxx、不要 from .xxx、不要 import lr_ui 或 logistic_regression_ui 或 startup_challenge_page 或 dual_pane_shell 或 data_ui。pandas／streamlit／pyplot 可加。
    import pandas as pd
    import streamlit as st
    from dataset_streamlit_shell.ml.regression import apply_feature_scaler, attach_test_costs, create_feature_scaler, gradient_descent_steps, predict_with_parameters
    from dataset_streamlit_shell.ml.classification import attach_logistic_test_costs, confusion_matrix_counts, logistic_gradient_descent_steps, predict_class_from_proba, predict_proba, precision_recall_f1_from_counts, sample_gradient_steps
    學生選線性回歸用 gradient_descent_steps；選邏輯迴歸用 logistic_gradient_descent_steps。縮放用 create_feature_scaler（method 用 "zscore"／"maxdiv"／"minmax"／"mean"）只 fit 訓練集，再用 apply_feature_scaler。Cost 抽樣用 sample_gradient_steps（線性回歸的 steps 也能丟進去）。
    分類先把 y 編成 0／1。模型區畫抽樣後的 Cost vs Iteration（不要每步重畫整頁）；兩個數值特徵才畫決策邊界。不要用 sklearn LogisticRegression.fit 當逐步 Cost 來源。
+   畫表不要 df.melt() 再 st.dataframe，也不要把含文字欄的寬表丟進 st.line_chart／st.bar_chart。melt 後的 value 欄會混字串與數字，pyarrow 丟 ArrowTypeError。Cost 用 pd.DataFrame({{"iteration": ..., "cost": ...}})，兩欄都是數字。object 欄若要進 st.dataframe，先轉成字串。
    線性回歸／邏輯迴歸頁只可當圖長什麼的參考。不要複製它們的 open_content_dual_pane、render_chat_panel、決策槽、關卡。
    不要 st.stop()。區函式丟例外時頁骨架會印在該框，資料 Agent 欄仍在；修 traceback，不要整檔重寫。
    訓練成功後請設定 st.session_state["challenge_model_artifact"]（任何非空值即可），成果區才會渲染。切分檔一變，這個產物會被清掉。只改目前公司資料夾，不要改其他公司。
@@ -477,13 +481,13 @@ def challenge_host_context(
 - 不要上網下載替代資料集，不要改用其他公司的 CSV。
 - 不要修改其他教學頁（邏輯迴歸、決策樹等）的程式，除非學生明確只要修專案展示頁。
 - 若需寫檢查或整理腳本，只放在 {scripts_dir} 下。
-- 不要編輯 ui/startup_challenge_page.py；那是專案展示頁骨架。
-- 不要編輯 ui/startup_challenge_empty_shell.py；那是尚無 Challenge UI 快照時的專案展示空殼還原來源。
+- 不要編輯 {page_py}；那是專案展示頁骨架。
+- 不要編輯 {empty_shell}；那是尚無 Challenge UI 快照時的專案展示空殼還原來源。
 - 不要直接改各公司 Challenge UI 快照。
 - 不要在模型區／成果區呼叫 challenge_host_context 當路徑物件。
 
 【允許改動範圍】
-- ui/startup_challenge_ui.py（只填模型區／成果區兩個函式）
+- {live_ui}（只填模型區／成果區兩個函式）
 - 目前挑戰公司資料夾內的 working.csv、train.csv、test.csv
 - 必要時 scripts/
 

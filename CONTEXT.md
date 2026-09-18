@@ -18,7 +18,7 @@ _Avoid_: 當作現行頁結構；用①②③當區塊標題
 
 **模型區**:
 專案展示下半空輪廓之一（框始終可見）。內容為選型與訓練（模型名稱、必要旋鈕、開始訓練），不含成果圖表。無 Challenge 訓練資料與 Challenge 測試資料時只顯示空輪廓、不可填入。Agent 可一次寫入本區與成果區程式。讀檔位置由專案展示頁骨架傳入，不靠 Challenge host context。區函式丟例外時頁骨架把 traceback 印在本框，資料 Agent 欄仍畫。
-_Avoid_: 白板②、我們做出來的結果；把指標圖／混淆矩陣放進本區；沒檔就隱藏下半；寫死分數當訓練結果；在本區呼叫 Challenge host context 當路徑物件；複製線性回歸／邏輯迴歸頁的雙欄與聊天欄；用 st.stop 中斷整頁；發佈時就把訓練 UI 寫進空殼；用 sklearn LogisticRegression.fit 當逐步 Cost；host 只寫模組路徑不給 from import；說只能 import ml 而拿掉 pandas／streamlit／ChallengePaths；from ml.xxx 或相對 import
+_Avoid_: 白板②、我們做出來的結果；把指標圖／混淆矩陣放進本區；沒檔就隱藏下半；寫死分數當訓練結果；在本區呼叫 Challenge host context 當路徑物件；複製線性回歸／邏輯迴歸頁的雙欄與聊天欄；用 st.stop 中斷整頁；發佈時就把訓練 UI 寫進空殼；用 sklearn LogisticRegression.fit 當逐步 Cost；host 只寫模組路徑不給 from import；說只能 import ml 而拿掉 pandas／streamlit／ChallengePaths；from ml.xxx 或相對 import；df.melt() 或含文字欄的寬表丟進 st.line_chart 再畫表
 
 **成果區**:
 專案展示下半空輪廓之二（框始終可見）。內容為訓練後的指標、圖與一次演示。無訓練／測試檔、或尚無 Challenge 模型產物時只顯示空輪廓。不是側欄名。讀檔位置由專案展示頁骨架傳入，不靠 Challenge host context。
@@ -105,8 +105,8 @@ _Avoid_: 挑戰頁直接叠 Titanic／Ready／教學頁寫回；靠「衝突以�
 _Avoid_: 與全站整理頁共用同一條 session 卻不換 host；換公司就重建而砍掉該公司對話；清除回起點就清對話；只靠每輪 snapshot 提醒卻不換 host；為挑戰頁單獨做 F5 對話存盤
 
 **Challenge 允許改動範圍**:
-專案展示軌道上 Agent／學生預設可改：`ui/startup_challenge_ui.py`、目前挑戰公司資料夾內的 Challenge 工作資料／訓練資料／測試資料、必要時 `scripts/`。不改專案展示頁骨架、不改專案展示空殼的還原來源、不直接改各公司 Challenge UI 快照、不改其他 ML 教學頁；頁入口薄包裝與側欄導覽由老師預放。
-_Avoid_: 為挑戰去改邏輯回歸等教學頁；把挑戰成果寫進根目錄 working／ready／train／val／test；改其他公司資料夾、empty_shell 或 `startup_challenge_page.py`
+專案展示軌道上 Agent／學生預設可改：相對**專案根目錄**的 `dataset_streamlit_shell/ui/startup_challenge_ui.py`、目前挑戰公司資料夾內的 Challenge 工作資料／訓練資料／測試資料、必要時 `scripts/`。不改專案展示頁骨架、不改專案展示空殼的還原來源、不直接改各公司 Challenge UI 快照、不改其他 ML 教學頁；頁入口薄包裝與側欄導覽由老師預放。
+_Avoid_: 為挑戰去改邏輯回歸等教學頁；把挑戰成果寫進根目錄 working／ready／train／val／test；改其他公司資料夾、empty_shell 或 `startup_challenge_page.py`；把 live UI 寫成專案根的 `ui/startup_challenge_ui.py`
 
 **Challenge 上台 Gate**:
 人審／自評的最小可上台規準（能講委託問題、有 Challenge 訓練資料／測試資料並用它們訓練、成果區可演示、含該公司必講紅線、分得清 Agent 與人類決策）。第一版不做機器硬檢查；每組自選獨特畫面為軟規則。不印在專案展示頁上。

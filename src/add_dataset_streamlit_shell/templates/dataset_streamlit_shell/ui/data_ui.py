@@ -637,7 +637,9 @@ def render_dataset_metrics(df: pd.DataFrame) -> None:
 
 def prepare_dataframe_for_display(df: pd.DataFrame) -> pd.DataFrame:
     display = df.copy()
-    for column in display.select_dtypes(include=["object", "category"]).columns:
+    for column in display.select_dtypes(
+        include=["object", "category", "string", "str"]
+    ).columns:
         display[column] = display[column].map(lambda value: "" if pd.isna(value) else str(value))
     return display
 
@@ -1066,7 +1068,7 @@ def render_chat_panel(
         greeting = (
             "請先按「啟用資料 Agent」。啟用後，我會以專案展示規則協助你："
             "先讀說明書、檢查 Challenge 起點資料，清理 Challenge 工作資料，再切成訓練／測試資料；"
-            "討論後用 AI coding 補齊模型區與成果區。"
+            "討論後改 dataset_streamlit_shell/ui/startup_challenge_ui.py 補齊模型區與成果區。"
             if agent_scope.startswith("challenge")
             else (
                 "請先按「啟用資料 Agent」。啟用後，我可以協助你理解資料整理流程；"

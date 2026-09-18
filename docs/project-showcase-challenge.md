@@ -36,9 +36,10 @@
 - 模型區＝選型與訓練；成果區＝訓練後指標／圖／演示（要有該公司 Challenge 模型產物才渲染；產物寫在該公司資料夾，重整與換公司後仍有效）
 - 一次 AI coding 可寫兩區程式；成果區未訓練前仍是空輪廓
 - 成果真相＝Agent **AI coding** 改允許檔案，不以表單 session 當唯一載體
-- 允許改：`ui/startup_challenge_ui.py`、目前公司資料夾內的 working／train／test、必要時 `scripts/`
+- 允許改：相對專案根的 `dataset_streamlit_shell/ui/startup_challenge_ui.py`、目前公司資料夾內的 working／train／test、必要時 `scripts/`。host 用 `_display_path` 給這條路徑，不要寫成專案根的 `ui/startup_challenge_ui.py`
 - 不准改專案展示頁骨架與空殼還原來源；不准直接改各公司快照；不准在區函式呼叫 Challenge host context 當路徑物件；不准把教學頁雙欄／聊天欄抄進區函式
 - 學生選線性／邏輯迴歸時，訓練用 `gradient_descent_steps`／`logistic_gradient_descent_steps`。host 與空殼 docstring 給可直接貼的 `from dataset_streamlit_shell.ml... import ...`；可加 pandas／streamlit。不要 import 教學頁 UI；不要 `from ml.xxx` 或相對 import；不要用 sklearn `LogisticRegression.fit` 當逐步 Cost。不要寫成「只能 import ml」而把 pandas／ChallengePaths 拿掉
+- `st.dataframe` 不要吃 `df.melt()` 後混型的 `value` 欄；Cost 用數字欄。資料檢視預覽走 `prepare_dataframe_for_display`，讀檔失敗印在該區、資料 Agent 欄仍畫
 - 頁骨架 lazy 載入 live UI，並把區函式例外印在該框；資料 Agent 欄仍畫。區函式裡的 `st.rerun()` 仍要生效（名稱含 Rerun 的例外要再丟出）
 - 倫理紅線只在對話與口頭 Gate
 

@@ -277,6 +277,13 @@ def test_restore_empty_shell_overwrites_live_ui(tmp_path: Path) -> None:
     assert dest.read_text(encoding="utf-8") == "# empty shell\n"
 
 
+_HOST_UI_PATHS = dict(
+    live_ui="dataset_streamlit_shell/ui/startup_challenge_ui.py",
+    page_py="dataset_streamlit_shell/ui/startup_challenge_page.py",
+    empty_shell="dataset_streamlit_shell/ui/startup_challenge_empty_shell.py",
+)
+
+
 def test_host_context_is_workflow_not_pitch_board() -> None:
     text = challenge_host_context(
         company="edupulse",
@@ -286,6 +293,7 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
         train_csv="dataset_streamlit_shell/workspace/challenge/edupulse/train.csv",
         test_csv="dataset_streamlit_shell/workspace/challenge/edupulse/test.csv",
         scripts_dir="dataset_streamlit_shell/scripts",
+        **_HOST_UI_PATHS,
     )
     assert "【AI Startup Challenge 模式】" in text
     assert "模型區" in text
@@ -304,8 +312,11 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "challenge_model_artifact" in text
     assert "自行還原專案展示空殼" in text
     assert "清除回起點確認" in text
-    assert "不要編輯 ui/startup_challenge_page.py" in text
-    assert "不要編輯 ui/startup_challenge_empty_shell.py" in text
+    assert "不要編輯 dataset_streamlit_shell/ui/startup_challenge_page.py" in text
+    assert "不要編輯 dataset_streamlit_shell/ui/startup_challenge_empty_shell.py" in text
+    assert "dataset_streamlit_shell/ui/startup_challenge_ui.py" in text
+    assert "不要寫到專案根的 ui/" in text
+    assert "改 ui/startup_challenge_ui.py" not in text
     assert "不要在模型區／成果區呼叫 challenge_host_context" in text
     assert "open_content_dual_pane" in text
     assert "不要 st.stop()" in text
@@ -319,6 +330,8 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "sample_gradient_steps" in text
     assert "不要 from ml.xxx" in text
     assert "只 import 這兩個 ml 模組" not in text
+    assert "不要 df.melt()" in text
+    assert "ArrowTypeError" in text
 
 
 def test_host_context_vitalrisk_fragment() -> None:
@@ -330,6 +343,7 @@ def test_host_context_vitalrisk_fragment() -> None:
         train_csv="challenge/vitalrisk/train.csv",
         test_csv="challenge/vitalrisk/test.csv",
         scripts_dir="scripts",
+        **_HOST_UI_PATHS,
     )
     assert "假陽性" in text or "假陰性" in text
     assert "不是診斷" in text
@@ -394,6 +408,7 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     assert is_zone_function_ui_snapshot(ui) is True
     assert "from dataset_streamlit_shell.ml.regression import" in ui
     assert "from dataset_streamlit_shell.ml.classification import" in ui
+    assert "不要 df.melt()" in ui
     assert "def render_model_zone(paths" in ui
     assert "def render_result_zone(paths" in ui
     assert "render_startup_challenge_page" not in ui
@@ -414,6 +429,7 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     assert "_call_zone" in page
     assert "_is_streamlit_rerun" in page
     assert "from dataset_streamlit_shell.ui import startup_challenge_ui as live_ui_module" in page
+    assert "live_ui=_display_path(LIVE_UI_PATH)" in page
     assert page.split("def _reload_live_ui")[0].count(
         "from dataset_streamlit_shell.ui import startup_challenge_ui"
     ) == 0
@@ -423,6 +439,7 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     ).read_text(encoding="utf-8")
     assert "白板三塊" not in greeting
     assert "模型區" in greeting or "Challenge 工作資料" in greeting
+    assert "dataset_streamlit_shell/ui/startup_challenge_ui.py" in greeting
     assert 'agent_scope.startswith("challenge")' in greeting
 
 
@@ -756,3 +773,19 @@ def test_challenge_host_named_ml_imports_exist() -> None:
     assert callable(predict_class_from_proba)
     assert callable(confusion_matrix_counts)
     assert callable(precision_recall_f1_from_counts)
+
+
+def test_prepare_dataframe_for_display_fixes_melt_value_column() -> None:
+    import pandas as pd
+    import pyarrow as pa
+
+    from dataset_streamlit_shell.ui.data_ui import prepare_dataframe_for_display
+
+    melted = pd.DataFrame({"sex": ["m"], "age": [20]}).melt()
+    try:
+        pa.Table.from_pandas(melted)
+    except pa.ArrowTypeError:
+        pass
+    else:
+        raise AssertionError("mixed melt value column should fail pyarrow")
+    pa.Table.from_pandas(prepare_dataframe_for_display(melted))

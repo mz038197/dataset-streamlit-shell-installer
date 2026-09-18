@@ -10,6 +10,7 @@ import streamlit as st
 from dataset_streamlit_shell.ml.regression import apply_feature_scaler, attach_test_costs, create_feature_scaler, gradient_descent_steps, predict_with_parameters
 from dataset_streamlit_shell.ml.classification import attach_logistic_test_costs, confusion_matrix_counts, logistic_gradient_descent_steps, predict_class_from_proba, predict_proba, precision_recall_f1_from_counts, sample_gradient_steps
 不要 from ml.xxx、不要 from .xxx、不要 import lr_ui 或 logistic_regression_ui。
+不要 df.melt() 再 st.dataframe。Cost 用 iteration／cost 兩欄數字。object 欄先轉字串再畫表。
 """
 
 from __future__ import annotations
