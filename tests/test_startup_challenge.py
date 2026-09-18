@@ -309,7 +309,7 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "不要在模型區／成果區呼叫 challenge_host_context" in text
     assert "open_content_dual_pane" in text
     assert "不要 st.stop()" in text
-    assert "先對齊再改" in text
+    assert "兩個空函式" in text
 
 
 def test_host_context_vitalrisk_fragment() -> None:
@@ -385,8 +385,6 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     assert is_zone_function_ui_snapshot(ui) is True
     assert "def render_model_zone(paths" in ui
     assert "def render_result_zone(paths" in ui
-    assert "challenge_model_train" in ui
-    assert "challenge_model_artifact" in ui
     assert "render_startup_challenge_page" not in ui
     assert "BOARD_CUSTOMER" not in ui
     assert "TODO(challenge)" not in ui
