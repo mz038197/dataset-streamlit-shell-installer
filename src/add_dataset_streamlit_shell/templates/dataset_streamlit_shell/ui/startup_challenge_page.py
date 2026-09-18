@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import importlib
+import traceback
 
 import pandas as pd
 import streamlit as st
 
-from dataset_streamlit_shell.ui import startup_challenge_ui as live_ui_module
 from dataset_streamlit_shell.ui.data_ui import (
     SHELL_ROOT,
     WORKSPACE_DIR,
@@ -65,8 +65,34 @@ PENDING_CLEAR_KEY = "challenge_pending_clear"
 APPLY_CLEAR_KEY = "challenge_apply_clear"
 
 
+def _is_streamlit_rerun(exc: BaseException) -> bool:
+    return "Rerun" in type(exc).__name__
+
+
+def _show_zone_error(exc: BaseException, details: str = "") -> None:
+    st.error(
+        "這個區的程式出錯。資料 Agent 欄還在。"
+        "把下面 traceback 貼給它，只要它修這次例外，不要整檔重寫。"
+    )
+    st.code(details.strip() or f"{type(exc).__name__}: {exc}")
+
+
+def _call_zone(renderer) -> None:
+    try:
+        renderer()
+    except Exception as exc:
+        if _is_streamlit_rerun(exc):
+            raise
+        _show_zone_error(exc, traceback.format_exc())
+
+
 def _reload_live_ui():
-    return importlib.reload(live_ui_module)
+    try:
+        from dataset_streamlit_shell.ui import startup_challenge_ui as live_ui_module
+
+        return importlib.reload(live_ui_module), None
+    except Exception as exc:
+        return None, (exc, traceback.format_exc())
 
 
 def _column_overview_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -206,12 +232,22 @@ def _render_data_view(paths, *, company: str | None) -> None:
         st.dataframe(frame.head(20), width="stretch", hide_index=True)
 
 
-def _render_zone(title: str, caption: str, *, unlocked: bool, renderer) -> None:
+def _render_zone(
+    title: str,
+    caption: str,
+    *,
+    unlocked: bool,
+    renderer,
+    load_error: tuple[BaseException, str] | None = None,
+) -> None:
     with st.container(border=True):
         st.markdown(f"##### {title}")
         st.caption(caption)
+        if load_error is not None:
+            _show_zone_error(load_error[0], load_error[1])
+            return
         if unlocked:
-            renderer()
+            _call_zone(renderer)
 
 
 def render_startup_challenge_page() -> None:
@@ -337,19 +373,21 @@ def render_startup_challenge_page() -> None:
             company=company if company in CHALLENGE_COMPANIES else None,
         )
 
-        live = _reload_live_ui()
+        live, load_error = _reload_live_ui()
         artifact_present = bool(st.session_state.get(company_artifact_key))
         _render_zone(
             "模型區",
             "這裡之後放你們要展示的模型。",
             unlocked=model_zone_unlocked(paths),
             renderer=lambda: live.render_model_zone(paths),
+            load_error=load_error,
         )
         _render_zone(
             "成果區",
             "這裡之後放訓練後的成果。",
             unlocked=result_zone_unlocked(paths, artifact_present=artifact_present),
             renderer=lambda: live.render_result_zone(paths),
+            load_error=load_error,
         )
 
     paths = challenge_paths(WORKSPACE_DIR, display_company)

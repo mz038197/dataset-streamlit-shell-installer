@@ -444,11 +444,14 @@ def challenge_host_context(
 1) 先讀說明書、檢查 Challenge 起點資料，再複製成 Challenge 工作資料後清理。起點 CSV 只讀、不可覆寫。
 2) 清理後從工作資料切出 Challenge 訓練資料與 Challenge 測試資料（預設 80／20；有類別目標則分層）。頁上無套用按鈕。模型只吃這兩份，不直接吃 working。
 3) 沒有訓練／測試檔時，模型區與成果區只顯示空輪廓，不可填入。
-4) 與學生討論要呈現的模型與方式後，以 AI coding 寫入 ui/startup_challenge_ui.py。
+4) 與學生討論要呈現的模型與方式後，以 AI coding 改 ui/startup_challenge_ui.py 裡現有的兩個函式，不要另寫整頁。
+   該檔已有可跑的最小選型／訓練骨架；先對齊再改。
    - 模型區：選型與訓練（名稱、必要旋鈕、開始訓練），不要放成果圖表。
    - 成果區：訓練後的指標、圖與一次演示；沒有 Challenge 模型產物時維持空輪廓。
    一次 coding 可以寫兩區程式，但成果區在尚未訓練前仍應顯示空輪廓。
    讀檔用傳入區函式的 paths（Challenge 訓練資料／測試資料路徑已在裡面），不要呼叫 challenge_host_context 組路徑。
+   線性回歸／邏輯迴歸頁只可當訓練後圖長什麼的參考。不要複製它們的 open_content_dual_pane、render_chat_panel、決策槽、關卡。
+   不要 st.stop()。區函式丟例外時頁骨架會印在該框，資料 Agent 欄仍在；修 traceback，不要整檔重寫。
    訓練成功後請設定 st.session_state["challenge_model_artifact"]（任何非空值即可），成果區才會渲染。切分檔一變，這個產物會被清掉。只改目前公司資料夾，不要改其他公司。
 5) 倫理紅線只在對話與口頭 Gate 處理，不要在頁上加第三塊標題。
 6) 「無檔則顯示輪廓」寫在專案展示頁骨架。不要改 ui/startup_challenge_page.py，也不要拆掉那層判斷。

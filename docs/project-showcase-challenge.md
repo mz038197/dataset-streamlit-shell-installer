@@ -30,14 +30,15 @@
 
 - 發佈＝專案展示空殼；某公司尚無 Challenge UI 快照時載入 `ui/startup_challenge_empty_shell.py`；清除回起點確認後亦載入（該公司快照已刪）
 - 專案展示頁骨架：`ui/startup_challenge_page.py`（公司選擇、資料檢視、區框與無檔則顯示輪廓、host、資料 Agent 欄）。頁入口薄包裝 `pages/30_Startup_Challenge.py` 只呼叫此檔。Agent 不准改
-- 專案展示空殼與 live UI：只含模型區／成果區兩個接收該公司路徑的函式。發佈時兩檔位元組相同
+- 專案展示空殼與 live UI：只含模型區／成果區兩個接收該公司路徑的函式，內建可抄的最小選型／訓練骨架。發佈時兩檔位元組相同。無 train／test 時頁骨架仍不呼叫，畫面維持空輪廓
 - Challenge UI 快照：`workspace/challenge/{company}/startup_challenge_ui.py`，內容是區函式不是頁骨架。Agent 只改 live `ui/startup_challenge_ui.py`。進頁時若快照已是區函式形狀則抄回 live。舊整頁檔留在磁碟但不載入、不因此畫清除回起點、不自動剪函式
 - 模型區／成果區框始終可見；無該公司 train+test 時不可填入。解鎖後骨架把該公司路徑傳進區函式
 - 模型區＝選型與訓練；成果區＝訓練後指標／圖／演示（要有該公司 Challenge 模型產物才渲染；產物寫在該公司資料夾，重整與換公司後仍有效）
 - 一次 AI coding 可寫兩區程式；成果區未訓練前仍是空輪廓
 - 成果真相＝Agent **AI coding** 改允許檔案，不以表單 session 當唯一載體
 - 允許改：`ui/startup_challenge_ui.py`、目前公司資料夾內的 working／train／test、必要時 `scripts/`
-- 不准改專案展示頁骨架與空殼還原來源；不准直接改各公司快照；不准在區函式呼叫 Challenge host context 當路徑物件
+- 不准改專案展示頁骨架與空殼還原來源；不准直接改各公司快照；不准在區函式呼叫 Challenge host context 當路徑物件；不准把教學頁雙欄／聊天欄抄進區函式
+- 頁骨架 lazy 載入 live UI，並把區函式例外印在該框；資料 Agent 欄仍畫。區函式裡的 `st.rerun()` 仍要生效（名稱含 Rerun 的例外要再丟出）
 - 倫理紅線只在對話與口頭 Gate
 
 ## Agent
