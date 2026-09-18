@@ -449,8 +449,14 @@ def challenge_host_context(
    - 成果區：訓練後的指標、圖與一次演示；沒有 Challenge 模型產物時維持空輪廓。
    一次 coding 可以寫兩區程式，但成果區在尚未訓練前仍應顯示空輪廓。
    讀檔用傳入區函式的 paths（Challenge 訓練資料／測試資料路徑已在裡面），不要呼叫 challenge_host_context 組路徑。
-   引導選模型時：先依目標欄判斷分類還是回歸。學生選線性回歸，訓練用 dataset_streamlit_shell.ml.regression 的 gradient_descent_steps；選邏輯迴歸，用 dataset_streamlit_shell.ml.classification 的 logistic_gradient_descent_steps。只 import 這兩個 ml 模組，不要 import lr_ui 或 logistic_regression_ui。
-   分類先把 y 編成 0／1，特徵縮放只 fit 訓練集。模型區畫抽樣後的 Cost vs Iteration（不要每步重畫整頁）；兩個數值特徵才畫決策邊界。不要用 sklearn LogisticRegression.fit 當逐步 Cost 來源。
+   引導選模型時：先依目標欄判斷分類還是回歸。
+   寫 ui/startup_challenge_ui.py 頂層時，保留 ChallengePaths 那行，並依學生選的模型貼上下列 import（可刪沒用到的名字）。不要 from ml.xxx、不要 from .xxx、不要 import lr_ui 或 logistic_regression_ui 或 startup_challenge_page 或 dual_pane_shell 或 data_ui。pandas／streamlit／pyplot 可加。
+   import pandas as pd
+   import streamlit as st
+   from dataset_streamlit_shell.ml.regression import apply_feature_scaler, attach_test_costs, create_feature_scaler, gradient_descent_steps, predict_with_parameters
+   from dataset_streamlit_shell.ml.classification import attach_logistic_test_costs, confusion_matrix_counts, logistic_gradient_descent_steps, predict_class_from_proba, predict_proba, precision_recall_f1_from_counts, sample_gradient_steps
+   學生選線性回歸用 gradient_descent_steps；選邏輯迴歸用 logistic_gradient_descent_steps。縮放用 create_feature_scaler（method 用 "zscore"／"maxdiv"／"minmax"／"mean"）只 fit 訓練集，再用 apply_feature_scaler。Cost 抽樣用 sample_gradient_steps（線性回歸的 steps 也能丟進去）。
+   分類先把 y 編成 0／1。模型區畫抽樣後的 Cost vs Iteration（不要每步重畫整頁）；兩個數值特徵才畫決策邊界。不要用 sklearn LogisticRegression.fit 當逐步 Cost 來源。
    線性回歸／邏輯迴歸頁只可當圖長什麼的參考。不要複製它們的 open_content_dual_pane、render_chat_panel、決策槽、關卡。
    不要 st.stop()。區函式丟例外時頁骨架會印在該框，資料 Agent 欄仍在；修 traceback，不要整檔重寫。
    訓練成功後請設定 st.session_state["challenge_model_artifact"]（任何非空值即可），成果區才會渲染。切分檔一變，這個產物會被清掉。只改目前公司資料夾，不要改其他公司。

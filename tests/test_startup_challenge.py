@@ -313,6 +313,12 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "logistic_gradient_descent_steps" in text
     assert "gradient_descent_steps" in text
     assert "不要 import lr_ui" in text
+    assert "from dataset_streamlit_shell.ml.regression import" in text
+    assert "from dataset_streamlit_shell.ml.classification import" in text
+    assert "create_feature_scaler" in text
+    assert "sample_gradient_steps" in text
+    assert "不要 from ml.xxx" in text
+    assert "只 import 這兩個 ml 模組" not in text
 
 
 def test_host_context_vitalrisk_fragment() -> None:
@@ -386,6 +392,8 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     page = (UI / "startup_challenge_page.py").read_text(encoding="utf-8")
     assert ui == empty
     assert is_zone_function_ui_snapshot(ui) is True
+    assert "from dataset_streamlit_shell.ml.regression import" in ui
+    assert "from dataset_streamlit_shell.ml.classification import" in ui
     assert "def render_model_zone(paths" in ui
     assert "def render_result_zone(paths" in ui
     assert "render_startup_challenge_page" not in ui
@@ -716,3 +724,35 @@ def test_apply_clear_leaves_legacy_full_page_on_disk(tmp_path: Path) -> None:
     assert ui_snapshot_path(edu).read_text(encoding="utf-8") == _LEGACY_PAGE_UI
     assert live.read_text(encoding="utf-8") == _ZONE_UI
     assert clear_back_to_start_available(edu, empty_shell=empty) is False
+
+
+def test_challenge_host_named_ml_imports_exist() -> None:
+    from dataset_streamlit_shell.ml.classification import (  # noqa: PLC0415
+        attach_logistic_test_costs,
+        confusion_matrix_counts,
+        logistic_gradient_descent_steps,
+        predict_class_from_proba,
+        predict_proba,
+        precision_recall_f1_from_counts,
+        sample_gradient_steps,
+    )
+    from dataset_streamlit_shell.ml.regression import (  # noqa: PLC0415
+        apply_feature_scaler,
+        attach_test_costs,
+        create_feature_scaler,
+        gradient_descent_steps,
+        predict_with_parameters,
+    )
+
+    assert callable(gradient_descent_steps)
+    assert callable(logistic_gradient_descent_steps)
+    assert callable(create_feature_scaler)
+    assert callable(apply_feature_scaler)
+    assert callable(attach_test_costs)
+    assert callable(predict_with_parameters)
+    assert callable(sample_gradient_steps)
+    assert callable(attach_logistic_test_costs)
+    assert callable(predict_proba)
+    assert callable(predict_class_from_proba)
+    assert callable(confusion_matrix_counts)
+    assert callable(precision_recall_f1_from_counts)
