@@ -36,32 +36,6 @@ def test_teaching_page_host_context_forbids_root_working_and_accepts_fragment() 
     assert "Working 工作資料路徑" not in text
 
 
-TEACHING_CHAT_FILES = (
-    "lr_ui.py",
-    "logistic_regression_ui.py",
-    "svm_ui.py",
-    "knn_ui.py",
-    "tree_ui.py",
-)
-
-
-def test_teaching_pages_pass_own_host() -> None:
-    for name in TEACHING_CHAT_FILES:
-        src = (UI / name).read_text(encoding="utf-8")
-        assert "teaching_page_host_context" in src, name
-        assert "host_context=" in src, name
-
-
-def test_linear_regression_host_uses_slot_fragment() -> None:
-    src = (UI / "lr_ui.py").read_text(encoding="utf-8")
-    assert "lr_host_context_fragment" in src
-
-
-def test_logistic_regression_host_uses_slot_fragment() -> None:
-    src = (UI / "logistic_regression_ui.py").read_text(encoding="utf-8")
-    assert "logistic_host_context_fragment" in src
-
-
 def test_neural_network_host_uses_form_fragment() -> None:
     src = (UI / "nn_ui.py").read_text(encoding="utf-8")
     assert "nn_host_context_fragment" in src

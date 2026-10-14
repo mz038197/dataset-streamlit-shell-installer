@@ -42,9 +42,9 @@ from dataset_streamlit_shell.ui.data_ui import (
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
-    teaching_page_host_context,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
+from dataset_streamlit_shell.ui.supervised_pack import supervised_host_context
 
 CLASSIFICATION_DEMO_DIR = SHELL_ROOT / "built-in-data" / "classification"
 KNN_BLOBS_PATH = CLASSIFICATION_DEMO_DIR / "knn_blobs_80.csv"
@@ -59,6 +59,10 @@ EVO_KEY = "knn_neighbors_evolution"
 _CLASS_COLORS = {0: "#2563eb", 1: "#dc2626"}
 
 
+def page_host_context() -> str:
+    return supervised_host_context()
+
+
 def render_knn_page() -> None:
     teaching, agent = open_content_dual_pane()
     with teaching:
@@ -71,7 +75,7 @@ def render_knn_page() -> None:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,
-            host_context=teaching_page_host_context(),
+            host_context=page_host_context(),
         )
 
 
@@ -653,7 +657,7 @@ def _send_hint(
             quiz.neighbors_hint_user_text(qid, features=features, target=target),
             extra_context=extra,
             display_user_text=quiz.neighbors_hint_display_text(qid),
-            host_context=teaching_page_host_context(),
+            host_context=page_host_context(),
             page_name=PAGE_TITLE,
         )
     st.rerun()

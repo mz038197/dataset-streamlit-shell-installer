@@ -55,7 +55,6 @@ from dataset_streamlit_shell.ui.data_ui import (
     _display_path,
     invoke_data_agent,
     render_chat_panel,
-    teaching_page_host_context,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.logistic_slot_state import (
@@ -91,6 +90,7 @@ from dataset_streamlit_shell.ui.logistic_slot_state import (
     split_frame_by_train_pct,
     train_request_is_set,
 )
+from dataset_streamlit_shell.ui.supervised_pack import supervised_host_context
 from dataset_streamlit_shell.ui.teaching_flow import (
     live_fit_caption,
     symbolic_logistic_yhat_latex,
@@ -143,8 +143,8 @@ DECISION_SLOT_CSS = """
 """
 
 
-def _lg_host() -> str:
-    return teaching_page_host_context(
+def page_host_context() -> str:
+    return supervised_host_context(
         logistic_host_context_fragment(
             slots_path=_display_path(logistic_slots_path(WORKSPACE_DIR)),
             request_path=_display_path(logistic_train_request_path(WORKSPACE_DIR)),
@@ -193,7 +193,7 @@ def render_logistic_regression_page() -> None:
         render_chat_panel(
             extra_context=extra,
             page_name=PAGE_TITLE,
-            host_context=_lg_host(),
+            host_context=page_host_context(),
             after_reply=_after_logistic_chat,
         )
 
@@ -1073,7 +1073,7 @@ def _send_boundary_quiz_hint(qid: str) -> None:
             focus_qid=qid,
         ),
         display_user_text=quiz.hint_display_text(qid),
-        host_context=_lg_host(),
+        host_context=page_host_context(),
         page_name=PAGE_TITLE,
     )
 
@@ -1086,7 +1086,7 @@ def _send_poly_quiz_hint(qid: str) -> None:
             focus_qid=qid,
         ),
         display_user_text=quiz.hint_display_text(qid),
-        host_context=_lg_host(),
+        host_context=page_host_context(),
         page_name=PAGE_TITLE,
     )
 
