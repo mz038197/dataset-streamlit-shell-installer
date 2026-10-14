@@ -1274,34 +1274,6 @@ def render_encoding_correlation_page() -> None:
     render_encoding_page()
 
 
-def pca_status(df: pd.DataFrame) -> dict[str, object]:
-    numeric = df.select_dtypes(include="number")
-    return {
-        "rows": len(df),
-        "numeric_columns": len(numeric.columns),
-        "missing_cells": int(numeric.isna().sum().sum()) if not numeric.empty else 0,
-        "enough_columns": len(numeric.columns) >= 2,
-        "enough_rows": len(df) >= 3,
-    }
-
-
-def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.DataFrame], None]) -> None:
-    teaching, agent = open_content_dual_pane()
-    with teaching:
-        st.title(title)
-        st.caption(caption)
-        if not working_dataset_file_exists():
-            st.warning("尚未建立工作資料。請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。")
-            return
-        df = load_working_dataset()
-        if df is None:
-            st.warning("尚未建立工作資料。請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。")
-            return
-        render_main(df)
-    with agent:
-        render_data_science_chat(page_name=title)
-
-
 def render_transform_page() -> None:
     def body(df: pd.DataFrame) -> None:
         st.markdown("##### 診斷：資料轉換（同義寫法）")

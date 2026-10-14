@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataset_streamlit_shell.ui.data_ui import brand_page_icon, inject_style
-from dataset_streamlit_shell.ui.workflow_ui import pca_status, render_analysis_shell
+from dataset_streamlit_shell.ui.pca_pack import pca_status, render_pca_shell
 
 st.set_page_config(page_title="PCA 主成分分析", page_icon=brand_page_icon(), layout="wide")
 inject_style()
@@ -80,4 +80,4 @@ def _render_pca(df: pd.DataFrame) -> None:
     st.dataframe(loading.style.format("{:.3f}"), width="stretch")
 
 
-render_analysis_shell("PCA 主成分分析", "以 Working 工作資料進行主成分分析與條件檢查。", _render_pca)
+render_pca_shell("PCA 主成分分析", "以 Working 工作資料進行主成分分析與條件檢查。", _render_pca)
