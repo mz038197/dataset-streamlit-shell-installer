@@ -1,0 +1,588 @@
+"""AI新創工作坊課程包自帶的分類函式副本（ADR 0029：課程包之間不互相引用）。
+
+原本複製自監督式課程包的 ml/classification.py；改這份不影響監督式，反之亦然。
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from dataset_streamlit_shell.ml.startup_challenge_regression import (
+    GradientDescentStep,
+    apply_feature_scaler,
+    apply_standard_scaler,
+    create_standard_scaler,
+)
+
+MODEL_KIND_LOGISTIC = "logistic_regression"
+MODEL_KIND_REGULARIZED = "regularized_logistic_regression"
+
+CONTOUR_U_MIN = -1.0
+CONTOUR_U_MAX = 1.5
+DEFAULT_MAP_DEGREE = 6
+
+COST_J_LOGISTIC_LATEX = (
+    r"J(w,b) = -\frac{1}{m}\sum_{i=0}^{m-1}\Big["
+    r"y^{(i)}\log(f_{w,b}(x^{(i)}))+(1-y^{(i)})\log(1-f_{w,b}(x^{(i)}))"
+    r"\Big]"
+)
+COST_J_LOGISTIC_REG_LATEX = (
+    r"J(w,b) = -\frac{1}{m}\sum_{i=0}^{m-1}\Big["
+    r"y^{(i)}\log(f_{w,b}(x^{(i)}))+(1-y^{(i)})\log(1-f_{w,b}(x^{(i)}))"
+    r"\Big] + \frac{\lambda}{2m}\sum_{j=0}^{n-1}w_j^2"
+)
+COST_GD_W_LOGISTIC_LATEX = r"w_j = w_j - \alpha \frac{\partial J(w,b)}{\partial w_j}"
+COST_GD_B_LOGISTIC_LATEX = r"b = b - \alpha \frac{\partial J(w,b)}{\partial b}"
+COST_DJ_DW_LOGISTIC_LATEX = (
+    r"\frac{\partial J(w,b)}{\partial w_j} = "
+    r"\frac{1}{m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})x_j^{(i)}"
+)
+COST_DJ_DB_LOGISTIC_LATEX = (
+    r"\frac{\partial J(w,b)}{\partial b} = "
+    r"\frac{1}{m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})"
+)
+COST_DJ_DW_LOGISTIC_REG_LATEX = (
+    r"\frac{\partial J(w,b)}{\partial w_j} = "
+    r"\frac{1}{m}\sum_{i=0}^{m-1}(f_{w,b}(x^{(i)}) - y^{(i)})x_j^{(i)}"
+    r" + \frac{\lambda}{m}w_j"
+)
+
+
+@dataclass(frozen=True)
+class LogisticModelArtifact:
+    model_kind: str
+    features: list[str]
+    target: str
+    weights: list[float]
+    intercept: float
+    scaler: dict[str, Any] | None
+    training_cost: float
+    data_source: str
+    schema_version: int = 1
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+
+
+@dataclass(frozen=True)
+class RegularizedLogisticModelArtifact:
+    model_kind: str
+    base_features: list[str]
+    mapped_features: list[str]
+    target: str
+    weights: list[float]
+    intercept: float
+    map_degree: int
+    lambda_: float
+    training_cost: float
+    data_source: str
+    scaler: dict[str, Any] | None = None
+    schema_version: int = 1
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+
+
+ClassificationArtifact = LogisticModelArtifact | RegularizedLogisticModelArtifact
+
+
+def sigmoid(z: np.ndarray | float) -> np.ndarray | float:
+    z_array = np.asarray(z, dtype=float)
+    clipped = np.clip(z_array, -500, 500)
+    result = 1.0 / (1.0 + np.exp(-clipped))
+    if np.ndim(z_array) == 0:
+        return float(result)
+    return result
+
+
+def log_1pexp(x: np.ndarray) -> np.ndarray:
+    out = np.zeros_like(x, dtype=float)
+    mask = x <= 20
+    out[mask] = np.log(1.0 + np.exp(x[mask]))
+    out[~mask] = x[~mask]
+    return out
+
+
+def compute_cost_logistic(
+    feature_frame: pd.DataFrame | np.ndarray,
+    target: pd.Series | np.ndarray,
+    weights: list[float] | np.ndarray,
+    intercept: float,
+) -> float:
+    x = _as_feature_matrix(feature_frame)
+    y = np.asarray(target, dtype=float).reshape(-1)
+    w = np.asarray(weights, dtype=float).reshape(-1)
+    if x.shape[0] != y.shape[0]:
+        raise ValueError("feature_frame and target must have the same row count")
+    if x.shape[0] == 0:
+        raise ValueError("feature_frame must contain at least one row")
+
+    z = x @ w + float(intercept)
+    cost_terms = -(y * z) + log_1pexp(z)
+    return float(np.sum(cost_terms) / x.shape[0])
+
+
+def compute_cost_logistic_reg(
+    feature_frame: pd.DataFrame | np.ndarray,
+    target: pd.Series | np.ndarray,
+    weights: list[float] | np.ndarray,
+    intercept: float,
+    lambda_: float,
+) -> float:
+    logistic_cost = compute_cost_logistic(feature_frame, target, weights, intercept)
+    w = np.asarray(weights, dtype=float).reshape(-1)
+    m = _as_feature_matrix(feature_frame).shape[0]
+    reg_cost = float(lambda_) / (2.0 * m) * float(np.sum(w**2))
+    return logistic_cost + reg_cost
+
+
+def predict_proba(
+    feature_frame: pd.DataFrame | np.ndarray,
+    weights: list[float] | np.ndarray,
+    intercept: float,
+) -> pd.Series:
+    x = _as_feature_matrix(feature_frame)
+    w = np.asarray(weights, dtype=float).reshape(-1)
+    values = sigmoid(x @ w + float(intercept))
+    index = feature_frame.index if isinstance(feature_frame, pd.DataFrame) else None
+    return pd.Series(values, index=index, name="probability")
+
+
+def predict_class_from_proba(probability: pd.Series | np.ndarray, threshold: float) -> pd.Series:
+    prob_array = np.asarray(probability, dtype=float)
+    classes = (prob_array >= float(threshold)).astype(int)
+    index = probability.index if isinstance(probability, pd.Series) else None
+    return pd.Series(classes, index=index, name="predicted_class")
+
+
+def logistic_gradient_descent_steps(
+    feature_frame: pd.DataFrame,
+    target: pd.Series,
+    *,
+    learning_rate: float,
+    epochs: int,
+    initial_weights: list[float] | np.ndarray | None = None,
+    initial_intercept: float = 0.0,
+    lambda_: float = 0.0,
+    regularized: bool = False,
+) -> list[GradientDescentStep]:
+    if epochs < 1:
+        raise ValueError("epochs must be at least 1")
+    if learning_rate <= 0:
+        raise ValueError("learning_rate must be greater than 0")
+
+    x = feature_frame.to_numpy(dtype=float)
+    y = np.asarray(target, dtype=float).reshape(-1)
+    if x.ndim != 2 or x.shape[0] == 0:
+        raise ValueError("feature_frame must contain at least one row")
+    if x.shape[0] != y.shape[0]:
+        raise ValueError("feature_frame and target must have the same row count")
+
+    weights = (
+        np.zeros(x.shape[1], dtype=float)
+        if initial_weights is None
+        else np.asarray(initial_weights, dtype=float).reshape(-1)
+    )
+    if weights.shape != (x.shape[1],):
+        raise ValueError("initial_weights must match feature count")
+    intercept = float(initial_intercept)
+    m = float(x.shape[0])
+
+    steps = [_logistic_step_snapshot(0, x, y, weights, intercept, lambda_, regularized)]
+    for iteration in range(1, epochs + 1):
+        prev_weights = weights.copy()
+        prev_intercept = float(intercept)
+        if regularized:
+            prev_cost = compute_cost_logistic_reg(x, y, weights, intercept, lambda_)
+        else:
+            prev_cost = compute_cost_logistic(x, y, weights, intercept)
+        prediction = sigmoid(x @ weights + intercept)
+        error = prediction - y
+        dj_dw = (x.T @ error) / m
+        if regularized:
+            dj_dw = dj_dw + (float(lambda_) / m) * weights
+        dj_db = float(np.sum(error) / m)
+        delta_w = -learning_rate * dj_dw
+        delta_b = -learning_rate * dj_db
+        weights = weights + delta_w
+        intercept = intercept + delta_b
+        steps.append(
+            _logistic_step_snapshot(
+                iteration,
+                x,
+                y,
+                weights,
+                intercept,
+                lambda_,
+                regularized,
+                prev_weights=[float(weight) for weight in prev_weights],
+                prev_intercept=prev_intercept,
+                prev_cost=float(prev_cost),
+                dj_dw=[float(value) for value in dj_dw],
+                dj_db=dj_db,
+                delta_w=[float(value) for value in delta_w],
+                delta_b=float(delta_b),
+            )
+        )
+    return steps
+
+
+def _logistic_step_snapshot(
+    iteration: int,
+    x: np.ndarray,
+    y: np.ndarray,
+    weights: np.ndarray,
+    intercept: float,
+    lambda_: float,
+    regularized: bool,
+    *,
+    prev_weights: list[float] | None = None,
+    prev_intercept: float | None = None,
+    prev_cost: float | None = None,
+    dj_dw: list[float] | None = None,
+    dj_db: float | None = None,
+    delta_w: list[float] | None = None,
+    delta_b: float | None = None,
+) -> GradientDescentStep:
+    if regularized:
+        cost = compute_cost_logistic_reg(x, y, weights, intercept, lambda_)
+    else:
+        cost = compute_cost_logistic(x, y, weights, intercept)
+    return GradientDescentStep(
+        iteration=iteration,
+        weights=[float(weight) for weight in weights],
+        intercept=float(intercept),
+        cost=float(cost),
+        prev_weights=prev_weights,
+        prev_intercept=prev_intercept,
+        prev_cost=prev_cost,
+        dj_dw=dj_dw,
+        dj_db=dj_db,
+        delta_w=delta_w,
+        delta_b=delta_b,
+    )
+
+
+def map_feature(
+    frame: pd.DataFrame,
+    base_features: list[str],
+    *,
+    degree: int = DEFAULT_MAP_DEGREE,
+) -> tuple[pd.DataFrame, list[str]]:
+    if len(base_features) != 2:
+        raise ValueError("map_feature requires exactly two base features")
+    x1 = frame[base_features[0]].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    x2 = frame[base_features[1]].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    columns: list[str] = []
+    values: list[np.ndarray] = []
+    for total_degree in range(1, degree + 1):
+        for power_x2 in range(total_degree + 1):
+            power_x1 = total_degree - power_x2
+            name = f"{base_features[0]}^{power_x1}*{base_features[1]}^{power_x2}"
+            columns.append(name)
+            values.append((x1**power_x1) * (x2**power_x2))
+    mapped = pd.DataFrame(np.column_stack(values), columns=columns, index=frame.index)
+    return mapped, columns
+
+
+def map_feature_row(base_features: list[str], values: dict[str, float], *, degree: int) -> pd.DataFrame:
+    frame = pd.DataFrame([{feature: float(values[feature]) for feature in base_features}])
+    mapped, _ = map_feature(frame, base_features, degree=degree)
+    return mapped
+
+
+def validate_binary_target(series: pd.Series) -> bool:
+    numeric = pd.to_numeric(series, errors="coerce").dropna()
+    if numeric.empty:
+        return False
+    unique = set(np.unique(numeric.astype(int)))
+    return unique.issubset({0, 1}) and len(unique) >= 1
+
+
+def training_accuracy(
+    actual: pd.Series,
+    probability: pd.Series,
+    threshold: float,
+) -> float:
+    predicted = predict_class_from_proba(probability, threshold)
+    actual_array = pd.to_numeric(actual, errors="coerce").astype(int)
+    return float(np.mean(predicted.to_numpy() == actual_array.to_numpy()) * 100.0)
+
+
+def save_classification_artifact(artifact: ClassificationArtifact, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(asdict(artifact), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def load_classification_artifact(
+    path: Path,
+    *,
+    expected_kind: str | None = None,
+) -> ClassificationArtifact:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return artifact_from_payload(payload, expected_kind=expected_kind)
+
+
+def artifact_from_payload(
+    payload: dict[str, Any],
+    *,
+    expected_kind: str | None = None,
+) -> ClassificationArtifact:
+    model_kind = str(payload["model_kind"])
+    if expected_kind is not None and model_kind != expected_kind:
+        raise ValueError(f"expected model_kind {expected_kind}, got {model_kind}")
+    if model_kind == MODEL_KIND_LOGISTIC:
+        return LogisticModelArtifact(
+            model_kind=model_kind,
+            features=[str(feature) for feature in payload["features"]],
+            target=str(payload["target"]),
+            weights=[float(weight) for weight in payload["weights"]],
+            intercept=float(payload["intercept"]),
+            scaler=payload.get("scaler"),
+            training_cost=float(payload["training_cost"]),
+            data_source=str(payload["data_source"]),
+            schema_version=int(payload.get("schema_version", 1)),
+            created_at=str(payload.get("created_at", datetime.now().isoformat(timespec="seconds"))),
+        )
+    if model_kind == MODEL_KIND_REGULARIZED:
+        return RegularizedLogisticModelArtifact(
+            model_kind=model_kind,
+            base_features=[str(feature) for feature in payload["base_features"]],
+            mapped_features=[str(feature) for feature in payload["mapped_features"]],
+            target=str(payload["target"]),
+            weights=[float(weight) for weight in payload["weights"]],
+            intercept=float(payload["intercept"]),
+            map_degree=int(payload["map_degree"]),
+            lambda_=float(payload["lambda_"]),
+            training_cost=float(payload["training_cost"]),
+            data_source=str(payload["data_source"]),
+            scaler=payload.get("scaler"),
+            schema_version=int(payload.get("schema_version", 1)),
+            created_at=str(payload.get("created_at", datetime.now().isoformat(timespec="seconds"))),
+        )
+    raise ValueError(f"unsupported model_kind: {model_kind}")
+
+
+def predict_proba_from_logistic_artifact(
+    artifact: LogisticModelArtifact,
+    frame: pd.DataFrame,
+) -> pd.Series:
+    numeric = frame[artifact.features].apply(pd.to_numeric, errors="coerce")
+    if artifact.scaler is not None:
+        numeric = apply_feature_scaler(numeric, artifact.scaler)
+    return predict_proba(numeric, artifact.weights, artifact.intercept)
+
+
+def predict_proba_from_regularized_artifact(
+    artifact: RegularizedLogisticModelArtifact,
+    frame: pd.DataFrame,
+) -> pd.Series:
+    numeric = frame[artifact.base_features].apply(pd.to_numeric, errors="coerce")
+    if artifact.scaler is not None:
+        numeric = apply_feature_scaler(numeric, artifact.scaler)
+    mapped, _ = map_feature(numeric, artifact.base_features, degree=artifact.map_degree)
+    return predict_proba(mapped[artifact.mapped_features], artifact.weights, artifact.intercept)
+
+
+def attach_logistic_test_costs(
+    steps: list[GradientDescentStep],
+    test_features: pd.DataFrame | np.ndarray,
+    test_target: pd.Series | np.ndarray,
+) -> list[GradientDescentStep]:
+    annotated: list[GradientDescentStep] = []
+    for step in steps:
+        test_cost = compute_cost_logistic(
+            test_features, test_target, step.weights, step.intercept
+        )
+        annotated.append(replace(step, test_cost=test_cost))
+    return annotated
+
+
+def sample_gradient_steps(
+    steps: list[GradientDescentStep],
+    *,
+    max_points: int = 80,
+) -> list[GradientDescentStep]:
+    if len(steps) <= max_points:
+        return list(steps)
+    stride = max(len(steps) // max_points, 1)
+    selected = list(steps[::stride])
+    if selected[-1] != steps[-1]:
+        selected.append(steps[-1])
+    return selected
+
+
+def confusion_matrix_counts(
+    actual: pd.Series | np.ndarray,
+    predicted: pd.Series | np.ndarray,
+) -> tuple[int, int, int, int]:
+    y = np.asarray(actual, dtype=int).reshape(-1)
+    p = np.asarray(predicted, dtype=int).reshape(-1)
+    if y.shape != p.shape:
+        raise ValueError("actual and predicted must have the same length")
+    n00 = int(np.sum((y == 0) & (p == 0)))
+    n01 = int(np.sum((y == 0) & (p == 1)))
+    n10 = int(np.sum((y == 1) & (p == 0)))
+    n11 = int(np.sum((y == 1) & (p == 1)))
+    return n00, n01, n10, n11
+
+
+def precision_recall_f1_from_counts(
+    n00: int,
+    n01: int,
+    n10: int,
+    n11: int,
+) -> tuple[float | None, float | None, float | None]:
+    _ = n00
+    predicted_pos = n11 + n01
+    actual_pos = n11 + n10
+    precision = (100.0 * n11 / predicted_pos) if predicted_pos else None
+    recall = (100.0 * n11 / actual_pos) if actual_pos else None
+    if precision is None or recall is None:
+        f1 = None
+    elif precision + recall == 0:
+        f1 = 0.0
+    else:
+        f1 = 2.0 * precision * recall / (precision + recall)
+    return precision, recall, f1
+
+
+def format_pct_or_dash(value: float | None) -> str:
+    if value is None:
+        return "—"
+    return f"{value:.1f}%"
+
+
+def precision_recall_f1_caption(
+    n00: int,
+    n01: int,
+    n10: int,
+    n11: int,
+) -> str:
+    precision, recall, f1 = precision_recall_f1_from_counts(n00, n01, n10, n11)
+    return (
+        f"precision {format_pct_or_dash(precision)}  "
+        f"recall {format_pct_or_dash(recall)}  "
+        f"F1 {format_pct_or_dash(f1)}"
+    )
+
+
+def build_classification_agent_context(
+    *,
+    page_name: str,
+    data_source: str,
+    features: list[str],
+    target: str,
+    learning_rate: float | None,
+    epochs: int | None,
+    row_count: int,
+    artifact: ClassificationArtifact | None = None,
+    lambda_: float | None = None,
+    map_degree: int | None = None,
+    threshold: float | None = None,
+    test_cost: float | None = None,
+    cost_curve: list[tuple[int, float, float]] | None = None,
+    confusion: tuple[int, int, int, int] | None = None,
+    train_accuracy: float | None = None,
+    test_accuracy: float | None = None,
+    note: str = "",
+) -> str:
+    parts = [
+        f"目前頁面：{page_name}。",
+        f"資料來源：{data_source}。",
+        f"可用訓練資料筆數：{row_count}。",
+        "目前 features：" + "、".join(features) + "。",
+        f"目前 target：{target}。",
+    ]
+    if learning_rate is not None:
+        parts.append(f"learning rate α：{learning_rate:g}。")
+    if epochs is not None:
+        parts.append(f"epoch：{epochs}。")
+    if lambda_ is not None:
+        parts.append(f"正則化 λ：{lambda_:g}。")
+    if map_degree is not None:
+        parts.append(f"特徵映射 degree：{map_degree}。")
+    if artifact is None:
+        parts.append("目前尚未完成本組設定的訓練，請引導學生先按「開始訓練」觀察 Cost 與模型演進。")
+    else:
+        parts.append(f"最後 intercept/B：{artifact.intercept:g}。")
+        parts.append(f"最後訓練 Cost J：{artifact.training_cost:g}。")
+        if test_cost is not None:
+            parts.append(f"最後測試 Cost J：{test_cost:g}。")
+        if lambda_ is not None:
+            parts.append("測試 Cost 為純對數損失，不含 λ。")
+        if cost_curve:
+            parts.append(
+                "訓練／測試 Cost 曲線（與動畫同一套；iteration,訓練Cost,測試Cost）："
+                + ";".join(
+                    f"{iteration},{train_cost:g},{held_out:g}"
+                    for iteration, train_cost, held_out in cost_curve
+                )
+                + "。"
+            )
+        if confusion is not None:
+            n00, n01, n10, n11 = confusion
+            parts.append(
+                "測試集混淆矩陣（列實際 y=0/1，欄預測 0/1）："
+                f"0→0={n00}，0→1={n01}，1→0={n10}，1→1={n11}。"
+            )
+            parts.extend(_precision_recall_f1_agent_parts(n00, n01, n10, n11))
+        if train_accuracy is not None:
+            parts.append(f"訓練正確率：{train_accuracy:g}%。")
+        if test_accuracy is not None:
+            parts.append(f"測試正確率：{test_accuracy:g}%。")
+        if isinstance(artifact, LogisticModelArtifact):
+            weights = "、".join(
+                f"{feature}={weight:g}"
+                for feature, weight in zip(artifact.features, artifact.weights)
+            )
+            parts.append(f"weights：{weights}。")
+        else:
+            parts.append(
+                "base features："
+                + "、".join(artifact.base_features)
+                + f"；映射後 {len(artifact.mapped_features)} 維。"
+            )
+        scaler = artifact.scaler
+        if scaler is not None:
+            method = scaler.get("method")
+            if method:
+                parts.append(f"本模型特徵縮放方法：{method}。")
+    if threshold is not None:
+        parts.append(f"目前 UI 分類 threshold：{threshold:g}（僅影響類別預測，不參與訓練）。")
+    if note:
+        parts.append(note)
+    return "".join(parts)
+
+
+def _precision_recall_f1_agent_parts(n00: int, n01: int, n10: int, n11: int) -> list[str]:
+    precision, recall, f1 = precision_recall_f1_from_counts(n00, n01, n10, n11)
+    no_pred = n11 + n01 == 0
+    no_actual = n11 + n10 == 0
+    if no_pred and no_actual:
+        f1_reason = "（沒有預測為 y=1，沒有實際 y=1）"
+    elif no_pred:
+        f1_reason = "（沒有預測為 y=1）"
+    elif no_actual:
+        f1_reason = "（沒有實際 y=1）"
+    else:
+        f1_reason = ""
+    pred_reason = "（沒有預測為 y=1）" if no_pred else ""
+    actual_reason = "（沒有實際 y=1）" if no_actual else ""
+    return [
+        f"測試集 precision：{format_pct_or_dash(precision)}{pred_reason}。",
+        f"測試集 recall：{format_pct_or_dash(recall)}{actual_reason}。",
+        f"測試集 F1：{format_pct_or_dash(f1)}{f1_reason if f1 is None else ''}。",
+    ]
+
+
+def _as_feature_matrix(feature_frame: pd.DataFrame | np.ndarray) -> np.ndarray:
+    if isinstance(feature_frame, pd.DataFrame):
+        return feature_frame.to_numpy(dtype=float)
+    return np.asarray(feature_frame, dtype=float)

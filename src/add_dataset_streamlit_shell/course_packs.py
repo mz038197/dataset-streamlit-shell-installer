@@ -179,11 +179,12 @@ STARTUP_WORKSHOP = CoursePack(
         "ui/startup_challenge_context.py",
         "ui/startup_challenge_ui.py",
         "ui/startup_challenge_empty_shell.py",
-        "ml/regression.py",
-        "ml/classification.py",
+        "ml/startup_challenge_regression.py",
+        "ml/startup_challenge_classification.py",
         "workspace/challenge",
     ),
-    dependencies=("numpy",),
+    # matplotlib：Challenge host 允許學生在模型區／成果區用 pyplot
+    dependencies=("numpy", "matplotlib"),
 )
 
 COURSE_PACKS: tuple[CoursePack, ...] = (

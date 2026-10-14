@@ -309,7 +309,7 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "nn_form.json" not in text
     assert "Challenge 工作資料" in text
     assert "只作為重置來源" not in text
-    assert "不要改根目錄的 original.csv" in text
+    assert "不要改 workspace 根目錄的 original.csv" in text
     assert "challenge_model_artifact" in text
     assert "自行還原專案展示空殼" in text
     assert "清除回起點確認" in text
@@ -325,8 +325,8 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "logistic_gradient_descent_steps" in text
     assert "gradient_descent_steps" in text
     assert "不要 import lr_ui" in text
-    assert "from dataset_streamlit_shell.ml.regression import" in text
-    assert "from dataset_streamlit_shell.ml.classification import" in text
+    assert "from dataset_streamlit_shell.ml.startup_challenge_regression import" in text
+    assert "from dataset_streamlit_shell.ml.startup_challenge_classification import" in text
     assert "create_feature_scaler" in text
     assert "sample_gradient_steps" in text
     assert "不要 from ml.xxx" in text
@@ -407,8 +407,8 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     page = (UI / "startup_challenge_page.py").read_text(encoding="utf-8")
     assert ui == empty
     assert is_zone_function_ui_snapshot(ui) is True
-    assert "from dataset_streamlit_shell.ml.regression import" in ui
-    assert "from dataset_streamlit_shell.ml.classification import" in ui
+    assert "from dataset_streamlit_shell.ml.startup_challenge_regression import" in ui
+    assert "from dataset_streamlit_shell.ml.startup_challenge_classification import" in ui
     assert "不要 df.melt()" in ui
     assert "def render_model_zone(paths" in ui
     assert "def render_result_zone(paths" in ui
@@ -743,7 +743,7 @@ def test_apply_clear_leaves_legacy_full_page_on_disk(tmp_path: Path) -> None:
 
 
 def test_challenge_host_named_ml_imports_exist() -> None:
-    from dataset_streamlit_shell.ml.classification import (  # noqa: PLC0415
+    from dataset_streamlit_shell.ml.startup_challenge_classification import (  # noqa: PLC0415
         attach_logistic_test_costs,
         confusion_matrix_counts,
         logistic_gradient_descent_steps,
@@ -752,7 +752,7 @@ def test_challenge_host_named_ml_imports_exist() -> None:
         precision_recall_f1_from_counts,
         sample_gradient_steps,
     )
-    from dataset_streamlit_shell.ml.regression import (  # noqa: PLC0415
+    from dataset_streamlit_shell.ml.startup_challenge_regression import (  # noqa: PLC0415
         apply_feature_scaler,
         attach_test_costs,
         create_feature_scaler,
