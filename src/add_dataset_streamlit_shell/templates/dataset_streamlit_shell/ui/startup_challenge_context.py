@@ -7,6 +7,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from dataset_streamlit_shell.host_context import assemble_host_context
+
 CHALLENGE_COMPANIES: tuple[str, ...] = (
     "edupulse",
     "vitalrisk",
@@ -427,9 +429,8 @@ def restore_startup_challenge_ui(empty_shell: Path, live_ui: Path) -> None:
     shutil.copyfile(empty_shell, live_ui)
 
 
-def challenge_host_context(
+def startup_workshop_pack_layer(
     *,
-    company: str,
     start_csv: str,
     handbook: str,
     working_csv: str,
@@ -440,11 +441,10 @@ def challenge_host_context(
     page_py: str,
     empty_shell: str,
 ) -> str:
-    """專案展示專用 host_context；不叠加 dataset_base_context。"""
-    fragment = _COMPANY_FRAGMENTS.get(
-        company,
-        f"【目前公司】\n{company}\n請依該公司資料說明書與委託情境協助；不要混用其他公司題目。",
-    )
+    """AI新創工作坊課程包層：挑戰軌道檔案邊界（白名單）與模型區／成果區完成樣貌。
+
+    不含當前挑戰公司的倫理／資料加碼（那是頁面層，見 ``challenge_company_page_layer``）。
+    """
     return f"""【AI Startup Challenge 模式】
 你是學生團隊的第五位隊友（資料／專案 Agent），正在協助完成 Startup Challenge 上台展示。
 學生才是負責人：最後的清理決策、模型選擇、倫理界線與上台解釋，必須由學生做出並能說清楚。
@@ -463,8 +463,8 @@ def challenge_host_context(
    寫 {live_ui} 頂層時，保留 ChallengePaths 那行，並依學生選的模型貼上下列 import（可刪沒用到的名字）。不要 from ml.xxx、不要 from .xxx、不要 import lr_ui 或 logistic_regression_ui 或 startup_challenge_page 或 dual_pane_shell 或 data_ui。pandas／streamlit／pyplot 可加。
    import pandas as pd
    import streamlit as st
-   from dataset_streamlit_shell.ml.regression import apply_feature_scaler, attach_test_costs, create_feature_scaler, gradient_descent_steps, predict_with_parameters
-   from dataset_streamlit_shell.ml.classification import attach_logistic_test_costs, confusion_matrix_counts, logistic_gradient_descent_steps, predict_class_from_proba, predict_proba, precision_recall_f1_from_counts, sample_gradient_steps
+   from dataset_streamlit_shell.ml.startup_challenge_regression import apply_feature_scaler, attach_test_costs, create_feature_scaler, gradient_descent_steps, predict_with_parameters
+   from dataset_streamlit_shell.ml.startup_challenge_classification import attach_logistic_test_costs, confusion_matrix_counts, logistic_gradient_descent_steps, predict_class_from_proba, predict_proba, precision_recall_f1_from_counts, sample_gradient_steps
    學生選線性回歸用 gradient_descent_steps；選邏輯迴歸用 logistic_gradient_descent_steps。縮放用 create_feature_scaler（method 用 "zscore"／"maxdiv"／"minmax"／"mean"）只 fit 訓練集，再用 apply_feature_scaler。Cost 抽樣用 sample_gradient_steps（線性回歸的 steps 也能丟進去）。
    分類先把 y 編成 0／1。模型區畫抽樣後的 Cost vs Iteration（不要每步重畫整頁）；兩個數值特徵才畫決策邊界。不要用 sklearn LogisticRegression.fit 當逐步 Cost 來源。
    畫表不要 df.melt() 再 st.dataframe，也不要把含文字欄的寬表丟進 st.line_chart／st.bar_chart。melt 後的 value 欄會混字串與數字，pyarrow 丟 ArrowTypeError。Cost 用 pd.DataFrame({{"iteration": ..., "cost": ...}})，兩欄都是數字。object 欄若要進 st.dataframe，先轉成字串。
@@ -478,31 +478,32 @@ def challenge_host_context(
 - Challenge 起點資料：{start_csv}
   → 只讀起點，不要覆蓋。
 - Challenge 資料說明書：{handbook}
-  → 解釋欄位與目標前，先用工具讀取說明書。不要把說明書全文貼進頁面。
+  → 只讀。解釋欄位與目標前，先用工具讀取說明書。不要把說明書全文貼進頁面。
 - Challenge 工作資料：{working_csv}
   （若尚未建立，先從起點檔複製再清理）
 - Challenge 訓練資料：{train_csv}
 - Challenge 測試資料：{test_csv}
 - 改寫目前公司的 working.csv 時必須刪除該公司的 train.csv 與 test.csv（切分作廢）。
-- 不要改根目錄的 original.csv／working.csv／ready.csv／train.csv／val.csv／test.csv；那些是雙表整理線，不是本挑戰軌道。
+- 挑戰軌道的工作副本與切分只寫在目前公司資料夾；不要改 workspace 根目錄的 original.csv／working.csv／ready.csv／train.csv／val.csv／test.csv，那些不是本挑戰軌道。
 - 不要上網下載替代資料集，不要改用其他公司的 CSV。
 - 不要修改其他教學頁（邏輯迴歸、決策樹等）的程式，除非學生明確只要修專案展示頁。
-- 若需寫檢查或整理腳本，只放在 {scripts_dir} 下。
 - 不要編輯 {page_py}；那是專案展示頁骨架。
 - 不要編輯 {empty_shell}；那是尚無 Challenge UI 快照時的專案展示空殼還原來源。
 - 不要直接改各公司 Challenge UI 快照。
 - 不要在模型區／成果區呼叫 challenge_host_context 當路徑物件。
 
-【允許改動範圍】
+【可寫清單（Challenge 允許改動範圍）】
 - {live_ui}（只填模型區／成果區兩個函式）
-- 目前挑戰公司資料夾內的 working.csv、train.csv、test.csv
-- 必要時 scripts/
+- {working_csv}（目前挑戰公司的 Challenge 工作資料）
+- {train_csv}（目前挑戰公司的 Challenge 訓練資料）
+- {test_csv}（目前挑戰公司的 Challenge 測試資料）
+- 必要時 {scripts_dir}/ 下的檢查或整理腳本
 
 【回答與行動規則】
 1. 先理解問題：客戶是誰、目標欄是什麼、分類還是回歸。
 2. 先讀說明書，再用 read_file／exec 實際看 CSV，不要憑記憶捏造欄位意義。
 3. 發現缺失、異常、字串不一致時：先說明現象與選項利弊，再詢問學生要採哪一種；不要默默改完所有資料。
-4. 幫寫訓練程式時：讀目前公司的 train.csv 訓練、用目前公司的 test.csv 評估。學生選定線性／邏輯迴歸時用教學頁同一套 GD 函式（見上），不要抄教學頁 UI。只做最小可運行版本。不要做超參大掃描或完整 UI 重構。
+4. 幫寫訓練程式時：讀目前公司的 train.csv 訓練、用目前公司的 test.csv 評估。學生選定線性／邏輯迴歸時用上面列出的 GD 函式，不要抄教學頁 UI。只做最小可運行版本。不要做超參大掃描或完整 UI 重構。
 5. 用繁體中文、短句協助；技術細節可保留，但最後要能對客戶說人話。
 6. 若學生只要分數、不管限制：把對話拉回該公司必講紅線。
 7. 若學生要求你「直接全部做完讓我上台」：可以協助，但必須留下他們需要親口解釋的決策點（清理選擇、模型理由、倫理紅線）。
@@ -515,14 +516,46 @@ def challenge_host_context(
 - 覆寫 Challenge 起點 CSV。
 - 剧透「老師故意埋了哪些缺陷」；改為引導學生自己檢查。
 - 用 BOARD_* 常數或寫死分數當成果真相。
-- 自行還原專案展示空殼；還原空殼只走頁上的清除回起點確認。
+- 自行還原專案展示空殼；還原空殼只走頁上的清除回起點確認。"""
 
-【目前公司】
-{company}
-請依該公司資料說明書與委託情境協助；不要混用其他公司題目。
 
-{fragment}
-"""
+def challenge_company_page_layer(company: str) -> str:
+    """頁面層：當前挑戰公司與其倫理／資料加碼（只強化必講紅線與檢查方向，不剧透缺陷）。"""
+    layer = (
+        "【目前公司】\n"
+        f"{company}\n"
+        "請依該公司資料說明書與委託情境協助；不要混用其他公司題目。"
+    )
+    fragment = _COMPANY_FRAGMENTS.get(company)
+    return f"{layer}\n\n{fragment}" if fragment else layer
+
+
+def challenge_host_context(
+    *,
+    company: str,
+    start_csv: str,
+    handbook: str,
+    working_csv: str,
+    train_csv: str,
+    test_csv: str,
+    scripts_dir: str,
+    live_ui: str,
+    page_py: str,
+    empty_shell: str,
+) -> str:
+    """專案展示 host：框架層 + AI新創工作坊課程包層 + 當前挑戰公司加碼（頁面層）。"""
+    pack_layer = startup_workshop_pack_layer(
+        start_csv=start_csv,
+        handbook=handbook,
+        working_csv=working_csv,
+        train_csv=train_csv,
+        test_csv=test_csv,
+        scripts_dir=scripts_dir,
+        live_ui=live_ui,
+        page_py=page_py,
+        empty_shell=empty_shell,
+    )
+    return assemble_host_context(pack_layer, challenge_company_page_layer(company))
 
 
 def challenge_page_snapshot(
