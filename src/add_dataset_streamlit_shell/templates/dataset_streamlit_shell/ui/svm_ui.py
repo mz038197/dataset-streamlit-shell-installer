@@ -11,9 +11,9 @@ import pandas as pd
 import streamlit as st
 
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
-    _display_path,
+    display_path,
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
@@ -916,7 +916,7 @@ def _render_svm_save_section(artifact: LinearSvmArtifact, *, key: str) -> None:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = CLASSIFICATION_MODEL_DIR / f"linear_svm_{stamp}.json"
         save_svm_artifact(artifact, path)
-        st.success(f"已保存模型：`{_display_path(path)}`")
+        st.success(f"已保存模型：`{display_path(path)}`")
 
 
 def _render_svm_inference_section(*, trained_artifact: LinearSvmArtifact | None, key_prefix: str) -> None:

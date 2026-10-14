@@ -17,7 +17,7 @@ from dataset_streamlit_shell.host_context import assemble_host_context
 from dataset_streamlit_shell.ml.integration import clear_dual_table_copies
 from dataset_streamlit_shell.ui.data_ui import (
     WORKSPACE_DIR,
-    _display_path,
+    display_path,
     render_chat_panel,
 )
 
@@ -207,11 +207,11 @@ def load_cleaning_log(limit: int = 8) -> list[dict[str, object]]:
 
 def data_science_pack_layer() -> str:
     """Data Science 課程包層：雙表、Original、Working 與 cleaning_log 的整理規則與可寫清單。"""
-    source = _display_path(ORIGINAL_DATASET_PATH)
-    working = _display_path(WORKING_DATASET_PATH)
-    cleaning_log = _display_path(CLEANING_LOG_PATH)
-    passengers_copy = _display_path(DUAL_TABLE_COPIES_DIR / "passengers.csv")
-    voyage_copy = _display_path(DUAL_TABLE_COPIES_DIR / "voyage.csv")
+    source = display_path(ORIGINAL_DATASET_PATH)
+    working = display_path(WORKING_DATASET_PATH)
+    cleaning_log = display_path(CLEANING_LOG_PATH)
+    passengers_copy = display_path(DUAL_TABLE_COPIES_DIR / "passengers.csv")
+    voyage_copy = display_path(DUAL_TABLE_COPIES_DIR / "voyage.csv")
     return (
         "【Data Science 課程包】本頁屬於 AI 協作資料整理。"
         f"可寫清單：{working}；{cleaning_log}；"

@@ -16,6 +16,7 @@ if str(TEMPLATE_ROOT) not in sys.path:
 from dataset_streamlit_shell.ui.startup_challenge_context import (  # noqa: E402
     CHALLENGE_COMPANIES,
     CHALLENGE_GREETING,
+    ChallengeHostPaths,
     DATA_VIEW_START,
     DATA_VIEW_TEST,
     DATA_VIEW_TRAIN,
@@ -288,13 +289,15 @@ _HOST_UI_PATHS = dict(
 def test_host_context_is_workflow_not_pitch_board() -> None:
     text = challenge_host_context(
         company="edupulse",
-        start_csv="dataset_streamlit_shell/workspace/challenge/edupulse.csv",
-        handbook="dataset_streamlit_shell/workspace/challenge/edupulse_資料說明書.md",
-        working_csv="dataset_streamlit_shell/workspace/challenge/edupulse/working.csv",
-        train_csv="dataset_streamlit_shell/workspace/challenge/edupulse/train.csv",
-        test_csv="dataset_streamlit_shell/workspace/challenge/edupulse/test.csv",
-        scripts_dir="dataset_streamlit_shell/scripts",
-        **_HOST_UI_PATHS,
+        paths=ChallengeHostPaths(
+            start_csv="dataset_streamlit_shell/workspace/challenge/edupulse.csv",
+            handbook="dataset_streamlit_shell/workspace/challenge/edupulse_資料說明書.md",
+            working_csv="dataset_streamlit_shell/workspace/challenge/edupulse/working.csv",
+            train_csv="dataset_streamlit_shell/workspace/challenge/edupulse/train.csv",
+            test_csv="dataset_streamlit_shell/workspace/challenge/edupulse/test.csv",
+            scripts_dir="dataset_streamlit_shell/scripts",
+            **_HOST_UI_PATHS,
+        ),
     )
     assert "【AI Startup Challenge 模式】" in text
     assert "模型區" in text
@@ -309,7 +312,9 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "nn_form.json" not in text
     assert "Challenge 工作資料" in text
     assert "只作為重置來源" not in text
-    assert "不要改 workspace 根目錄的 original.csv" in text
+    assert "工作副本與切分只寫在目前公司資料夾" in text
+    assert "original.csv" not in text
+    assert "ready.csv" not in text
     assert "challenge_model_artifact" in text
     assert "自行還原專案展示空殼" in text
     assert "清除回起點確認" in text
@@ -338,13 +343,15 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
 def test_host_context_vitalrisk_fragment() -> None:
     text = challenge_host_context(
         company="vitalrisk",
-        start_csv="challenge/vitalrisk.csv",
-        handbook="challenge/vitalrisk_資料說明書.md",
-        working_csv="challenge/vitalrisk/working.csv",
-        train_csv="challenge/vitalrisk/train.csv",
-        test_csv="challenge/vitalrisk/test.csv",
-        scripts_dir="scripts",
-        **_HOST_UI_PATHS,
+        paths=ChallengeHostPaths(
+            start_csv="challenge/vitalrisk.csv",
+            handbook="challenge/vitalrisk_資料說明書.md",
+            working_csv="challenge/vitalrisk/working.csv",
+            train_csv="challenge/vitalrisk/train.csv",
+            test_csv="challenge/vitalrisk/test.csv",
+            scripts_dir="scripts",
+            **_HOST_UI_PATHS,
+        ),
     )
     assert "假陽性" in text or "假陰性" in text
     assert "不是診斷" in text
@@ -430,7 +437,7 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     assert "_call_zone" in page
     assert "_is_streamlit_rerun" in page
     assert "from dataset_streamlit_shell.ui import startup_challenge_ui as live_ui_module" in page
-    assert "live_ui=_display_path(LIVE_UI_PATH)" in page
+    assert "live_ui=display_path(LIVE_UI_PATH)" in page
     assert page.split("def _reload_live_ui")[0].count(
         "from dataset_streamlit_shell.ui import startup_challenge_ui"
     ) == 0

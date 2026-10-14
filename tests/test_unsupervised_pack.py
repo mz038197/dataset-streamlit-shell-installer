@@ -62,9 +62,9 @@ def test_unsupervised_layer_uses_builtin_examples_and_writes_no_root_files() -> 
 
     assert "內建範例" in layer
     assert "built-in-data/clustering" in layer
-    assert "可寫清單" in layer
+    assert "可寫清單：無" in layer
     for root_file in ("original.csv", "working.csv", "ready.csv", "cleaning_log"):
-        assert root_file in layer  # 明列為不可寫
+        assert root_file not in layer  # 白名單：不點名其他課程包的檔
     # 不帶 Data Science 的整理指示
     assert "commit_dual_table_merge" not in layer
     assert "Working 工作資料路徑" not in layer

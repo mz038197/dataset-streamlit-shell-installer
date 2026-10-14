@@ -99,3 +99,41 @@ def test_update_without_record_fails_and_suggests_force(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "--force" in result.output
+
+
+def _record_with_unknown_pack(project: Path) -> None:
+    _invoke("add", "data-science", "-C", str(project), "--no-install-deps")
+    (project / SHELL / "course_packs.json").write_text(
+        json.dumps({"course_packs": ["data-science", "no-such-pack"]}),
+        encoding="utf-8",
+    )
+
+
+def _assert_friendly_unknown_pack_error(result) -> None:
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception  # 不是 traceback
+    assert "no-such-pack" in result.output
+    for pack in COURSE_PACKS:
+        assert pack.name in result.output
+
+
+def test_unknown_pack_in_record_is_friendly_error_for_default_command(tmp_path: Path) -> None:
+    _record_with_unknown_pack(tmp_path)
+
+    result = _invoke("-C", str(tmp_path), "--update", "--no-install-deps")
+
+    _assert_friendly_unknown_pack_error(result)
+
+
+def test_unknown_pack_in_record_is_friendly_error_for_list(tmp_path: Path) -> None:
+    _record_with_unknown_pack(tmp_path)
+
+    _assert_friendly_unknown_pack_error(_invoke("list", "-C", str(tmp_path)))
+
+
+def test_unknown_pack_in_record_is_friendly_error_for_add(tmp_path: Path) -> None:
+    _record_with_unknown_pack(tmp_path)
+
+    result = _invoke("add", "supervised", "-C", str(tmp_path), "--no-install-deps")
+
+    _assert_friendly_unknown_pack_error(result)

@@ -91,19 +91,21 @@ def test_workshop_dependencies_match_its_third_party_imports(tmp_path: Path) -> 
 _SHELL = "dataset_streamlit_shell"
 
 
-def _paths(company: str) -> dict[str, str]:
+def _paths(company: str):
+    from dataset_streamlit_shell.ui.startup_challenge_context import ChallengeHostPaths
+
     challenge = f"{_SHELL}/workspace/challenge"
-    return {
-        "start_csv": f"{challenge}/{company}.csv",
-        "handbook": f"{challenge}/{company}_資料說明書.md",
-        "working_csv": f"{challenge}/{company}/working.csv",
-        "train_csv": f"{challenge}/{company}/train.csv",
-        "test_csv": f"{challenge}/{company}/test.csv",
-        "scripts_dir": f"{_SHELL}/scripts",
-        "live_ui": f"{_SHELL}/ui/startup_challenge_ui.py",
-        "page_py": f"{_SHELL}/ui/startup_challenge_page.py",
-        "empty_shell": f"{_SHELL}/ui/startup_challenge_empty_shell.py",
-    }
+    return ChallengeHostPaths(
+        start_csv=f"{challenge}/{company}.csv",
+        handbook=f"{challenge}/{company}_資料說明書.md",
+        working_csv=f"{challenge}/{company}/working.csv",
+        train_csv=f"{challenge}/{company}/train.csv",
+        test_csv=f"{challenge}/{company}/test.csv",
+        scripts_dir=f"{_SHELL}/scripts",
+        live_ui=f"{_SHELL}/ui/startup_challenge_ui.py",
+        page_py=f"{_SHELL}/ui/startup_challenge_page.py",
+        empty_shell=f"{_SHELL}/ui/startup_challenge_empty_shell.py",
+    )
 
 
 def test_challenge_host_is_framework_plus_workshop_layer_plus_company_layer() -> None:
@@ -116,8 +118,8 @@ def test_challenge_host_is_framework_plus_workshop_layer_plus_company_layer() ->
     )
 
     paths = _paths("edupulse")
-    host = challenge_host_context(company="edupulse", **paths)
-    pack_layer = startup_workshop_pack_layer(**paths)
+    host = challenge_host_context(company="edupulse", paths=paths)
+    pack_layer = startup_workshop_pack_layer(paths)
     page_layer = challenge_company_page_layer("edupulse")
 
     assert host.startswith(framework_host_context())
@@ -135,15 +137,15 @@ def test_workshop_layer_is_a_whitelist_of_track_files_without_company_fragment()
     )
 
     paths = _paths("airsense")
-    layer = startup_workshop_pack_layer(**paths)
+    layer = startup_workshop_pack_layer(paths)
 
     assert "可寫清單" in layer
     whitelist = layer.split("可寫清單", 1)[1].split("【", 1)[0]
     for key in ("live_ui", "working_csv", "train_csv", "test_csv"):
-        assert paths[key] in whitelist, key
-    assert paths["start_csv"] not in whitelist
-    assert paths["empty_shell"] not in whitelist
-    assert paths["page_py"] not in whitelist
+        assert getattr(paths, key) in whitelist, key
+    assert paths.start_csv not in whitelist
+    assert paths.empty_shell not in whitelist
+    assert paths.page_py not in whitelist
     assert "加碼" not in layer
     assert "-200" not in layer
 
@@ -170,7 +172,7 @@ def test_workshop_layer_import_instructions_resolve_without_supervised(
     )
 
     shell = installed_shell(tmp_path, "startup-workshop")
-    lines = _import_lines(startup_workshop_pack_layer(**_paths("edupulse")))
+    lines = _import_lines(startup_workshop_pack_layer(_paths("edupulse")))
 
     joined = "\n".join(lines)
     assert " gradient_descent_steps" in joined

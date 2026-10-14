@@ -8,10 +8,10 @@ import traceback
 import pandas as pd
 import streamlit as st
 
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
     WORKSPACE_DIR,
-    _display_path,
+    display_path,
     prepare_dataframe_for_display,
     render_chat_panel,
     render_dataset_metrics,
@@ -22,6 +22,7 @@ from dataset_streamlit_shell.ui.startup_challenge_context import (
     CHALLENGE_COMPANIES,
     CHALLENGE_GREETING,
     CHALLENGE_SPLIT_SIGNATURE_KEY,
+    ChallengeHostPaths,
     CLEAR_BACK_TO_START_BUTTON_LABEL,
     CLEAR_BACK_TO_START_CANCEL_LABEL,
     CLEAR_BACK_TO_START_CONFIRM_LABEL,
@@ -408,15 +409,17 @@ def render_startup_challenge_page() -> None:
     paths = challenge_paths(WORKSPACE_DIR, display_company)
     host = challenge_host_context(
         company=display_company,
-        start_csv=_display_path(paths.start_csv),
-        handbook=_display_path(paths.handbook),
-        working_csv=_display_path(paths.working_csv),
-        train_csv=_display_path(paths.train_csv),
-        test_csv=_display_path(paths.test_csv),
-        scripts_dir=_display_path(SHELL_ROOT / "scripts"),
-        live_ui=_display_path(LIVE_UI_PATH),
-        page_py=_display_path(SHELL_ROOT / "ui" / "startup_challenge_page.py"),
-        empty_shell=_display_path(EMPTY_SHELL_PATH),
+        paths=ChallengeHostPaths(
+            start_csv=display_path(paths.start_csv),
+            handbook=display_path(paths.handbook),
+            working_csv=display_path(paths.working_csv),
+            train_csv=display_path(paths.train_csv),
+            test_csv=display_path(paths.test_csv),
+            scripts_dir=display_path(SHELL_ROOT / "scripts"),
+            live_ui=display_path(LIVE_UI_PATH),
+            page_py=display_path(SHELL_ROOT / "ui" / "startup_challenge_page.py"),
+            empty_shell=display_path(EMPTY_SHELL_PATH),
+        ),
     )
     snapshot = challenge_page_snapshot(
         company=display_company,

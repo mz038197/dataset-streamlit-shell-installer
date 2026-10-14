@@ -8,16 +8,16 @@ from __future__ import annotations
 
 import streamlit as st
 
-from dataset_streamlit_shell.host_context import assemble_host_context
-from dataset_streamlit_shell.ui.data_ui import SHELL_ROOT, _display_path, render_chat_panel
+from dataset_streamlit_shell.host_context import SHELL_ROOT, assemble_host_context
+from dataset_streamlit_shell.ui.data_ui import display_path, render_chat_panel
 
 CV_DATA_DIR = SHELL_ROOT / "built-in-data" / "computer-vision"
 
 
 def computer_vision_pack_layer() -> str:
     """電腦視覺課程包層：只用內建範例圖片與頁面上的模型結果；可寫清單為空（白名單）。"""
-    examples = _display_path(CV_DATA_DIR / "examples")
-    models = _display_path(CV_DATA_DIR / "models")
+    examples = display_path(CV_DATA_DIR / "examples")
+    models = display_path(CV_DATA_DIR / "models")
     return (
         "【電腦視覺課程包】本頁屬於電腦視覺（CNN、影像分類、物件偵測、語意分割、實例分割、提示式分割）。"
         f"本頁使用內建範例圖片 {examples} 與學生在頁面上傳的圖片；"
