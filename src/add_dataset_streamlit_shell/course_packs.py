@@ -197,6 +197,28 @@ COURSE_PACKS: tuple[CoursePack, ...] = (
 )
 
 
+ALL_PACKS = "all"
+
+
+class UnknownCoursePackError(ValueError):
+    """指令名稱不在課程包清單內。"""
+
+
+def resolve_course_packs(names: Iterable[str]) -> tuple[CoursePack, ...]:
+    """把指令名稱（或 ``all``）轉成課程包，依清單順序、去重；有未知名稱就報錯並列出可用名稱。"""
+    by_name = {pack.name: pack for pack in COURSE_PACKS}
+    wanted = list(names)
+    unknown = [name for name in wanted if name != ALL_PACKS and name not in by_name]
+    if unknown:
+        available = ", ".join([*by_name, ALL_PACKS])
+        raise UnknownCoursePackError(
+            f"Unknown course pack: {', '.join(unknown)}. Available: {available}"
+        )
+    if ALL_PACKS in wanted:
+        return COURSE_PACKS
+    return tuple(pack for pack in COURSE_PACKS if pack.name in wanted)
+
+
 def _template_files(shell_root: Path) -> list[str]:
     return sorted(
         path.relative_to(shell_root).as_posix()
