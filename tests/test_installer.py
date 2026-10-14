@@ -194,6 +194,22 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
     assert result.installed_dependencies[-1] == CHARSET_NORMALIZER_CONSTRAINT
 
 
+def test_install_shell_uses_git_runtime_when_no_sibling_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(installer, "_resolve_runtime_path", lambda _: None)
+
+    def runner(args: list[str], **kwargs: object) -> None:
+        calls.append(args)
+
+    result = install_shell(tmp_path, dependency_runner=runner)
+
+    runtime = "peas-agent-runtime @ git+https://github.com/mz038197/peas-agent-runtime.git"
+    assert calls[1] == ["uv", "add", runtime]
+    assert result.installed_dependencies[-2] == runtime
+
+
 def test_check_contract_uses_uv_run_not_global_import(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

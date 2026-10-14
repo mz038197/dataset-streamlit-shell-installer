@@ -44,6 +44,9 @@ PROJECT_DEPENDENCIES = (
 )
 # requests 間接依賴；避開 PyPI yanked 的 3.4.8
 CHARSET_NORMALIZER_CONSTRAINT = "charset-normalizer>=3.4.9"
+RUNTIME_DEPENDENCY = (
+    "peas-agent-runtime @ git+https://github.com/mz038197/peas-agent-runtime.git"
+)
 DependencyRunner = Callable[[list[str]], None]
 
 
@@ -172,11 +175,11 @@ def _install_dependencies(
         runtime_label = f"peas-agent-runtime @ {runtime_path}"
     else:
         dependency_runner(
-            ["uv", "add", "peas-agent-runtime"],
+            ["uv", "add", RUNTIME_DEPENDENCY],
             cwd=project_root,
             check=True,
         )
-        runtime_label = "peas-agent-runtime"
+        runtime_label = RUNTIME_DEPENDENCY
     dependency_runner(
         ["uv", "add", CHARSET_NORMALIZER_CONSTRAINT],
         cwd=project_root,
