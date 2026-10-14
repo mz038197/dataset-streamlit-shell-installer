@@ -16,7 +16,7 @@ import streamlit as st
 from dataset_streamlit_shell.host_context import assemble_host_context
 from dataset_streamlit_shell.ui.data_ui import (
     WORKSPACE_DIR,
-    _display_path,
+    display_path,
     render_chat_panel,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
@@ -98,11 +98,11 @@ def pca_status(df: pd.DataFrame) -> dict[str, object]:
 
 def pca_pack_layer() -> str:
     """降維分析課程包層：Data Science 課程包層的副本（Working 規則與可寫清單）。"""
-    source = _display_path(ORIGINAL_DATASET_PATH)
-    working = _display_path(WORKING_DATASET_PATH)
-    cleaning_log = _display_path(CLEANING_LOG_PATH)
-    passengers_copy = _display_path(DUAL_TABLE_COPIES_DIR / "passengers.csv")
-    voyage_copy = _display_path(DUAL_TABLE_COPIES_DIR / "voyage.csv")
+    source = display_path(ORIGINAL_DATASET_PATH)
+    working = display_path(WORKING_DATASET_PATH)
+    cleaning_log = display_path(CLEANING_LOG_PATH)
+    passengers_copy = display_path(DUAL_TABLE_COPIES_DIR / "passengers.csv")
+    voyage_copy = display_path(DUAL_TABLE_COPIES_DIR / "voyage.csv")
     return (
         "【降維分析課程包】本頁屬於降維分析，以 Working 工作資料做 PCA。"
         f"可寫清單：{working}；{cleaning_log}；"

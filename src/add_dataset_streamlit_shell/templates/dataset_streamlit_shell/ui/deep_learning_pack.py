@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataset_streamlit_shell.host_context import assemble_host_context
-from dataset_streamlit_shell.ui.data_ui import SHELL_ROOT, WORKSPACE_DIR, _display_path
+from dataset_streamlit_shell.host_context import SHELL_ROOT, assemble_host_context
+from dataset_streamlit_shell.ui.data_ui import WORKSPACE_DIR, display_path
 from dataset_streamlit_shell.ui.nn_form_state import (
     nn_form_path,
     nn_last_run_path,
@@ -15,10 +15,10 @@ BUILTIN_NN_DATA_PATH = SHELL_ROOT / "built-in-data" / "classification" / "nn_bin
 
 def deep_learning_pack_layer() -> str:
     """深度學習課程包層：只用內建範例資料；寫檔只限本包可寫清單。"""
-    builtin = _display_path(BUILTIN_NN_DATA_PATH)
-    form = _display_path(nn_form_path(WORKSPACE_DIR))
-    request = _display_path(nn_train_request_path(WORKSPACE_DIR))
-    last_run = _display_path(nn_last_run_path(WORKSPACE_DIR))
+    builtin = display_path(BUILTIN_NN_DATA_PATH)
+    form = display_path(nn_form_path(WORKSPACE_DIR))
+    request = display_path(nn_train_request_path(WORKSPACE_DIR))
+    last_run = display_path(nn_last_run_path(WORKSPACE_DIR))
     return (
         "【深度學習課程包】本頁屬於深度學習，使用內建範例資料 "
         f"{builtin}，只讀不寫，也不要改用其他資料檔。"

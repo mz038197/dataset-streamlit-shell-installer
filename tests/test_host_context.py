@@ -77,20 +77,22 @@ def test_overview_host_is_framework_layer_only() -> None:
     assert overview_host_context() == framework_host_context()
 
 
-def _workshop_paths(company: str) -> dict[str, str]:
+def _workshop_paths(company: str):
+    from dataset_streamlit_shell.ui.startup_challenge_context import ChallengeHostPaths
+
     shell = "dataset_streamlit_shell"
     challenge = f"{shell}/workspace/challenge"
-    return {
-        "start_csv": f"{challenge}/{company}.csv",
-        "handbook": f"{challenge}/{company}_資料說明書.md",
-        "working_csv": f"{challenge}/{company}/working.csv",
-        "train_csv": f"{challenge}/{company}/train.csv",
-        "test_csv": f"{challenge}/{company}/test.csv",
-        "scripts_dir": f"{shell}/scripts",
-        "live_ui": f"{shell}/ui/startup_challenge_ui.py",
-        "page_py": f"{shell}/ui/startup_challenge_page.py",
-        "empty_shell": f"{shell}/ui/startup_challenge_empty_shell.py",
-    }
+    return ChallengeHostPaths(
+        start_csv=f"{challenge}/{company}.csv",
+        handbook=f"{challenge}/{company}_資料說明書.md",
+        working_csv=f"{challenge}/{company}/working.csv",
+        train_csv=f"{challenge}/{company}/train.csv",
+        test_csv=f"{challenge}/{company}/test.csv",
+        scripts_dir=f"{shell}/scripts",
+        live_ui=f"{shell}/ui/startup_challenge_ui.py",
+        page_py=f"{shell}/ui/startup_challenge_page.py",
+        empty_shell=f"{shell}/ui/startup_challenge_empty_shell.py",
+    )
 
 
 def _pack_layers() -> dict[str, str]:
@@ -111,7 +113,7 @@ def _pack_layers() -> dict[str, str]:
         "deep-learning": deep_learning_pack_layer(),
         "computer-vision": computer_vision_pack_layer(),
         "pca": pca_pack_layer(),
-        "startup-workshop": startup_workshop_pack_layer(**_workshop_paths("edupulse")),
+        "startup-workshop": startup_workshop_pack_layer(_workshop_paths("edupulse")),
     }
 
 
@@ -140,7 +142,7 @@ def _page_hosts() -> dict[str, tuple[str, str]]:
         "PCA": ("pca", pca_host_context()),
         "專案展示": (
             "startup-workshop",
-            challenge_host_context(company="edupulse", **_workshop_paths("edupulse")),
+            challenge_host_context(company="edupulse", paths=_workshop_paths("edupulse")),
         ),
     }
 
@@ -159,3 +161,35 @@ def test_old_default_and_teaching_hosts_are_gone() -> None:
 
     assert not hasattr(data_ui, "dataset_base_context")
     assert not hasattr(data_ui, "teaching_page_host_context")
+
+
+DATA_SCIENCE_FILE_NAMES = (
+    "original.csv",
+    "working.csv",
+    "ready.csv",
+    "cleaning_log",
+    "雙表",
+)
+
+
+def _without_challenge_track_working(layer: str) -> str:
+    """挑戰軌道自己的工作副本也叫 working.csv，但一定指目前公司資料夾內那份。"""
+    return layer.replace("edupulse/working.csv", "edupulse/<working>").replace(
+        "公司的 working.csv", "公司的 <working>"
+    )
+
+
+def test_pack_layers_do_not_name_data_science_files() -> None:
+    """課程包層是白名單、不引用其他課程包；只有 Data Science 與 PCA 的那份副本會提到 DS 檔名。"""
+    for pack, layer in _pack_layers().items():
+        if pack in {"data-science", "pca"}:
+            continue
+        text = _without_challenge_track_working(layer)
+        for name in DATA_SCIENCE_FILE_NAMES:
+            assert name not in text, f"{pack} 課程包層提到 {name}"
+
+
+def test_assemble_drops_page_layer_without_pack_layer() -> None:
+    """頁面層只能疊在課程包層上；沒有課程包層時頁面層被丟掉，只剩框架層。"""
+    assert assemble_host_context(None, PAGE_LAYER) == framework_host_context()
+    assert assemble_host_context(page_layer=PAGE_LAYER) == framework_host_context()

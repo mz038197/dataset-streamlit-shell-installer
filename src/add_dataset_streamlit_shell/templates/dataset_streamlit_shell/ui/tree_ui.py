@@ -40,8 +40,8 @@ from dataset_streamlit_shell.plotting import (
 )
 from dataset_streamlit_shell.ui import tree_ensemble_quiz as quiz
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,

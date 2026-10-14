@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import NoReturn
 
 import typer
 
@@ -34,15 +35,16 @@ def _project_root_option() -> Path:
     )
 
 
+def _fail(exc: Exception) -> NoReturn:
+    """印出友善錯誤（不帶 traceback）並以非零結束。"""
+    typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+    raise typer.Exit(code=1) from exc
+
+
 @app.callback(invoke_without_command=True)
 def install(
     ctx: typer.Context,
-    project_root: Path = typer.Option(
-        Path.cwd(),
-        "--project-root",
-        "-C",
-        help="Workshop project root to install into.",
-    ),
+    project_root: Path = _project_root_option(),
     force: bool = typer.Option(
         False,
         "--force",
@@ -91,9 +93,8 @@ def install(
             require_agent_contract=require_agent_contract,
             install_dependencies=install_dependencies,
         )
-    except (FileExistsError, FileNotFoundError) as exc:
-        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1) from exc
+    except (FileExistsError, FileNotFoundError, UnknownCoursePackError) as exc:
+        _fail(exc)
 
     action = "updated" if update else "installed"
     typer.secho(f"Dataset Streamlit shell {action}.", fg=typer.colors.GREEN)
@@ -148,8 +149,7 @@ def add(
             install_dependencies=install_dependencies,
         )
     except (UnknownCoursePackError, FileNotFoundError) as exc:
-        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1) from exc
+        _fail(exc)
 
     if result.framework_installed:
         typer.secho("AI Lab framework installed.", fg=typer.colors.GREEN)
@@ -169,7 +169,11 @@ def add(
 def list_packs(project_root: Path = _project_root_option()) -> None:
     """List course packs, their sidebar sections and whether they are installed."""
 
-    for pack, installed in course_pack_status(project_root):
+    try:
+        status = course_pack_status(project_root)
+    except UnknownCoursePackError as exc:
+        _fail(exc)
+    for pack, installed in status:
         state = "已安裝" if installed else "未安裝"
         typer.echo(f"{pack.name:<18} {pack.sidebar_section:<16} {state}")
 

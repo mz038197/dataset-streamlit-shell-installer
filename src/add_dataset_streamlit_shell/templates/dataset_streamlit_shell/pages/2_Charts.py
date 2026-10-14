@@ -24,7 +24,7 @@ from dataset_streamlit_shell.ui.data_science import (
     working_dataset_file_exists,
 )
 from dataset_streamlit_shell.ui.data_ui import (
-    _display_path,
+    display_path,
     brand_page_icon,
     inject_style,
     render_dataset_metrics,
@@ -1318,7 +1318,7 @@ def run_page() -> None:
             st.caption(f"目前使用：{source_label}（本頁只讀 Working）")
             if source_path:
                 with st.expander("技術資訊", expanded=False):
-                    st.caption(f"資料檔：`{_display_path(source_path)}`")
+                    st.caption(f"資料檔：`{display_path(source_path)}`")
 
             roles = _infer_column_roles(df)
             st.markdown("### 選對圖種")

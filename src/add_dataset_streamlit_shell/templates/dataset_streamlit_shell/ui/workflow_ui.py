@@ -48,10 +48,10 @@ from dataset_streamlit_shell.ui.data_science import (
     save_split_datasets,
     working_dataset_file_exists,
 )
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
     WORKSPACE_DIR,
-    _display_path,
+    display_path,
     render_dataset_metrics,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
@@ -131,7 +131,7 @@ def _render_recent_log() -> None:
     with st.expander("最近整理紀錄", expanded=False):
         entries = load_cleaning_log()
         if not entries:
-            st.caption(f"尚無紀錄。Agent 修改資料後可寫入 `{_display_path(CLEANING_LOG_PATH)}`。")
+            st.caption(f"尚無紀錄。Agent 修改資料後可寫入 `{display_path(CLEANING_LOG_PATH)}`。")
             return
         for entry in entries:
             created_at = _format_log_time(str(entry.get("created_at", "")))
@@ -1466,9 +1466,9 @@ def render_split_page() -> None:
                     actor="ui",
                 )
                 st.success(
-                    f"已寫入 `{_display_path(TRAIN_DATASET_PATH)}`、"
-                    f"`{_display_path(VAL_DATASET_PATH)}`、"
-                    f"`{_display_path(TEST_DATASET_PATH)}`。"
+                    f"已寫入 `{display_path(TRAIN_DATASET_PATH)}`、"
+                    f"`{display_path(VAL_DATASET_PATH)}`、"
+                    f"`{display_path(TEST_DATASET_PATH)}`。"
                 )
 
     with agent:

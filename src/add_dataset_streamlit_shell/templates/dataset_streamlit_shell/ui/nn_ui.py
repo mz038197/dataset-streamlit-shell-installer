@@ -8,10 +8,10 @@ import pandas as pd
 import streamlit as st
 
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
     WORKSPACE_DIR,
-    _display_path,
+    display_path,
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
@@ -101,9 +101,9 @@ NN_PAGE_TITLE = "類神經網路"
 def _nn_host() -> str:
     return deep_learning_host_context(
         nn_host_context_fragment(
-            form_path=_display_path(nn_form_path(WORKSPACE_DIR)),
-            request_path=_display_path(nn_train_request_path(WORKSPACE_DIR)),
-            last_run_path=_display_path(nn_last_run_path(WORKSPACE_DIR)),
+            form_path=display_path(nn_form_path(WORKSPACE_DIR)),
+            request_path=display_path(nn_train_request_path(WORKSPACE_DIR)),
+            last_run_path=display_path(nn_last_run_path(WORKSPACE_DIR)),
         )
     )
 
@@ -227,9 +227,9 @@ def _nn_extra_context(form_state: dict, row_count: int) -> str:
         row_count=row_count,
         loop=loop,
         last_run=last_run,
-        form_path=_display_path(nn_form_path(WORKSPACE_DIR)),
-        request_path=_display_path(nn_train_request_path(WORKSPACE_DIR)),
-        last_run_path=_display_path(nn_last_run_path(WORKSPACE_DIR)),
+        form_path=display_path(nn_form_path(WORKSPACE_DIR)),
+        request_path=display_path(nn_train_request_path(WORKSPACE_DIR)),
+        last_run_path=display_path(nn_last_run_path(WORKSPACE_DIR)),
     )
 
 
@@ -403,8 +403,8 @@ def _run_agent_decision_turn(*, extra_context: str, row_count: int) -> None:
         f"剛剛完成第 {loop['run_index']}／{loop['max_runs']} 輪左欄動畫訓練（資料 {row_count} 筆）。"
         f"結果：{summary}。剩餘可實驗 {remaining} 輪。"
         "請用繁體中文解釋結果與取捨；若要繼續，先更新 "
-        f"{_display_path(nn_form_path(WORKSPACE_DIR))}，再寫入 "
-        f'{_display_path(nn_train_request_path(WORKSPACE_DIR))} 為 {{"requested": true}}；'
+        f"{display_path(nn_form_path(WORKSPACE_DIR))}，再寫入 "
+        f'{display_path(nn_train_request_path(WORKSPACE_DIR))} 為 {{"requested": true}}；'
         "若停止實驗，請總結理由且不要寫訓練請求。"
         "不要改高 max_runs，不要清除預算。"
     )

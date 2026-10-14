@@ -28,10 +28,10 @@ from dataset_streamlit_shell.ml.regression import (
 )
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 from dataset_streamlit_shell.ui import multiple_regression_quiz as multi_quiz
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
     WORKSPACE_DIR,
-    _display_path,
+    display_path,
     invoke_data_agent,
     render_chat_panel,
 )
@@ -107,8 +107,8 @@ LR_INSPECT_SCATTER_FIGSIZE = (5.2, 3.6)
 def page_host_context() -> str:
     return supervised_host_context(
         lr_host_context_fragment(
-            slots_path=_display_path(lr_slots_path(WORKSPACE_DIR)),
-            request_path=_display_path(lr_train_request_path(WORKSPACE_DIR)),
+            slots_path=display_path(lr_slots_path(WORKSPACE_DIR)),
+            request_path=display_path(lr_train_request_path(WORKSPACE_DIR)),
         )
     )
 LR_STAGE_SIMPLE = "單變量"
@@ -1144,8 +1144,8 @@ def _set_simple_agent_context(
         quiz_unlocked=quiz_unlocked,
         scale_errors=scale_errors,
         artifact_note=_artifact_note(artifact),
-        slots_path=_display_path(lr_slots_path(WORKSPACE_DIR)),
-        request_path=_display_path(lr_train_request_path(WORKSPACE_DIR)),
+        slots_path=display_path(lr_slots_path(WORKSPACE_DIR)),
+        request_path=display_path(lr_train_request_path(WORKSPACE_DIR)),
     )
     st.session_state[LR_CONTEXT_KEY] = (
         build_regression_agent_context(
@@ -1203,8 +1203,8 @@ def _set_multiple_agent_context(
         quiz_unlocked=quiz_unlocked,
         scale_errors=scale_errors,
         artifact_note=_artifact_note(artifact),
-        slots_path=_display_path(lr_slots_path(WORKSPACE_DIR)),
-        request_path=_display_path(lr_train_request_path(WORKSPACE_DIR)),
+        slots_path=display_path(lr_slots_path(WORKSPACE_DIR)),
+        request_path=display_path(lr_train_request_path(WORKSPACE_DIR)),
     )
     st.session_state[LR_CONTEXT_KEY] = (
         build_regression_agent_context(

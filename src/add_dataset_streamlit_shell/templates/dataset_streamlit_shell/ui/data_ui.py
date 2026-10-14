@@ -17,8 +17,7 @@ from dotenv import load_dotenv
 from openai_tts import Settings
 from openai_tts.settings import MAX_TTS_SPEED, MIN_TTS_SPEED
 
-SHELL_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = SHELL_ROOT.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -27,7 +26,10 @@ from dataset_streamlit_shell.agent_loader import (  # noqa: E402
     create_agent_for_session,
     load_create_agent,
 )
-from dataset_streamlit_shell.host_context import assemble_host_context  # noqa: E402
+from dataset_streamlit_shell.host_context import (  # noqa: E402
+    SHELL_ROOT,
+    assemble_host_context,
+)
 
 BRAND_LOGO_PATH = SHELL_ROOT / "assets" / "brand-logo.png"
 WORKSPACE_DIR = SHELL_ROOT / "workspace"
@@ -79,7 +81,7 @@ TTS_VOICE_OPTIONS = [
 ]
 
 
-def _display_path(path: Path) -> str:
+def display_path(path: Path) -> str:
     try:
         return path.relative_to(PROJECT_ROOT).as_posix()
     except ValueError:

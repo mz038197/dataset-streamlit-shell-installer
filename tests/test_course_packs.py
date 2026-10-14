@@ -145,6 +145,98 @@ def test_every_template_file_belongs_to_at_most_one_course_pack() -> None:
     assert shared == {}
 
 
+def _app_sections() -> dict[str, list[str]]:
+    """app.py 的 SECTIONS：分段名稱 → 頁檔路徑（只取字串頁；總覽是函式頁）。"""
+    tree = ast.parse((SHELL_ROOT / "app.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "SECTIONS" for t in node.targets
+        ):
+            assert isinstance(node.value, ast.Dict)
+            sections: dict[str, list[str]] = {}
+            for key, value in zip(node.value.keys, node.value.values):
+                assert isinstance(key, ast.Constant) and isinstance(value, ast.List)
+                sections[key.value] = [
+                    call.args[0].value
+                    for call in value.elts
+                    if isinstance(call, ast.Call)
+                    and isinstance(call.args[0], ast.Constant)
+                ]
+            return sections
+    raise AssertionError("app.py has no SECTIONS")
+
+
+def test_app_sections_match_course_pack_manifest() -> None:
+    """側欄每一頁屬於剛好一個課程包，且分段名稱等於該包的 sidebar_section；包內每頁都在側欄。"""
+    sections = _app_sections()
+    listed: set[str] = set()
+    for section, pages in sections.items():
+        if section == "":
+            assert pages == [], "總覽分段只放框架的函式頁"
+            continue
+        for page in pages:
+            owners = [pack for pack in COURSE_PACKS if page in pack_files(SHELL_ROOT, pack)]
+            assert len(owners) == 1, f"{page} 屬於 {[p.name for p in owners]}"
+            assert owners[0].sidebar_section == section, f"{page}: {section}"
+            listed.add(page)
+    for pack in COURSE_PACKS:
+        for rel in pack_files(SHELL_ROOT, pack):
+            if rel.startswith("pages/"):
+                assert rel in listed, f"{pack.name}: {rel} 不在 SECTIONS"
+
+
+def _imports_plotting(rel: str) -> bool:
+    return any(module == "dataset_streamlit_shell.plotting" for module, _ in _internal_imports(rel))
+
+
+def test_packs_using_framework_plotting_declare_matplotlib() -> None:
+    """plotting 是框架、但只在函式內懶載入 matplotlib；用到它的課程包要自己宣告 matplotlib。"""
+    users = []
+    for pack in COURSE_PACKS:
+        if any(_imports_plotting(rel) for rel in pack_files(SHELL_ROOT, pack) if rel.endswith(".py")):
+            users.append(pack.name)
+            assert "matplotlib" in pack.dependencies, pack.name
+    assert users  # 確實有課程包用到 plotting
+
+
+def test_plotting_module_imports_without_matplotlib() -> None:
+    """只裝框架（沒有 matplotlib）時，import plotting 頂層不會失敗。"""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "sys.modules['matplotlib'] = None\n"
+        "import dataset_streamlit_shell.plotting\n"
+        "assert 'matplotlib.pyplot' not in sys.modules\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=SHELL_ROOT.parent,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_shell_root_is_defined_only_in_host_context() -> None:
+    """框架與 ui/ 只有一個 SHELL_ROOT 定義（host_context），其他模組從那裡 import。"""
+    candidates = [
+        rel
+        for rel in _template_files()
+        if rel.endswith(".py") and (rel.startswith("ui/") or "/" not in rel)
+    ]
+    definers = []
+    for rel in candidates:
+        tree = ast.parse((SHELL_ROOT / rel).read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "SHELL_ROOT" for t in node.targets
+            ):
+                definers.append(rel)
+    assert definers == ["host_context.py"]
+
+
 def test_each_pack_internal_imports_only_reach_framework_or_itself() -> None:
     framework = set(framework_files(SHELL_ROOT))
     template = _template_files()

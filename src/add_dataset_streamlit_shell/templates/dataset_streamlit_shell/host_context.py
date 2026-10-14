@@ -24,7 +24,11 @@ def assemble_host_context(
     pack_layer: str | None = None,
     page_layer: str | None = None,
 ) -> str:
-    """依「框架層 → 課程包層 → 頁面層」組出完整 host context；沒有課程包層時只有框架層。"""
+    """依「框架層 → 課程包層 → 頁面層」組出完整 host context。
+
+    頁面層只能疊在課程包層之上：沒有課程包層時，傳入的頁面層會被丟掉，只剩框架層
+    （避免某頁繞過課程包的資料邊界與可寫清單）。
+    """
     layers = [framework_host_context()]
     if pack_layer:
         layers.append(pack_layer)

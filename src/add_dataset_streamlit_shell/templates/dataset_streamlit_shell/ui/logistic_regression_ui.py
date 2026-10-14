@@ -49,10 +49,10 @@ from dataset_streamlit_shell.plotting import (
     scatter_binary_classes,
 )
 from dataset_streamlit_shell.ui import logistic_quiz as quiz
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
     WORKSPACE_DIR,
-    _display_path,
+    display_path,
     invoke_data_agent,
     render_chat_panel,
 )
@@ -146,8 +146,8 @@ DECISION_SLOT_CSS = """
 def page_host_context() -> str:
     return supervised_host_context(
         logistic_host_context_fragment(
-            slots_path=_display_path(logistic_slots_path(WORKSPACE_DIR)),
-            request_path=_display_path(logistic_train_request_path(WORKSPACE_DIR)),
+            slots_path=display_path(logistic_slots_path(WORKSPACE_DIR)),
+            request_path=display_path(logistic_train_request_path(WORKSPACE_DIR)),
         )
     )
 
@@ -1156,8 +1156,8 @@ def _set_agent_context(
         quiz_unlocked=quiz_unlocked,
         scale_errors=scale_errors,
         artifact_note=_artifact_note(artifact, test_cost=extras["test_cost"]),
-        slots_path=_display_path(logistic_slots_path(WORKSPACE_DIR)),
-        request_path=_display_path(logistic_train_request_path(WORKSPACE_DIR)),
+        slots_path=display_path(logistic_slots_path(WORKSPACE_DIR)),
+        request_path=display_path(logistic_train_request_path(WORKSPACE_DIR)),
     )
     stage_label = "線性邊界" if stage == STAGE_BOUNDARY else "多項式與 λ"
     st.session_state[CONTEXT_KEY] = (

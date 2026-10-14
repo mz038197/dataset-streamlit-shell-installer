@@ -111,6 +111,21 @@ class ChallengePaths:
     challenge_dir: Path
 
 
+@dataclass(frozen=True)
+class ChallengeHostPaths:
+    """Challenge host 寫給 Agent 看的路徑（相對專案根的顯示字串）。"""
+
+    start_csv: str
+    handbook: str
+    working_csv: str
+    train_csv: str
+    test_csv: str
+    scripts_dir: str
+    live_ui: str
+    page_py: str
+    empty_shell: str
+
+
 def challenge_paths(workspace_dir: Path, company: str) -> ChallengePaths:
     challenge_dir = workspace_dir / "challenge"
     return ChallengePaths(
@@ -429,22 +444,20 @@ def restore_startup_challenge_ui(empty_shell: Path, live_ui: Path) -> None:
     shutil.copyfile(empty_shell, live_ui)
 
 
-def startup_workshop_pack_layer(
-    *,
-    start_csv: str,
-    handbook: str,
-    working_csv: str,
-    train_csv: str,
-    test_csv: str,
-    scripts_dir: str,
-    live_ui: str,
-    page_py: str,
-    empty_shell: str,
-) -> str:
+def startup_workshop_pack_layer(paths: ChallengeHostPaths) -> str:
     """AI新創工作坊課程包層：挑戰軌道檔案邊界（白名單）與模型區／成果區完成樣貌。
 
     不含當前挑戰公司的倫理／資料加碼（那是頁面層，見 ``challenge_company_page_layer``）。
     """
+    start_csv = paths.start_csv
+    handbook = paths.handbook
+    working_csv = paths.working_csv
+    train_csv = paths.train_csv
+    test_csv = paths.test_csv
+    scripts_dir = paths.scripts_dir
+    live_ui = paths.live_ui
+    page_py = paths.page_py
+    empty_shell = paths.empty_shell
     return f"""【AI Startup Challenge 模式】
 你是學生團隊的第五位隊友（資料／專案 Agent），正在協助完成 Startup Challenge 上台展示。
 學生才是負責人：最後的清理決策、模型選擇、倫理界線與上台解釋，必須由學生做出並能說清楚。
@@ -484,7 +497,7 @@ def startup_workshop_pack_layer(
 - Challenge 訓練資料：{train_csv}
 - Challenge 測試資料：{test_csv}
 - 改寫目前公司的 working.csv 時必須刪除該公司的 train.csv 與 test.csv（切分作廢）。
-- 挑戰軌道的工作副本與切分只寫在目前公司資料夾；不要改 workspace 根目錄的 original.csv／working.csv／ready.csv／train.csv／val.csv／test.csv，那些不是本挑戰軌道。
+- 挑戰軌道的工作副本與切分只寫在目前公司資料夾（上面列出的路徑），不寫到其他位置。
 - 不要上網下載替代資料集，不要改用其他公司的 CSV。
 - 不要修改其他教學頁（邏輯迴歸、決策樹等）的程式，除非學生明確只要修專案展示頁。
 - 不要編輯 {page_py}；那是專案展示頁骨架。
@@ -530,32 +543,12 @@ def challenge_company_page_layer(company: str) -> str:
     return f"{layer}\n\n{fragment}" if fragment else layer
 
 
-def challenge_host_context(
-    *,
-    company: str,
-    start_csv: str,
-    handbook: str,
-    working_csv: str,
-    train_csv: str,
-    test_csv: str,
-    scripts_dir: str,
-    live_ui: str,
-    page_py: str,
-    empty_shell: str,
-) -> str:
+def challenge_host_context(*, company: str, paths: ChallengeHostPaths) -> str:
     """專案展示 host：框架層 + AI新創工作坊課程包層 + 當前挑戰公司加碼（頁面層）。"""
-    pack_layer = startup_workshop_pack_layer(
-        start_csv=start_csv,
-        handbook=handbook,
-        working_csv=working_csv,
-        train_csv=train_csv,
-        test_csv=test_csv,
-        scripts_dir=scripts_dir,
-        live_ui=live_ui,
-        page_py=page_py,
-        empty_shell=empty_shell,
+    return assemble_host_context(
+        startup_workshop_pack_layer(paths),
+        challenge_company_page_layer(company),
     )
-    return assemble_host_context(pack_layer, challenge_company_page_layer(company))
 
 
 def challenge_page_snapshot(

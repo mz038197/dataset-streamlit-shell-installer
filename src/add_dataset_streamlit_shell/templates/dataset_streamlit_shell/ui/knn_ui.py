@@ -37,8 +37,8 @@ from dataset_streamlit_shell.ml.knn import (
     vote_tally,
 )
 from dataset_streamlit_shell.ui import knn_quiz as quiz
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
