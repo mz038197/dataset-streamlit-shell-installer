@@ -8,9 +8,9 @@ TEMPLATE = ROOT / "src" / "add_dataset_streamlit_shell" / "templates" / "dataset
 
 def test_app_sidebar_merges_tree_ensemble_page() -> None:
     app_src = (TEMPLATE / "app.py").read_text(encoding="utf-8")
-    assert 'title="決策樹與集成"' in app_src
-    assert 'title="決策樹概念"' not in app_src
-    assert 'title="XGBoost"' not in app_src
+    assert '"決策樹與集成")' in app_src
+    assert '"決策樹概念")' not in app_src
+    assert '"XGBoost")' not in app_src
     assert "20_XGBoost.py" not in app_src
     assert not (TEMPLATE / "pages" / "20_XGBoost.py").exists()
     assert not (TEMPLATE / "ui" / "xgboost_ui.py").exists()

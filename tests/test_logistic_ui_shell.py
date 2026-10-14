@@ -17,8 +17,8 @@ def test_logistic_pages_omit_save_manual_and_page_intro_info() -> None:
 
 def test_app_sidebar_merges_regularized_into_logistic() -> None:
     app_src = (TEMPLATE / "app.py").read_text(encoding="utf-8")
-    assert 'title="邏輯迴歸"' in app_src
-    assert 'title="正則化邏輯迴歸"' not in app_src
+    assert '"邏輯迴歸")' in app_src
+    assert '"正則化邏輯迴歸")' not in app_src
     assert "17_Regularized_Logistic_Regression.py" not in app_src
     assert not (TEMPLATE / "pages" / "17_Regularized_Logistic_Regression.py").exists()
 
