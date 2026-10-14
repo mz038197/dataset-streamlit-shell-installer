@@ -154,7 +154,7 @@ def test_add_several_names_records_them_in_manifest_order(tmp_path: Path) -> Non
     files = installed_files(result.target)
     assert "pages/3_Field_Quality.py" in files
     assert "pages/12_KMeans.py" in files
-    assert runner.calls == [["uv", "add", "matplotlib", "scikit-learn", "scipy"]]
+    assert runner.calls == [["uv", "add", "matplotlib", "scikit-learn", "numpy", "scipy"]]
 
 
 def test_add_unknown_name_lists_available_names_and_changes_nothing(

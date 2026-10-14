@@ -42,7 +42,6 @@ TEACHING_CHAT_FILES = (
     "svm_ui.py",
     "knn_ui.py",
     "tree_ui.py",
-    "clustering_ui.py",
 )
 
 

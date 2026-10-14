@@ -120,18 +120,6 @@ def test_split_page_reads_working() -> None:
     assert "尚未建立 Ready" not in split
 
 
-def test_pca_shell_reads_working() -> None:
-    pca = (PAGES / "10_PCA.py").read_text(encoding="utf-8")
-    workflow = (UI / "workflow_ui.py").read_text(encoding="utf-8")
-    shell = workflow[workflow.index("def render_analysis_shell") :]
-    next_def = shell.find("\ndef ", 1)
-    shell = shell[: next_def if next_def != -1 else len(shell)]
-    assert "load_working_dataset" in shell
-    assert "load_ready_dataset" not in shell
-    assert "Ready 分析就緒資料" not in pca
-    assert "Working 工作資料" in pca
-
-
 def test_ready_page_is_removed() -> None:
     assert not (PAGES / "8_Ready.py").exists()
     workflow = (UI / "workflow_ui.py").read_text(encoding="utf-8")

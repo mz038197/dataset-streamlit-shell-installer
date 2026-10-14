@@ -99,10 +99,11 @@ UNSUPERVISED = CoursePack(
         "pages/11_Wards_Method.py",
         "pages/12_KMeans.py",
         "ui/clustering_ui.py",
+        "ui/unsupervised_pack.py",
         "ml/clustering.py",
         "built-in-data/clustering",
     ),
-    dependencies=("matplotlib", "scipy", "scikit-learn"),
+    dependencies=("numpy", "matplotlib", "scipy", "scikit-learn"),
 )
 
 DEEP_LEARNING = CoursePack(
@@ -164,12 +165,9 @@ PCA = CoursePack(
     sidebar_section="降維分析",
     paths=(
         "pages/10_PCA.py",
-        "ui/workflow_ui.py",
-        "ui/data_science.py",
-        "ml/integration.py",
-        "ml/split.py",
+        "ui/pca_pack.py",
     ),
-    dependencies=("numpy", "matplotlib", "scikit-learn"),
+    dependencies=("numpy",),
 )
 
 STARTUP_WORKSHOP = CoursePack(
