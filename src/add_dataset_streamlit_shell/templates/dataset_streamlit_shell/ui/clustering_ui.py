@@ -114,7 +114,6 @@ def render_kmeans_page() -> None:
             ),
             page_name=KMEANS_TITLE,
             host_context=teaching_page_host_context(),
-            skip_working_snapshot=True,
         )
 
 
@@ -168,7 +167,6 @@ def render_wards_page() -> None:
             ),
             page_name=WARDS_TITLE,
             host_context=teaching_page_host_context(),
-            skip_working_snapshot=True,
         )
 
 

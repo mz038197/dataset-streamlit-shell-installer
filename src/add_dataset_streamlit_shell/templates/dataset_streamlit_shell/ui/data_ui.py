@@ -27,20 +27,12 @@ from dataset_streamlit_shell.agent_loader import (  # noqa: E402
     create_agent_for_session,
     load_create_agent,
 )
-from dataset_streamlit_shell.ml.integration import clear_dual_table_copies  # noqa: E402
+from dataset_streamlit_shell.host_context import assemble_host_context  # noqa: E402
 
 BRAND_LOGO_PATH = SHELL_ROOT / "assets" / "brand-logo.png"
 WORKSPACE_DIR = SHELL_ROOT / "workspace"
 SESSION_DIR = PROJECT_ROOT / "sessions"
 AGENT_ACTIVATION_MARKER_PATH = SHELL_ROOT / ".agent_activated"
-ORIGINAL_DATASET_PATH = WORKSPACE_DIR / "original.csv"
-WORKING_DATASET_PATH = WORKSPACE_DIR / "working.csv"
-READY_DATASET_PATH = WORKSPACE_DIR / "ready.csv"
-TRAIN_DATASET_PATH = WORKSPACE_DIR / "train.csv"
-VAL_DATASET_PATH = WORKSPACE_DIR / "val.csv"
-TEST_DATASET_PATH = WORKSPACE_DIR / "test.csv"
-CLEANING_LOG_PATH = WORKSPACE_DIR / "cleaning_log.jsonl"
-SPLIT_DATASET_PATHS = (TRAIN_DATASET_PATH, VAL_DATASET_PATH, TEST_DATASET_PATH)
 USER_SETTINGS_PATH = WORKSPACE_DIR / "user_settings.json"
 _AGENT_SCOPE_KEYS: dict[str, dict[str, str]] = {
     "data": {
@@ -53,23 +45,13 @@ _AGENT_SCOPE_KEYS: dict[str, dict[str, str]] = {
         "picker_version": "session_picker_version",
         "chat_just_replied": "data_chat_just_replied",
     },
-    "challenge": {
-        "session_path": "challenge_session_path",
-        "chat_history": "challenge_chat_history",
-        "agent": "challenge_agent",
-        "agent_session_path": "challenge_agent_session_path",
-        "agent_factory_ref": "challenge_agent_factory_ref",
-        "agent_connected": "challenge_agent_connected",
-        "picker_version": "challenge_session_picker_version",
-        "chat_just_replied": "challenge_chat_just_replied",
-    },
 }
 
 
 def _agent_keys(scope: str) -> dict[str, str]:
     if scope in _AGENT_SCOPE_KEYS:
         return _AGENT_SCOPE_KEYS[scope]
-    if scope.startswith("challenge_"):
+    if scope.isidentifier():
         return {
             "session_path": f"{scope}_session_path",
             "chat_history": f"{scope}_chat_history",
@@ -81,6 +63,8 @@ def _agent_keys(scope: str) -> dict[str, str]:
             "chat_just_replied": f"{scope}_chat_just_replied",
         }
     raise ValueError(f"未知 Agent scope：{scope!r}")
+
+
 TTS_VOICE_OPTIONS = [
     "alloy",
     "ash",
@@ -361,216 +345,6 @@ def _remove_activation_marker() -> None:
         AGENT_ACTIVATION_MARKER_PATH.unlink()
 
 
-def save_dataset(df: pd.DataFrame, *, working: bool = False) -> None:
-    _ensure_workspace_dir()
-    target = WORKING_DATASET_PATH if working else ORIGINAL_DATASET_PATH
-    df.to_csv(target, index=False)
-    if working:
-        discard_leftover_ready()
-        clear_split_datasets()
-        return
-    st.session_state["dataset_df"] = df
-    st.session_state.pop("working_dataset_df", None)
-    st.session_state.pop("selected_columns", None)
-    st.session_state.pop("filter_columns", None)
-    st.session_state.pop("filter_signature", None)
-
-
-def refresh_working_dataset_cache() -> None:
-    st.session_state.pop("working_dataset_df", None)
-
-
-def refresh_ready_dataset_cache() -> None:
-    st.session_state.pop("ready_dataset_df", None)
-
-
-def load_dataset() -> pd.DataFrame | None:
-    if "dataset_df" in st.session_state:
-        return st.session_state["dataset_df"]
-    if ORIGINAL_DATASET_PATH.exists():
-        df = pd.read_csv(ORIGINAL_DATASET_PATH)
-        st.session_state["dataset_df"] = df
-        return df
-    return None
-
-
-def load_working_dataset() -> pd.DataFrame | None:
-    discard_leftover_ready()
-    sync_split_if_working_stale()
-    if WORKING_DATASET_PATH.exists():
-        df = pd.read_csv(WORKING_DATASET_PATH)
-        st.session_state["working_dataset_df"] = df
-        return df
-    return load_dataset()
-
-
-def reset_working_dataset() -> None:
-    st.session_state.pop("working_dataset_df", None)
-    if WORKING_DATASET_PATH.exists():
-        WORKING_DATASET_PATH.unlink()
-    discard_leftover_ready()
-    clear_split_datasets()
-    reset_cleaning_log()
-
-
-def clear_split_datasets() -> None:
-    for path in SPLIT_DATASET_PATHS:
-        if path.exists():
-            path.unlink()
-
-
-def discard_leftover_ready() -> None:
-    refresh_ready_dataset_cache()
-    if READY_DATASET_PATH.exists():
-        READY_DATASET_PATH.unlink()
-
-
-def sync_split_if_working_stale() -> bool:
-    if not WORKING_DATASET_PATH.exists():
-        return False
-    split_files = [path for path in SPLIT_DATASET_PATHS if path.exists()]
-    if not split_files:
-        return False
-    working_mtime = WORKING_DATASET_PATH.stat().st_mtime
-    if not any(working_mtime > path.stat().st_mtime for path in split_files):
-        return False
-    clear_split_datasets()
-    return True
-
-
-def working_dataset_file_exists() -> bool:
-    return WORKING_DATASET_PATH.exists()
-
-
-def clear_to_dual_start() -> None:
-    """清除 working／切分產物／original／雙表工作副本與遺留 ready.csv，回到雙表起點。"""
-    clear_split_datasets()
-    reset_working_dataset()
-    st.session_state.pop("dataset_df", None)
-    if ORIGINAL_DATASET_PATH.exists():
-        ORIGINAL_DATASET_PATH.unlink()
-    clear_dual_table_copies(WORKSPACE_DIR)
-
-
-def reset_cleaning_log() -> None:
-    if CLEANING_LOG_PATH.exists():
-        CLEANING_LOG_PATH.unlink()
-
-
-def initialize_working_dataset(df: pd.DataFrame) -> None:
-    save_dataset(df, working=True)
-    st.session_state["working_dataset_df"] = df
-
-
-def reset_working_dataset_from_source() -> bool:
-    source = load_dataset()
-    if source is None:
-        return False
-    save_dataset(source, working=True)
-    st.session_state["working_dataset_df"] = source
-    append_cleaning_log(
-        action="重置工作資料",
-        columns=source.columns,
-        rows=len(source),
-        note="使用 original.csv 重建 working.csv。",
-        actor="ui",
-    )
-    return True
-
-
-def save_split_datasets(
-    train: pd.DataFrame,
-    val: pd.DataFrame,
-    test: pd.DataFrame,
-) -> None:
-    _ensure_workspace_dir()
-    train.to_csv(TRAIN_DATASET_PATH, index=False)
-    val.to_csv(VAL_DATASET_PATH, index=False)
-    test.to_csv(TEST_DATASET_PATH, index=False)
-
-
-def append_cleaning_log(
-    *,
-    action: str,
-    columns: Iterable[str] | None = None,
-    rows: int | None = None,
-    note: str = "",
-    actor: str = "ui",
-) -> None:
-    _ensure_workspace_dir()
-    column_list = [] if columns is None else [str(column) for column in columns]
-    normalized_actor = actor if actor in {"agent", "ui"} else "ui"
-    entry = {
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "actor": normalized_actor,
-        "action": action,
-        "columns": column_list,
-        "rows": rows,
-        "note": note,
-    }
-    with CLEANING_LOG_PATH.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-
-def load_cleaning_log(limit: int = 8) -> list[dict[str, object]]:
-    if not CLEANING_LOG_PATH.exists():
-        return []
-    entries: list[dict[str, object]] = []
-    with CLEANING_LOG_PATH.open(encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(obj, dict):
-                entries.append(obj)
-    return entries[-limit:][::-1]
-
-
-def dataset_base_context() -> str:
-    """整理／分析頁 host_context：雙表、Working、腳本。不含教學頁寫回。"""
-    source = _display_path(ORIGINAL_DATASET_PATH)
-    working = _display_path(WORKING_DATASET_PATH)
-    cleaning_log = _display_path(CLEANING_LOG_PATH)
-    scripts = _display_path(SHELL_ROOT / "scripts")
-    copies = _display_path(WORKSPACE_DIR / "integration")
-    return (
-        "目前為 Dataset Streamlit Shell。"
-        f"Original 原始資料路徑：{source}，只作為重置來源。"
-        "合併完成前不存在；僅在資料整合時可與 Working 同批寫入，此外請勿覆蓋。"
-        f"Working 工作資料路徑：{working}。"
-        "資料整合成功時與 Original 一併寫入；Working 為之後整理用副本。"
-        "圖表探索、PCA、資料切分都讀 Working。"
-        "寫回 Working 會作廢 train／val／test，並刪掉遺留 ready.csv。"
-        "不要建立 ready.csv，也不要把它當分析來源。"
-        f"雙表工作副本目錄：{copies}（workspace/integration/passengers.csv、voyage.csv）。"
-        "雙表起點進頁時已寫出這兩份；請直接改航程表副本的 passenger_id 為 PassengerId，不要另存新檔。"
-        "內建雙表教材不得覆寫。"
-        "合併前只准將航程表副本的 passenger_id 改名為 PassengerId；不要補值、刪欄或改乘客表。"
-        "通過訓練前預測（資料整合）且鍵名已對齊後，才可依學生指定的 left 或 inner 合併"
-        "（課堂主線建議 left），"
-        f"同時寫入 {source} 與 {working}，並刪除雙表工作副本"
-        "（可用 commit_dual_table_merge）。"
-        "寫入後請告訴學生按「重新讀取工作資料」。"
-        "未解鎖或未對齊鍵名時拒絕合併。"
-        "回答資料問題時，請使用你的 read_file 或 exec 工具實際讀取 CSV 後再回答。"
-        f"如果使用者要求補值、清理資料、計算欄位或新增欄位，且 Working 已存在，請預設讀取並更新 {working}，不要覆蓋 {source}。"
-        f"如果需要撰寫 Python 腳本來整理或檢查資料，請只建立在 {scripts} 底下，"
-        "不要在專案根目錄建立臨時 Python 腳本。"
-        f"修改 Working 工作資料後，請追加一筆 JSONL 紀錄到 {cleaning_log}，每行必須是單一 JSON 物件，"
-        "欄位固定為 created_at、actor、action、columns、rows、note。"
-        "actor 必須是 agent；action 使用簡短 snake_case；columns 是受影響欄位陣列；"
-        "rows 是受影響筆數；note 用繁體中文一句話摘要修改內容。"
-        "範例："
-        '{"created_at":"2026-05-29T12:05:41","actor":"agent",'
-        '"action":"fill_missing_age","columns":["Age"],"rows":177,'
-        '"note":"以中位數補齊 Age 欄位的空值。"}'
-    )
-
-
 def teaching_page_host_context(*fragments: str) -> str:
     """教學頁 host_context：內建範例邊界，可接該頁寫回 fragment。不叠 dataset_base_context。"""
     boundary = (
@@ -583,22 +357,18 @@ def teaching_page_host_context(*fragments: str) -> str:
     return boundary + extra
 
 
-def dataset_page_snapshot(df: pd.DataFrame | None, extra_context: str = "") -> str:
-    """當頁／當下快照 → 每輪 user（【目前頁面狀態】）。"""
-    parts: list[str] = []
-    if df is None:
-        parts.append(
-            "尚未建立工作資料。"
-            "若詢問資料內容、清理、補值或欄位計算，請先提醒到「欄位與資料整合」查看雙表；"
-            "合併前可請 Agent 對齊航程表鍵名，通過關卡後再請 Agent 合併，會同時寫入 Original 與 Working。"
-            "一般概念問題可直接回答。"
-        )
-    else:
-        columns = ", ".join(str(c) for c in df.columns)
-        parts.append(f"工作資料目前有 {len(df)} 筆、{len(df.columns)} 欄。欄位：{columns}。")
-    if extra_context.strip():
-        parts.append(extra_context.strip())
-    return "\n".join(parts)
+PageState = str | Callable[[], str]
+"""每輪【目前頁面狀態】：由呼叫的頁面傳入字串，或送出當下才計算的函式。"""
+
+DEFAULT_GREETING = (
+    "請先按「啟用資料 Agent」。啟用後，我可以協助你使用 AI Lab："
+    "回答資料與 AI 的問題，並在本頁允許的範圍內讀檔、寫腳本。"
+)
+
+
+def resolve_page_state(extra_context: PageState) -> str:
+    text = extra_context() if callable(extra_context) else extra_context
+    return (text or "").strip()
 
 
 def format_user_turn(user_text: str, *, extra_context: str = "") -> str:
@@ -608,11 +378,6 @@ def format_user_turn(user_text: str, *, extra_context: str = "") -> str:
             f"使用者問題：{user_text}"
         )
     return f"使用者問題：{user_text}"
-
-
-def dataset_context(df: pd.DataFrame | None) -> str:
-    """相容舊呼叫：host + 快照合併（新路徑請改用 dataset_base_context／snapshot）。"""
-    return f"{dataset_base_context()}\n\n{dataset_page_snapshot(df)}"
 
 
 def metric_value(df: pd.DataFrame, kind: str) -> str:
@@ -910,7 +675,7 @@ def _create_agent_for_session(
 ) -> tuple[Any, str]:
     if not _is_valid_session_relpath(session_path):
         raise RuntimeError(f"對話紀錄路徑無效：{session_path!r}")
-    context = dataset_base_context() if host_context is None else host_context
+    context = assemble_host_context() if host_context is None else host_context
     return create_agent_for_session(
         PROJECT_ROOT,
         session_path,
@@ -1003,9 +768,8 @@ def _remember_chat_page(page_name: str, *, scope: str = "data") -> None:
 def invoke_data_agent(
     user_text: str,
     *,
-    extra_context: str = "",
+    extra_context: PageState = "",
     display_user_text: str | None = None,
-    skip_working_snapshot: bool = False,
     host_context: str | None = None,
     page_name: str = "",
 ) -> str:
@@ -1020,9 +784,7 @@ def invoke_data_agent(
     shown = display_user_text if display_user_text is not None else user_text
     st.session_state["data_chat_history"].append(("user", shown))
 
-    df = None if skip_working_snapshot else load_working_dataset()
-    snapshot = extra_context.strip() if skip_working_snapshot else dataset_page_snapshot(df, extra_context)
-    prompt = format_user_turn(user_text, extra_context=snapshot)
+    prompt = format_user_turn(user_text, extra_context=resolve_page_state(extra_context))
 
     _remember_chat_page(page_name)
     try:
@@ -1039,14 +801,20 @@ def invoke_data_agent(
 
 @st.fragment
 def render_chat_panel(
-    extra_context: str = "",
+    extra_context: PageState = "",
     page_name: str = "",
     *,
     host_context: str | None = None,
     agent_scope: str = "data",
-    skip_working_snapshot: bool = False,
+    greeting: str | None = None,
+    new_session_on_entry: bool = False,
     after_reply: Callable[[], None] | None = None,
 ) -> None:
+    """資料 Agent 聊天欄。
+
+    每輪頁面狀態（extra_context）、開場白（greeting）與「進頁開新 session」
+    （new_session_on_entry）都由呼叫的頁面決定；框架不讀任何課程包的資料。
+    """
     keys = _agent_keys(agent_scope)
     _remember_chat_page(page_name, scope=agent_scope)
     st.markdown(
@@ -1054,28 +822,17 @@ def render_chat_panel(
         unsafe_allow_html=True,
     )
 
-    df = None if skip_working_snapshot else load_working_dataset()
-
     sessions = _list_sessions()
     if keys["session_path"] not in st.session_state and sessions:
-        if agent_scope.startswith("challenge"):
+        if new_session_on_entry:
             _set_current_session(_new_session_path(), scope=agent_scope)
         else:
             _set_current_session(sessions[0], scope=agent_scope)
     current_session = _ensure_valid_current_session(sessions, scope=agent_scope)
 
     if keys["chat_history"] not in st.session_state:
-        greeting = (
-            "請先按「啟用資料 Agent」。啟用後，我會以專案展示規則協助你："
-            "先讀說明書、檢查 Challenge 起點資料，清理 Challenge 工作資料，再切成訓練／測試資料；"
-            "討論後改 dataset_streamlit_shell/ui/startup_challenge_ui.py 補齊模型區與成果區。"
-            if agent_scope.startswith("challenge")
-            else (
-                "請先按「啟用資料 Agent」。啟用後，我可以協助你理解資料整理流程；"
-                "雙表合併建立工作資料後，也能一起分析 Working。"
-            )
-        )
-        st.session_state[keys["chat_history"]] = [("assistant", greeting)]
+        opening = greeting if greeting is not None else DEFAULT_GREETING
+        st.session_state[keys["chat_history"]] = [("assistant", opening)]
 
     ids, labels = _build_session_picker_options(sessions)
     if current_session and current_session not in labels and _is_valid_session_relpath(current_session):
@@ -1225,11 +982,7 @@ def render_chat_panel(
     if user_text := st.chat_input("詢問資料 Agent...", key=f"{agent_scope}_chat"):
         st.session_state[keys["chat_history"]].append(("user", user_text))
         # host_context 已在建立 Agent 時注入 system；此處只組 user 層
-        if skip_working_snapshot:
-            snapshot = extra_context.strip()
-        else:
-            snapshot = dataset_page_snapshot(df, extra_context)
-        prompt = format_user_turn(user_text, extra_context=snapshot)
+        prompt = format_user_turn(user_text, extra_context=resolve_page_state(extra_context))
 
         with chat:
             with st.chat_message("user"):

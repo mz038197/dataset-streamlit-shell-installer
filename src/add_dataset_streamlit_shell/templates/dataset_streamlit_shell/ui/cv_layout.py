@@ -24,7 +24,6 @@ def render_cv_tabbed_page(
             ),
             page_name=page_title,
             host_context=teaching_page_host_context(),
-            skip_working_snapshot=True,
         )
     with teaching_col:
         tabs = st.tabs(list(tab_labels))

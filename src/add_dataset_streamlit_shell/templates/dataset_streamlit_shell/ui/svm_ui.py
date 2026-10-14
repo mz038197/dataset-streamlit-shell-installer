@@ -80,7 +80,6 @@ def render_linear_svm_page() -> None:
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,
             host_context=teaching_page_host_context(),
-            skip_working_snapshot=True,
         )
 
 
@@ -765,7 +764,6 @@ def _send_hard_hint(
             quiz.hard_hint_user_text(qid, features=features, target=target),
             extra_context=extra,
             display_user_text=quiz.hard_hint_display_text(qid),
-            skip_working_snapshot=True,
             host_context=teaching_page_host_context(),
             page_name=PAGE_TITLE,
         )
@@ -822,7 +820,6 @@ def _send_soft_hint(
             quiz.soft_hint_user_text(qid, features=features, target=target, C=C),
             extra_context=extra,
             display_user_text=quiz.soft_hint_display_text(qid),
-            skip_working_snapshot=True,
             host_context=teaching_page_host_context(),
             page_name=PAGE_TITLE,
         )

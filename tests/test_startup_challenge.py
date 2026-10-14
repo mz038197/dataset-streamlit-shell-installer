@@ -15,6 +15,7 @@ if str(TEMPLATE_ROOT) not in sys.path:
 
 from dataset_streamlit_shell.ui.startup_challenge_context import (  # noqa: E402
     CHALLENGE_COMPANIES,
+    CHALLENGE_GREETING,
     DATA_VIEW_START,
     DATA_VIEW_TEST,
     DATA_VIEW_TRAIN,
@@ -434,13 +435,11 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
         "from dataset_streamlit_shell.ui import startup_challenge_ui"
     ) == 0
     assert "clear_challenge_runtime" not in page
-    greeting = (
-        SHELL / "ui" / "data_ui.py"
-    ).read_text(encoding="utf-8")
-    assert "白板三塊" not in greeting
-    assert "模型區" in greeting or "Challenge 工作資料" in greeting
-    assert "dataset_streamlit_shell/ui/startup_challenge_ui.py" in greeting
-    assert 'agent_scope.startswith("challenge")' in greeting
+    assert "白板三塊" not in CHALLENGE_GREETING
+    assert "模型區" in CHALLENGE_GREETING or "Challenge 工作資料" in CHALLENGE_GREETING
+    assert "dataset_streamlit_shell/ui/startup_challenge_ui.py" in CHALLENGE_GREETING
+    assert "greeting=CHALLENGE_GREETING" in page
+    assert "new_session_on_entry=True" in page
 
 
 def test_legacy_files_ignore_session_until_confirmed(tmp_path: Path) -> None:

@@ -179,7 +179,6 @@ def render_linear_regression_page() -> None:
             extra_context=extra,
             page_name=LR_PAGE_TITLE,
             host_context=_lr_host(),
-            skip_working_snapshot=True,
             after_reply=_after_lr_chat,
         )
 
@@ -1339,7 +1338,6 @@ def _send_simple_hint(
             ),
             extra_context=extra,
             display_user_text=hint_display_text(qid),
-            skip_working_snapshot=True,
             host_context=_lr_host(),
             page_name=LR_PAGE_TITLE,
         )
@@ -1557,7 +1555,6 @@ def _send_multiple_hint(
             multi_quiz.hint_user_text(qid, features=features, target=target),
             extra_context=extra,
             display_user_text=multi_quiz.hint_display_text(qid),
-            skip_working_snapshot=True,
             host_context=_lr_host(),
             page_name=LR_PAGE_TITLE,
         )
