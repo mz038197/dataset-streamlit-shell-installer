@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dataset_streamlit_shell.navigation import NavPage, installed_sections
+from dataset_streamlit_shell.navigation import NavPage, installed_sections, needs_manual_menu
 from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
     brand_page_icon,
@@ -69,6 +69,7 @@ SECTIONS = {
     ],
 }
 
+installed = installed_sections(SHELL_ROOT, SECTIONS)
 pages = {
     section: [
         st.Page(
@@ -78,7 +79,16 @@ pages = {
         )
         for page in section_pages
     ]
-    for section, section_pages in installed_sections(SHELL_ROOT, SECTIONS).items()
+    for section, section_pages in installed.items()
 }
 
-st.navigation(pages).run()
+if needs_manual_menu(installed):
+    # 只裝框架時只有總覽一頁，st.navigation 會隱藏選單；改由側欄自己列出。
+    navigation = st.navigation(pages, position="hidden")
+    with st.sidebar:
+        for section_pages in pages.values():
+            for page in section_pages:
+                st.page_link(page)
+else:
+    navigation = st.navigation(pages)
+navigation.run()

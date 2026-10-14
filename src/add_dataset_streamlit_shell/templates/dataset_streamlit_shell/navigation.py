@@ -30,3 +30,8 @@ def installed_sections(
         if kept:
             result[section] = kept
     return result
+
+
+def needs_manual_menu(sections: Mapping[str, Sequence[NavPage]]) -> bool:
+    """只剩一頁時 st.navigation 會自動隱藏側欄選單，須由 app.py 自己畫出。"""
+    return sum(len(pages) for pages in sections.values()) == 1

@@ -88,3 +88,15 @@ def test_navigation_module_does_not_import_streamlit(tmp_path: Path) -> None:
         "assert 'streamlit' not in sys.modules"
     )
     subprocess.run([sys.executable, "-c", code, str(TEMPLATE_ROOT)], check=True)
+
+
+def test_single_page_needs_manual_menu() -> None:
+    from dataset_streamlit_shell.navigation import needs_manual_menu
+
+    only_overview = {"": [NavPage(_overview, "總覽", default=True)]}
+    assert needs_manual_menu(only_overview)
+    two_pages = {
+        "": [NavPage(_overview, "總覽", default=True)],
+        "降維分析": [NavPage("pages/10_PCA.py", "PCA 主成分分析")],
+    }
+    assert not needs_manual_menu(two_pages)
