@@ -16,7 +16,8 @@ APP = (
     / "add_dataset_streamlit_shell"
     / "templates"
     / "dataset_streamlit_shell"
-    / "app.py"
+    / "ui"
+    / "overview_ui.py"
 )
 
 
