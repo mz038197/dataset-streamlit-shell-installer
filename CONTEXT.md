@@ -1,6 +1,6 @@
 # Dataset Streamlit Shell
 
-教學用 Streamlit 資料實驗室殼層：自雙表起點經整合與整理 Working，圖表探索／資料切分／PCA 讀 Working，並以內建範例走通監督式與非監督式演算法頁；另含 AI 新創工作坊的專案展示軌道。
+教學用 Streamlit 資料實驗室殼層 = AI Lab 框架 + 課程包。學生先裝 AI Lab 框架（總覽、資料 Agent 欄、側欄品牌列），上課到哪一段再加裝那一段的課程包：AI 協作資料整理（自雙表起點經整合與整理 Working，圖表探索、資料切分）、監督式與非監督式（內建範例走通演算法頁）、深度學習、電腦視覺、降維分析（讀 Working 做 PCA），以及 AI 新創工作坊的專案展示軌道。課程包之間不共用程式，每頁的 host context 只疊自己那一個課程包層。
 
 ## Language
 

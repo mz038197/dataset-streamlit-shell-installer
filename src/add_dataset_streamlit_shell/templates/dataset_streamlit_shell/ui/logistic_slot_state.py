@@ -849,7 +849,7 @@ def logistic_host_context_fragment(
         f'{request_path}，內容為 {{"requested": true}}。'
         "決策槽未齊、訓練前預測未過關、或正規化（除以最大）遇上負值時，不准寫訓練請求。"
         "不要自行 exec 訓練、不要假裝已訓完、不要代填訓練前預測選項。"
-        "不要改 nn_form.json、lr_slots.json 或線性回歸的訓練請求。"
+        "不要改 lr_slots.json 或線性回歸的訓練請求。"
         "六槽齊後主教學欄預覽 expander 可下載該階段模型下載程式碼"
         "（獨立 Keras 專案，含內建表；不是模型程式碼預覽，也不是已訓權重）。"
         "下載不必過關、不必先訓；訓練請求仍要過關。"

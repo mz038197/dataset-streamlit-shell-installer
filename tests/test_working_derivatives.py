@@ -14,7 +14,7 @@ TEMPLATE_ROOT = (
 if str(TEMPLATE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEMPLATE_ROOT))
 
-from dataset_streamlit_shell.ui import data_ui  # noqa: E402
+from dataset_streamlit_shell.ui import data_science as data_ui  # noqa: E402
 
 
 def _patch_workspace(monkeypatch, tmp_path: Path) -> dict[str, Path]:

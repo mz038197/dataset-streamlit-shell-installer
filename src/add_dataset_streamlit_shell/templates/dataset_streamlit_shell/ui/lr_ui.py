@@ -28,13 +28,12 @@ from dataset_streamlit_shell.ml.regression import (
 )
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
 from dataset_streamlit_shell.ui import multiple_regression_quiz as multi_quiz
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
     WORKSPACE_DIR,
-    _display_path,
+    display_path,
     invoke_data_agent,
     render_chat_panel,
-    teaching_page_host_context,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.lr_slot_state import (
@@ -90,6 +89,7 @@ from dataset_streamlit_shell.ui.simple_regression_quiz import (
     quiz_choice_status,
     quiz_identity,
 )
+from dataset_streamlit_shell.ui.supervised_pack import supervised_host_context
 from dataset_streamlit_shell.ui.teaching_flow import live_fit_caption
 
 configure_matplotlib_for_traditional_chinese()
@@ -104,11 +104,11 @@ LR_TRAINING_CHART_FIGSIZE = (6.5, 6.5)
 LR_INSPECT_SCATTER_FIGSIZE = (5.2, 3.6)
 
 
-def _lr_host() -> str:
-    return teaching_page_host_context(
+def page_host_context() -> str:
+    return supervised_host_context(
         lr_host_context_fragment(
-            slots_path=_display_path(lr_slots_path(WORKSPACE_DIR)),
-            request_path=_display_path(lr_train_request_path(WORKSPACE_DIR)),
+            slots_path=display_path(lr_slots_path(WORKSPACE_DIR)),
+            request_path=display_path(lr_train_request_path(WORKSPACE_DIR)),
         )
     )
 LR_STAGE_SIMPLE = "單變量"
@@ -178,8 +178,7 @@ def render_linear_regression_page() -> None:
         render_chat_panel(
             extra_context=extra,
             page_name=LR_PAGE_TITLE,
-            host_context=_lr_host(),
-            skip_working_snapshot=True,
+            host_context=page_host_context(),
             after_reply=_after_lr_chat,
         )
 
@@ -1145,8 +1144,8 @@ def _set_simple_agent_context(
         quiz_unlocked=quiz_unlocked,
         scale_errors=scale_errors,
         artifact_note=_artifact_note(artifact),
-        slots_path=_display_path(lr_slots_path(WORKSPACE_DIR)),
-        request_path=_display_path(lr_train_request_path(WORKSPACE_DIR)),
+        slots_path=display_path(lr_slots_path(WORKSPACE_DIR)),
+        request_path=display_path(lr_train_request_path(WORKSPACE_DIR)),
     )
     st.session_state[LR_CONTEXT_KEY] = (
         build_regression_agent_context(
@@ -1204,8 +1203,8 @@ def _set_multiple_agent_context(
         quiz_unlocked=quiz_unlocked,
         scale_errors=scale_errors,
         artifact_note=_artifact_note(artifact),
-        slots_path=_display_path(lr_slots_path(WORKSPACE_DIR)),
-        request_path=_display_path(lr_train_request_path(WORKSPACE_DIR)),
+        slots_path=display_path(lr_slots_path(WORKSPACE_DIR)),
+        request_path=display_path(lr_train_request_path(WORKSPACE_DIR)),
     )
     st.session_state[LR_CONTEXT_KEY] = (
         build_regression_agent_context(
@@ -1339,8 +1338,7 @@ def _send_simple_hint(
             ),
             extra_context=extra,
             display_user_text=hint_display_text(qid),
-            skip_working_snapshot=True,
-            host_context=_lr_host(),
+            host_context=page_host_context(),
             page_name=LR_PAGE_TITLE,
         )
     st.rerun()
@@ -1557,8 +1555,7 @@ def _send_multiple_hint(
             multi_quiz.hint_user_text(qid, features=features, target=target),
             extra_context=extra,
             display_user_text=multi_quiz.hint_display_text(qid),
-            skip_working_snapshot=True,
-            host_context=_lr_host(),
+            host_context=page_host_context(),
             page_name=LR_PAGE_TITLE,
         )
     st.rerun()

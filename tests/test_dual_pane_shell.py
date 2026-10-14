@@ -45,7 +45,7 @@ def test_pane_height_locks_to_viewport_minus_row_top() -> None:
 
 def test_dual_pane_pages_use_shared_shell_not_hardcoded_ratio() -> None:
     paths = [
-        TEMPLATE / "app.py",
+        UI / "overview_ui.py",
         TEMPLATE / "pages" / "2_Charts.py",
         UI / "workflow_ui.py",
         UI / "cv_layout.py",
@@ -81,15 +81,6 @@ def test_dual_pane_chrome_does_not_insert_column_sibling() -> None:
     assert "dssResizeBound" in chrome
     assert "width: 8px" in chrome
     assert "edge - e.clientX > 8" in chrome
-
-
-def test_overview_metrics_use_keyed_container_not_split_html() -> None:
-    app = (TEMPLATE / "app.py").read_text(encoding="utf-8")
-    styles = (UI / "data_ui.py").read_text(encoding="utf-8")
-    assert 'st.markdown(\'<div class="data-card">\'' not in app
-    assert "st.markdown(\"</div>\"" not in app
-    assert 'key="overview_data_card"' in app
-    assert "st-key-overview_data_card" in styles
 
 
 def test_dual_pane_chrome_clears_overlay_header() -> None:

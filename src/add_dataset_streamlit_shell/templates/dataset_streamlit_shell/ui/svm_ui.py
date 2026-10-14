@@ -11,13 +11,12 @@ import pandas as pd
 import streamlit as st
 
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
+from dataset_streamlit_shell.host_context import SHELL_ROOT
 from dataset_streamlit_shell.ui.data_ui import (
-    SHELL_ROOT,
-    _display_path,
+    display_path,
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
-    teaching_page_host_context,
 )
 from dataset_streamlit_shell.ml.svm import (
     MODEL_KIND_LINEAR_SVM,
@@ -37,6 +36,7 @@ from dataset_streamlit_shell.plotting import (
     configure_matplotlib_for_traditional_chinese,
 )
 from dataset_streamlit_shell.ui import svm_quiz as quiz
+from dataset_streamlit_shell.ui.supervised_pack import supervised_host_context
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -52,6 +52,10 @@ PAGE_TITLE = "線性支持向量機"
 CONTEXT_KEY = f"{PAGE_TITLE}_agent_context"
 STAGE_HARD_LABEL = "線性可分（最大化 margin）"
 STAGE_SOFT_LABEL = "Soft Margin"
+
+
+def page_host_context() -> str:
+    return supervised_host_context()
 
 
 def render_linear_svm_page() -> None:
@@ -79,8 +83,7 @@ def render_linear_svm_page() -> None:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,
-            host_context=teaching_page_host_context(),
-            skip_working_snapshot=True,
+            host_context=page_host_context(),
         )
 
 
@@ -765,8 +768,7 @@ def _send_hard_hint(
             quiz.hard_hint_user_text(qid, features=features, target=target),
             extra_context=extra,
             display_user_text=quiz.hard_hint_display_text(qid),
-            skip_working_snapshot=True,
-            host_context=teaching_page_host_context(),
+            host_context=page_host_context(),
             page_name=PAGE_TITLE,
         )
     st.rerun()
@@ -822,8 +824,7 @@ def _send_soft_hint(
             quiz.soft_hint_user_text(qid, features=features, target=target, C=C),
             extra_context=extra,
             display_user_text=quiz.soft_hint_display_text(qid),
-            skip_working_snapshot=True,
-            host_context=teaching_page_host_context(),
+            host_context=page_host_context(),
             page_name=PAGE_TITLE,
         )
     st.rerun()
@@ -915,7 +916,7 @@ def _render_svm_save_section(artifact: LinearSvmArtifact, *, key: str) -> None:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = CLASSIFICATION_MODEL_DIR / f"linear_svm_{stamp}.json"
         save_svm_artifact(artifact, path)
-        st.success(f"已保存模型：`{_display_path(path)}`")
+        st.success(f"已保存模型：`{display_path(path)}`")
 
 
 def _render_svm_inference_section(*, trained_artifact: LinearSvmArtifact | None, key_prefix: str) -> None:

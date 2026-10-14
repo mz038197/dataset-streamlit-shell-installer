@@ -9,7 +9,7 @@ import pytest
 from add_dataset_streamlit_shell import installer
 from add_dataset_streamlit_shell.installer import (
     CHARSET_NORMALIZER_CONSTRAINT,
-    PROJECT_DEPENDENCIES,
+    FRAMEWORK_DEPENDENCIES,
     install_shell,
 )
 
@@ -20,19 +20,12 @@ def test_install_shell_copies_template_without_agent_core(tmp_path: Path) -> Non
     assert (result.target / "app.py").exists()
     assert (result.target / "ui" / "data_ui.py").exists()
     assert not (result.target / "pages" / "1_Database.py").exists()
-    assert (result.target / "pages" / "3_Field_Quality.py").exists()
-    app_src = (result.target / "app.py").read_text(encoding="utf-8")
-    assert "資料上傳與預覽" not in app_src
-    assert "3_Field_Quality.py" in app_src
     assert (result.target / "workspace" / ".gitkeep").exists()
-    assert (result.target / "assets" / "encoding_onehot_vs_label.png").is_file()
+    assert (result.target / "scripts" / ".gitkeep").exists()
     assert (tmp_path / "sessions" / ".gitkeep").exists()
     assert not (result.target / "sessions").exists()
     data_ui = (result.target / "ui" / "data_ui.py").read_text(encoding="utf-8")
     assert 'SESSION_DIR = PROJECT_ROOT / "sessions"' in data_ui
-    workflow_ui = (result.target / "ui" / "workflow_ui.py").read_text(encoding="utf-8")
-    assert "One-Hot 與 Label Encoding 對照" in workflow_ui
-    assert "encoding_onehot_vs_label.png" in workflow_ui
 
 
 def test_install_shell_can_require_agent_core(tmp_path: Path) -> None:
@@ -176,7 +169,7 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
 
     assert len(calls) == 3
     assert calls[0] == (
-        ["uv", "add", "--upgrade-package", "openai-tts", *PROJECT_DEPENDENCIES],
+        ["uv", "add", "--upgrade-package", "openai-tts", *FRAMEWORK_DEPENDENCIES],
         tmp_path.resolve(),
         True,
     )
@@ -188,8 +181,8 @@ def test_install_shell_installs_project_dependencies_by_default(tmp_path: Path) 
         tmp_path.resolve(),
         True,
     )
-    assert "streamlit>=1.61" in PROJECT_DEPENDENCIES
-    assert PROJECT_DEPENDENCIES == result.installed_dependencies[:-2]
+    assert "streamlit>=1.61" in FRAMEWORK_DEPENDENCIES
+    assert FRAMEWORK_DEPENDENCIES == result.installed_dependencies[:-2]
     assert "peas-agent-runtime" in result.installed_dependencies[-2]
     assert result.installed_dependencies[-1] == CHARSET_NORMALIZER_CONSTRAINT
 

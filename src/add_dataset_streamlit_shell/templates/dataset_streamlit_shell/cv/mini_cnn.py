@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from dataset_streamlit_shell.ml.tf_runtime import configure_tensorflow_runtime
+from dataset_streamlit_shell.cv.tf_runtime import configure_tensorflow_runtime
 
 configure_tensorflow_runtime()
 import tensorflow as tf

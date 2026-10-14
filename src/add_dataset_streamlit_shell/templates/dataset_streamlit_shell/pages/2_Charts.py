@@ -17,15 +17,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from dataset_streamlit_shell.ui.data_ui import (
+from dataset_streamlit_shell.ui.data_science import (
     WORKING_DATASET_PATH,
-    _display_path,
+    load_working_dataset,
+    render_data_science_chat,
+    working_dataset_file_exists,
+)
+from dataset_streamlit_shell.ui.data_ui import (
+    display_path,
     brand_page_icon,
     inject_style,
-    load_working_dataset,
-    render_chat_panel,
     render_dataset_metrics,
-    working_dataset_file_exists,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
@@ -1316,7 +1318,7 @@ def run_page() -> None:
             st.caption(f"目前使用：{source_label}（本頁只讀 Working）")
             if source_path:
                 with st.expander("技術資訊", expanded=False):
-                    st.caption(f"資料檔：`{_display_path(source_path)}`")
+                    st.caption(f"資料檔：`{display_path(source_path)}`")
 
             roles = _infer_column_roles(df)
             st.markdown("### 選對圖種")
@@ -1397,7 +1399,7 @@ def run_page() -> None:
             drawn_id=active_draw,
             draw_summary=draw_summary_for_agent,
         )
-        render_chat_panel(extra_context=extra_context, page_name="圖表探索")
+        render_data_science_chat(extra_context, page_name="圖表探索")
 
 
 if os.environ.get("DATASET_CHARTS_SKIP_RUN") != "1":

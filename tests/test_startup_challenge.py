@@ -15,6 +15,8 @@ if str(TEMPLATE_ROOT) not in sys.path:
 
 from dataset_streamlit_shell.ui.startup_challenge_context import (  # noqa: E402
     CHALLENGE_COMPANIES,
+    CHALLENGE_GREETING,
+    ChallengeHostPaths,
     DATA_VIEW_START,
     DATA_VIEW_TEST,
     DATA_VIEW_TRAIN,
@@ -287,13 +289,15 @@ _HOST_UI_PATHS = dict(
 def test_host_context_is_workflow_not_pitch_board() -> None:
     text = challenge_host_context(
         company="edupulse",
-        start_csv="dataset_streamlit_shell/workspace/challenge/edupulse.csv",
-        handbook="dataset_streamlit_shell/workspace/challenge/edupulse_資料說明書.md",
-        working_csv="dataset_streamlit_shell/workspace/challenge/edupulse/working.csv",
-        train_csv="dataset_streamlit_shell/workspace/challenge/edupulse/train.csv",
-        test_csv="dataset_streamlit_shell/workspace/challenge/edupulse/test.csv",
-        scripts_dir="dataset_streamlit_shell/scripts",
-        **_HOST_UI_PATHS,
+        paths=ChallengeHostPaths(
+            start_csv="dataset_streamlit_shell/workspace/challenge/edupulse.csv",
+            handbook="dataset_streamlit_shell/workspace/challenge/edupulse_資料說明書.md",
+            working_csv="dataset_streamlit_shell/workspace/challenge/edupulse/working.csv",
+            train_csv="dataset_streamlit_shell/workspace/challenge/edupulse/train.csv",
+            test_csv="dataset_streamlit_shell/workspace/challenge/edupulse/test.csv",
+            scripts_dir="dataset_streamlit_shell/scripts",
+            **_HOST_UI_PATHS,
+        ),
     )
     assert "【AI Startup Challenge 模式】" in text
     assert "模型區" in text
@@ -308,7 +312,9 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "nn_form.json" not in text
     assert "Challenge 工作資料" in text
     assert "只作為重置來源" not in text
-    assert "不要改根目錄的 original.csv" in text
+    assert "工作副本與切分只寫在目前公司資料夾" in text
+    assert "original.csv" not in text
+    assert "ready.csv" not in text
     assert "challenge_model_artifact" in text
     assert "自行還原專案展示空殼" in text
     assert "清除回起點確認" in text
@@ -324,8 +330,8 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
     assert "logistic_gradient_descent_steps" in text
     assert "gradient_descent_steps" in text
     assert "不要 import lr_ui" in text
-    assert "from dataset_streamlit_shell.ml.regression import" in text
-    assert "from dataset_streamlit_shell.ml.classification import" in text
+    assert "from dataset_streamlit_shell.ml.startup_challenge_regression import" in text
+    assert "from dataset_streamlit_shell.ml.startup_challenge_classification import" in text
     assert "create_feature_scaler" in text
     assert "sample_gradient_steps" in text
     assert "不要 from ml.xxx" in text
@@ -337,13 +343,15 @@ def test_host_context_is_workflow_not_pitch_board() -> None:
 def test_host_context_vitalrisk_fragment() -> None:
     text = challenge_host_context(
         company="vitalrisk",
-        start_csv="challenge/vitalrisk.csv",
-        handbook="challenge/vitalrisk_資料說明書.md",
-        working_csv="challenge/vitalrisk/working.csv",
-        train_csv="challenge/vitalrisk/train.csv",
-        test_csv="challenge/vitalrisk/test.csv",
-        scripts_dir="scripts",
-        **_HOST_UI_PATHS,
+        paths=ChallengeHostPaths(
+            start_csv="challenge/vitalrisk.csv",
+            handbook="challenge/vitalrisk_資料說明書.md",
+            working_csv="challenge/vitalrisk/working.csv",
+            train_csv="challenge/vitalrisk/train.csv",
+            test_csv="challenge/vitalrisk/test.csv",
+            scripts_dir="scripts",
+            **_HOST_UI_PATHS,
+        ),
     )
     assert "假陽性" in text or "假陰性" in text
     assert "不是診斷" in text
@@ -406,8 +414,8 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     page = (UI / "startup_challenge_page.py").read_text(encoding="utf-8")
     assert ui == empty
     assert is_zone_function_ui_snapshot(ui) is True
-    assert "from dataset_streamlit_shell.ml.regression import" in ui
-    assert "from dataset_streamlit_shell.ml.classification import" in ui
+    assert "from dataset_streamlit_shell.ml.startup_challenge_regression import" in ui
+    assert "from dataset_streamlit_shell.ml.startup_challenge_classification import" in ui
     assert "不要 df.melt()" in ui
     assert "def render_model_zone(paths" in ui
     assert "def render_result_zone(paths" in ui
@@ -429,18 +437,16 @@ def test_live_and_empty_shell_are_zone_functions_without_page_chrome() -> None:
     assert "_call_zone" in page
     assert "_is_streamlit_rerun" in page
     assert "from dataset_streamlit_shell.ui import startup_challenge_ui as live_ui_module" in page
-    assert "live_ui=_display_path(LIVE_UI_PATH)" in page
+    assert "live_ui=display_path(LIVE_UI_PATH)" in page
     assert page.split("def _reload_live_ui")[0].count(
         "from dataset_streamlit_shell.ui import startup_challenge_ui"
     ) == 0
     assert "clear_challenge_runtime" not in page
-    greeting = (
-        SHELL / "ui" / "data_ui.py"
-    ).read_text(encoding="utf-8")
-    assert "白板三塊" not in greeting
-    assert "模型區" in greeting or "Challenge 工作資料" in greeting
-    assert "dataset_streamlit_shell/ui/startup_challenge_ui.py" in greeting
-    assert 'agent_scope.startswith("challenge")' in greeting
+    assert "白板三塊" not in CHALLENGE_GREETING
+    assert "模型區" in CHALLENGE_GREETING or "Challenge 工作資料" in CHALLENGE_GREETING
+    assert "dataset_streamlit_shell/ui/startup_challenge_ui.py" in CHALLENGE_GREETING
+    assert "greeting=CHALLENGE_GREETING" in page
+    assert "new_session_on_entry=True" in page
 
 
 def test_legacy_files_ignore_session_until_confirmed(tmp_path: Path) -> None:
@@ -744,7 +750,7 @@ def test_apply_clear_leaves_legacy_full_page_on_disk(tmp_path: Path) -> None:
 
 
 def test_challenge_host_named_ml_imports_exist() -> None:
-    from dataset_streamlit_shell.ml.classification import (  # noqa: PLC0415
+    from dataset_streamlit_shell.ml.startup_challenge_classification import (  # noqa: PLC0415
         attach_logistic_test_costs,
         confusion_matrix_counts,
         logistic_gradient_descent_steps,
@@ -753,7 +759,7 @@ def test_challenge_host_named_ml_imports_exist() -> None:
         precision_recall_f1_from_counts,
         sample_gradient_steps,
     )
-    from dataset_streamlit_shell.ml.regression import (  # noqa: PLC0415
+    from dataset_streamlit_shell.ml.startup_challenge_regression import (  # noqa: PLC0415
         apply_feature_scaler,
         attach_test_costs,
         create_feature_scaler,

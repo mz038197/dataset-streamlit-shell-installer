@@ -33,24 +33,26 @@ from dataset_streamlit_shell.ml.split import (
     ratios_sum_to_one,
     split_ready_frame,
 )
-from dataset_streamlit_shell.ui.data_ui import (
+from dataset_streamlit_shell.ui.data_science import (
     CLEANING_LOG_PATH,
-    SHELL_ROOT,
     TEST_DATASET_PATH,
     TRAIN_DATASET_PATH,
     VAL_DATASET_PATH,
-    WORKSPACE_DIR,
-    _display_path,
     append_cleaning_log,
     clear_to_dual_start,
     load_cleaning_log,
     load_working_dataset,
     refresh_working_dataset_cache,
-    render_chat_panel,
-    render_dataset_metrics,
+    render_data_science_chat,
     reset_working_dataset_from_source,
     save_split_datasets,
     working_dataset_file_exists,
+)
+from dataset_streamlit_shell.host_context import SHELL_ROOT
+from dataset_streamlit_shell.ui.data_ui import (
+    WORKSPACE_DIR,
+    display_path,
+    render_dataset_metrics,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
@@ -109,7 +111,7 @@ def _page_shell(
         _render_recent_log()
     with agent:
         extra_context = extra_context_builder(df) if extra_context_builder else ""
-        render_chat_panel(extra_context=extra_context, page_name=title)
+        render_data_science_chat(extra_context, page_name=title)
 
 
 def _render_refresh_controls() -> None:
@@ -129,7 +131,7 @@ def _render_recent_log() -> None:
     with st.expander("最近整理紀錄", expanded=False):
         entries = load_cleaning_log()
         if not entries:
-            st.caption(f"尚無紀錄。Agent 修改資料後可寫入 `{_display_path(CLEANING_LOG_PATH)}`。")
+            st.caption(f"尚無紀錄。Agent 修改資料後可寫入 `{display_path(CLEANING_LOG_PATH)}`。")
             return
         for entry in entries:
             created_at = _format_log_time(str(entry.get("created_at", "")))
@@ -331,7 +333,7 @@ def render_quality_page() -> None:
         else:
             extra_context = _render_dual_table_quality()
     with agent:
-        render_chat_panel(extra_context=extra_context, page_name=title)
+        render_data_science_chat(extra_context, page_name=title)
 
 
 def render_missing_page() -> None:
@@ -1272,34 +1274,6 @@ def render_encoding_correlation_page() -> None:
     render_encoding_page()
 
 
-def pca_status(df: pd.DataFrame) -> dict[str, object]:
-    numeric = df.select_dtypes(include="number")
-    return {
-        "rows": len(df),
-        "numeric_columns": len(numeric.columns),
-        "missing_cells": int(numeric.isna().sum().sum()) if not numeric.empty else 0,
-        "enough_columns": len(numeric.columns) >= 2,
-        "enough_rows": len(df) >= 3,
-    }
-
-
-def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.DataFrame], None]) -> None:
-    teaching, agent = open_content_dual_pane()
-    with teaching:
-        st.title(title)
-        st.caption(caption)
-        if not working_dataset_file_exists():
-            st.warning("尚未建立工作資料。請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。")
-            return
-        df = load_working_dataset()
-        if df is None:
-            st.warning("尚未建立工作資料。請先到「欄位與資料整合」查看雙表，請 Agent 對齊鍵名後合併。")
-            return
-        render_main(df)
-    with agent:
-        render_chat_panel(page_name=title)
-
-
 def render_transform_page() -> None:
     def body(df: pd.DataFrame) -> None:
         st.markdown("##### 診斷：資料轉換（同義寫法）")
@@ -1492,13 +1466,13 @@ def render_split_page() -> None:
                     actor="ui",
                 )
                 st.success(
-                    f"已寫入 `{_display_path(TRAIN_DATASET_PATH)}`、"
-                    f"`{_display_path(VAL_DATASET_PATH)}`、"
-                    f"`{_display_path(TEST_DATASET_PATH)}`。"
+                    f"已寫入 `{display_path(TRAIN_DATASET_PATH)}`、"
+                    f"`{display_path(VAL_DATASET_PATH)}`、"
+                    f"`{display_path(TEST_DATASET_PATH)}`。"
                 )
 
     with agent:
-        render_chat_panel(
+        render_data_science_chat(
             extra_context=(
                 f"資料切分頁。Working 列數={len(working) if working is not None else 0}。"
                 f"預設比例 "

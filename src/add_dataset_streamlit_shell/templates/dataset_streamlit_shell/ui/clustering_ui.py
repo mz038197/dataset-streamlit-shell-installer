@@ -26,12 +26,9 @@ from dataset_streamlit_shell.ml.clustering import (
     ward_linkage,
 )
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
-from dataset_streamlit_shell.ui.data_ui import (
-    render_chat_panel,
-    render_dataset_metrics,
-    teaching_page_host_context,
-)
+from dataset_streamlit_shell.ui.data_ui import render_dataset_metrics
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
+from dataset_streamlit_shell.ui.unsupervised_pack import render_unsupervised_chat
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -104,8 +101,8 @@ def render_kmeans_page() -> None:
         evo = st.session_state.get(KMEANS_EVO_KEY)
         locked = evo.locked_k if isinstance(evo, KMeansEvolution) else "尚未開始"
         status = kmeans_evolution_status(evo) if isinstance(evo, KMeansEvolution) else "尚未開始分群演示"
-        render_chat_panel(
-            extra_context=(
+        render_unsupervised_chat(
+            (
                 f"目前頁面：{KMEANS_TITLE}。資料來源：{SOURCE_LABEL}。"
                 f"固定特徵 {CLUSTERING_FEATURES}；slider K="
                 f"{st.session_state.get('kmeans_n_clusters', DEFAULT_N_CLUSTERS)}；鎖定的 K={locked}。"
@@ -113,8 +110,6 @@ def render_kmeans_page() -> None:
                 "演算法不使用教學用真實群標籤；該欄僅供對照。"
             ),
             page_name=KMEANS_TITLE,
-            host_context=teaching_page_host_context(),
-            skip_working_snapshot=True,
         )
 
 
@@ -159,16 +154,14 @@ def render_wards_page() -> None:
         )
 
     with agent:
-        render_chat_panel(
-            extra_context=(
+        render_unsupervised_chat(
+            (
                 f"目前頁面：{WARDS_TITLE}。資料來源：{SOURCE_LABEL}。"
                 f"固定特徵 {CLUSTERING_FEATURES}；目前切群數="
                 f"{st.session_state.get('wards_n_clusters', DEFAULT_N_CLUSTERS)}。"
                 "演算法不使用教學用真實群標籤；該欄僅供對照。"
             ),
             page_name=WARDS_TITLE,
-            host_context=teaching_page_host_context(),
-            skip_working_snapshot=True,
         )
 
 
