@@ -54,8 +54,8 @@ def test_app_nav_order_for_integration_transform_split() -> None:
     split = src.index("20_Data_Split.py")
     assert collab < quality < transform < duplicates
     assert scaling < charts < split
-    assert 'title="欄位與資料整合"' in src
-    assert 'title="資料整合"' not in src
+    assert '"欄位與資料整合")' in src
+    assert '"資料整合")' not in src
 
 
 def test_guidance_strings_point_to_field_quality_not_upload() -> None:
