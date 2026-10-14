@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 
 import streamlit as st
 
-from dataset_streamlit_shell.ui.data_ui import render_chat_panel, teaching_page_host_context
+from dataset_streamlit_shell.ui.computer_vision_pack import render_computer_vision_chat
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 
 
@@ -18,13 +18,7 @@ def render_cv_tabbed_page(
     """Render CV teaching pages with one shared Agent panel beside tabbed main content."""
     teaching_col, agent_col = open_content_dual_pane()
     with agent_col:
-        render_chat_panel(
-            extra_context=str(
-                st.session_state.get(context_key, f"目前頁面：{page_title}。")
-            ),
-            page_name=page_title,
-            host_context=teaching_page_host_context(),
-        )
+        render_computer_vision_chat(page_title=page_title, context_key=context_key)
     with teaching_col:
         tabs = st.tabs(list(tab_labels))
         for tab, renderer in zip(tabs, tab_renderers, strict=True):

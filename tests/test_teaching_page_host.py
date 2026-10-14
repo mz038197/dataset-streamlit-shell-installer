@@ -43,8 +43,6 @@ TEACHING_CHAT_FILES = (
     "knn_ui.py",
     "tree_ui.py",
     "clustering_ui.py",
-    "cnn_ui.py",
-    "cv_layout.py",
 )
 
 
