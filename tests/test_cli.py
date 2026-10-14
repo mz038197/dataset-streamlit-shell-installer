@@ -42,6 +42,23 @@ def test_add_installs_named_packs_into_project_root(tmp_path: Path) -> None:
     assert "data-science" in result.output
 
 
+def test_add_tells_student_to_refresh_the_page(tmp_path: Path) -> None:
+    result = _invoke("add", "data-science", "-C", str(tmp_path), "--no-install-deps")
+
+    assert result.exit_code == 0, result.output
+    assert "refresh the Streamlit page" in result.output
+
+
+def test_update_with_packs_does_not_suggest_adding_data_science(tmp_path: Path) -> None:
+    _invoke("add", "supervised", "-C", str(tmp_path), "--no-install-deps")
+
+    result = _invoke("-C", str(tmp_path), "--update", "--no-install-deps")
+
+    assert result.exit_code == 0, result.output
+    assert "supervised" in result.output
+    assert "add data-science" not in result.output
+
+
 def test_add_again_reports_already_installed(tmp_path: Path) -> None:
     _invoke("add", "data-science", "-C", str(tmp_path), "--no-install-deps")
 

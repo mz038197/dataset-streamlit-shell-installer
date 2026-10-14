@@ -1,107 +1,89 @@
 # Dataset Streamlit Shell Installer
 
-Install the workshop `dataset_streamlit_shell/` UI into a student agent project.
+把教學用的 `dataset_streamlit_shell/` 裝進學生的 Agent 專案。殼層 = **AI Lab 框架** + 已加裝的**課程包**：先裝框架（總覽、資料 Agent 欄、側欄品牌列），上課到哪一段再 `add` 那一段的課程包；沒裝的課程包不出現在側欄。
 
-## Usage
+## 安裝 AI Lab 框架
 
-From the project where you want to add the shell:
+在要加裝殼層的專案根目錄執行：
 
 ```powershell
 uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell
 ```
 
-Local development:
+本機開發：
 
 ```powershell
 uvx --from . add-dataset-streamlit-shell
 ```
 
-To require `agent_core.py` during installation:
+只裝框架時側欄只有總覽，完成提示會建議下一步 `add data-science`。框架預設用 `uv add` 裝自己的套件（Streamlit、pandas、openai-tts、peas-agent-runtime）；專案旁有 `../peas-agent-runtime` 時改以 editable 安裝。
 
-```powershell
-uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell --require-agent-core
-```
-
-To update an existing shell while keeping runtime data:
-
-```powershell
-uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell --update
-```
-
-By default, installation and update also run this in the target project:
-
-```powershell
-uv add --upgrade-package openai-tts "streamlit>=1.50" pandas matplotlib plotly numpy scikit-learn xgboost "openai-tts @ git+https://github.com/mz038197/openai-tts.git"
-```
-
-To copy or update the shell without changing project dependencies:
-
-```powershell
-uvx --from git+https://github.com/mz038197/dataset-streamlit-shell-installer.git add-dataset-streamlit-shell --no-install-deps
-```
-
-When using `--no-install-deps`, the target project must already provide Streamlit 1.50 or newer.
-
-This preserves:
-
-- `dataset_streamlit_shell/workspace/*.csv`
-- `dataset_streamlit_shell/workspace/*.jsonl`
-- `dataset_streamlit_shell/workspace/user_settings.json`
-- `sessions/*.jsonl`（專案根；對話紀錄）
-- `dataset_streamlit_shell/scripts/`
-- `dataset_streamlit_shell/uploads/`
-
-After installation:
+啟動：
 
 ```powershell
 uv run streamlit run dataset_streamlit_shell/app.py
 ```
 
-## Agent reasoning
+## 加裝課程包
 
-The data Agent column shows a collapsible **思考過程** expander while the student `create_agent` streams reasoning (Responses API). It is kept in the Streamlit session until refresh, not in `sessions/*.jsonl`. Agents that only accept `on_token` still work; they just show the answer.
+以下指令都可加 `-C <專案根目錄>` 指定專案。下面以 `add-dataset-streamlit-shell` 代表上面的 `uvx --from ... add-dataset-streamlit-shell`。
 
-## TTS settings
-
-The data Agent column **does not show or play TTS**. `dataset_streamlit_shell/workspace/user_settings.json` may still contain `tts_*` keys from older installs; the shell creates the file if missing but does not drive UI or playback from it.
-
-```json
-{
-  "tts_enabled": false,
-  "tts_voice": "nova",
-  "tts_instructions": "用台灣繁體中文說話。",
-  "tts_speed": 1.0
-}
+```powershell
+add-dataset-streamlit-shell add data-science            # 加裝一包
+add-dataset-streamlit-shell add supervised unsupervised # 一次加裝多包
+add-dataset-streamlit-shell add all                     # 加裝全部課程包
+add-dataset-streamlit-shell list                        # 列出課程包、側欄分段、是否已安裝
 ```
 
-## Machine learning pages (shell template)
+- `add`：還沒裝框架時會先裝框架；已裝過的課程包顯示「已安裝」並略過；名稱打錯會列出可用名稱。只新增檔案，不覆蓋 `workspace/` 等保留目錄裡既有的檔。完成後**重新整理 Streamlit 頁面**，側欄就會出現新的分段。
+- 加裝的課程包記在 `dataset_streamlit_shell/course_packs.json`（安裝紀錄）。
+- 每個課程包只裝自己需要的額外套件。
 
-The installed `dataset_streamlit_shell/` template includes supervised learning pages aligned with the course labs:
+| 指令名稱 | 側欄分段 | 額外套件 |
+| --- | --- | --- |
+| `data-science` | AI 協作資料整理 | matplotlib、scikit-learn |
+| `supervised` | 機器學習 · 監督式 | numpy、matplotlib、plotly、scikit-learn、xgboost |
+| `unsupervised` | 機器學習 · 非監督式 | numpy、matplotlib、scipy、scikit-learn |
+| `deep-learning` | 深度學習 | numpy、matplotlib、tensorflow-cpu |
+| `computer-vision` | 電腦視覺 | numpy、matplotlib、scikit-learn、tensorflow-cpu、torch、torchvision、ultralytics、CLIP、opencv-python-headless、pillow、gdown |
+| `pca` | 降維分析 | numpy |
+| `startup-workshop` | AI新創工作坊 | numpy、matplotlib |
 
-- **Linear regression** (built-in restaurant profit and house price CSVs under `built-in-data/regression/`)
-- **Logistic regression** — two stages: linear boundary (`university_admission.csv`, Coursera ex2data1) → polynomial features & λ (`microchip_test.csv`, ex2data2, degree-6 map). Pre-train quiz on each stage; cost expander aligned with linear regression (J + GD + derivatives).
-- **Linear SVM** — two-stage hard → soft margin: `svm_blobs_80.csv` (linearly separable) then `svm_soft_margin_80.csv` (overlapping classes), both under `built-in-data/classification/`. Uses `sklearn.svm.SVC(kernel='linear')`; hard stage omits C on the surface, soft stage centers on C. Shows decision boundary and support vectors. Requires `scikit-learn`.
-- **K-近鄰分類** — single page: pre-train quiz (instance learner + majority vote), then odd `k` slider. Builtin `knn_blobs_80.csv` only (always standardized). 「開始預測演示」fits the neighbor pool; 「下一步」walks each query through appear → distance rank → k lines → majority vote. Plotly click-to-add after 3 demo points. Requires `scikit-learn` and `plotly`.
-- **決策樹與集成** — three stages: single tree (cat toy `cat_toy_10.csv`, entropy / information gain) → random forest / Bagging (`n_estimators`, tree vs forest val accuracy on heart disease) → XGBoost / Boosting (`learning_rate`, shared 80/20 split, forest baseline). Pre-train quiz on each stage; Bagging vs Boosting contrast on stage 3. Requires `scikit-learn` and `xgboost`. Builtin data only; no model JSON save.
+課程包之間不共用程式：兩包都要用的功能各帶一份副本，只裝其中一包也能完整使用。降維分析讀 AI 協作資料整理產生的 Working；只裝 `pca` 時頁面會提示先 `add data-science`。
 
-Trained classification models are saved as portable JSON under `dataset_streamlit_shell/workspace/models/classification/` for pages that still expose save. The logistic page does not save model JSON in this release; it uses hand-written gradient descent and logistic Cost J. The linear SVM page uses scikit-learn `SVC`. Classification threshold is adjusted after training on the logistic page and is not stored in artifacts (λ is part of the in-session regularized-stage artifact only). Decision tree / ensemble pages do not save models in this release.
+## 更新與重裝
 
-### Promptable segmentation (SAM 3)
+```powershell
+add-dataset-streamlit-shell --update   # 更新框架與已裝的課程包（依安裝紀錄，不多裝）
+add-dataset-streamlit-shell --force    # 備份成 dataset_streamlit_shell.bakN 後重裝
+```
 
-The **Promptable Segmentation** page uses SAM 3 (`sam3.pt`, ~3.4 GB). Weights are **not** bundled in git. On first use, open the page and click **Download SAM 3 weights** (course-hosted via Google Drive), or place `sam3.pt` manually at:
+- `--update`：刪掉保留目錄以外的舊檔再重新複製，保留：
+  - `dataset_streamlit_shell/workspace/`（含 `workspace/challenge/` 學生進度、`user_settings.json`）
+  - `dataset_streamlit_shell/scripts/`、`uploads/`、`memory/`
+  - `sessions/*.jsonl`（專案根；對話紀錄）
+  - `built-in-data/computer-vision/models/` 下已下載的 `*.pt` 權重
+- `--force`：依安裝紀錄重裝框架與已裝的課程包；Challenge 工作資料／訓練／測試會從備份還原，不會只留在 `.bak`。
+- 舊版安裝（沒有 `course_packs.json`）：`--update` 會報錯並建議改用 `--force`；`--force` 備份後只重裝框架，再用 `add` 加裝需要的課程包。
+- `--force` 與 `--update` 不能同時使用；殼層已存在又沒帶任一旗標時拒絕覆蓋。
+
+## 其他選項
+
+- `--no-install-deps`：安裝、`add`、`--update` 都不執行 `uv add`；目標專案須自備 Streamlit 1.61 以上與各課程包的套件。
+- `--require-agent-contract`：安裝後必須通過 `create_agent` 契約檢查，否則非零結束。未接上 Agent 也能安裝，只會提示。
+- `--require-agent-core`：舊旗標，請改用 `--require-agent-contract`。
+
+## 資料 Agent 欄
+
+- 學生的 `create_agent` 串流推理（Responses API）時，欄位顯示可收合的 **思考過程**；只留在 Streamlit session 直到重新整理，不寫入 `sessions/*.jsonl`。只支援 `on_token` 的 Agent 照常可用，只是只顯示回答。
+- 資料 Agent 欄**不顯示也不播放 TTS**。`workspace/user_settings.json` 可能留有舊版的 `tts_*` 鍵；檔案不存在時殼層會建立，但不據此驅動介面或播放。
+
+## Promptable Segmentation（SAM 3）
+
+電腦視覺課程包的 **Promptable Segmentation** 頁使用 SAM 3（`sam3.pt`，約 3.4 GB），權重**不**放在 git。第一次使用時在該頁按 **Download SAM 3 weights**（課程用 Google Drive），或手動放到：
 
 ```text
 dataset_streamlit_shell/built-in-data/computer-vision/models/sam3.pt
 ```
 
-Requires stable network, ~3.4 GB free disk space, and `gdown` (installed with shell dependencies). Weights are for course use only. Running `add-dataset-streamlit-shell --update` preserves downloaded `*.pt` files under `built-in-data/computer-vision/models/`.
-
-## What It Does
-
-- Copies `dataset_streamlit_shell/` into the current project.
-- Installs even before `agent_core.py` is connected; use `--require-agent-core` for strict checking.
-- Installs required project dependencies with `uv add "streamlit>=1.50" pandas matplotlib plotly numpy scikit-learn xgboost` and `openai-tts` by default.
-- Keeps `user_settings.json` on disk; the data Agent column does not show or play TTS.
-- Refuses to overwrite an existing shell unless `--force` is used. `--force` still restores Challenge 工作資料／訓練／測試（含各公司資料夾與舊共用檔），不會只留在 `.bak`。
-- Supports `--update` to refresh shell code while preserving runtime data（含 `workspace/challenge/` 學生進度）。
-- Prints the Streamlit launch command.
+需要穩定網路、約 3.4 GB 磁碟空間與 `gdown`（隨 `computer-vision` 課程包安裝）。權重僅供課程使用；`--update` 會保留已下載的 `*.pt`。

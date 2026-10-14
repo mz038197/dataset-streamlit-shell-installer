@@ -57,9 +57,8 @@ def test_logistic_page_uses_decision_slots_not_teaching_flow() -> None:
     assert "打回尚未選擇" not in src
 
 
-def test_dataset_base_context_does_not_embed_lr_host_fragment() -> None:
+def test_framework_chat_does_not_embed_lr_host_fragment() -> None:
     src = (UI / "data_ui.py").read_text(encoding="utf-8")
-    assert "def teaching_page_host_context" in src
     assert "lr_host_context_fragment" not in src
     assert "lr_slots.json" not in src
     assert "lr_train_request.json" not in src
