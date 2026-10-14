@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues live as local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Issues live on GitHub (`mz038197/dataset-streamlit-shell-installer`); use `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
