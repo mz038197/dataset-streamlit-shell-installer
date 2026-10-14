@@ -15,8 +15,8 @@ from dataset_streamlit_shell.ui.data_ui import (
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
-    teaching_page_host_context,
 )
+from dataset_streamlit_shell.ui.deep_learning_pack import deep_learning_host_context
 from dataset_streamlit_shell.ui.nn_form_state import (
     AGENT_EPOCHS_MAX,
     DEFAULT_MAX_RUNS,
@@ -99,7 +99,7 @@ NN_PAGE_TITLE = "類神經網路"
 
 
 def _nn_host() -> str:
-    return teaching_page_host_context(
+    return deep_learning_host_context(
         nn_host_context_fragment(
             form_path=_display_path(nn_form_path(WORKSPACE_DIR)),
             request_path=_display_path(nn_train_request_path(WORKSPACE_DIR)),

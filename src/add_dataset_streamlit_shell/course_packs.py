@@ -113,6 +113,7 @@ DEEP_LEARNING = CoursePack(
         "pages/21_Neural_Network.py",
         "ui/nn_ui.py",
         "ui/nn_form_state.py",
+        "ui/deep_learning_pack.py",
         "ml/coffee_nn.py",
         "ml/tf_runtime.py",
         "built-in-data/classification/nn_binary_400.csv",
