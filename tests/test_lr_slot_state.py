@@ -367,7 +367,7 @@ def test_host_context_forbids_exec_and_locked_kind_changes() -> None:
     assert "不要同時寫訓練請求" in text
     assert "不要自行 exec" in text
     assert "鎖定槽" in text
-    assert "nn_form.json" in text
+    assert "nn_form.json" not in text  # 別包的檔不列黑名單；可寫清單是白名單
     assert "代填" in text
     assert "全是 null" not in text
     assert "輸入資料進頁即為該階段鎖定值" in text

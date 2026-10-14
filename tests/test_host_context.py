@@ -75,3 +75,87 @@ def test_overview_host_is_framework_layer_only() -> None:
     from dataset_streamlit_shell.ui.overview_ui import overview_host_context
 
     assert overview_host_context() == framework_host_context()
+
+
+def _workshop_paths(company: str) -> dict[str, str]:
+    shell = "dataset_streamlit_shell"
+    challenge = f"{shell}/workspace/challenge"
+    return {
+        "start_csv": f"{challenge}/{company}.csv",
+        "handbook": f"{challenge}/{company}_資料說明書.md",
+        "working_csv": f"{challenge}/{company}/working.csv",
+        "train_csv": f"{challenge}/{company}/train.csv",
+        "test_csv": f"{challenge}/{company}/test.csv",
+        "scripts_dir": f"{shell}/scripts",
+        "live_ui": f"{shell}/ui/startup_challenge_ui.py",
+        "page_py": f"{shell}/ui/startup_challenge_page.py",
+        "empty_shell": f"{shell}/ui/startup_challenge_empty_shell.py",
+    }
+
+
+def _pack_layers() -> dict[str, str]:
+    from dataset_streamlit_shell.ui.computer_vision_pack import computer_vision_pack_layer
+    from dataset_streamlit_shell.ui.data_science import data_science_pack_layer
+    from dataset_streamlit_shell.ui.deep_learning_pack import deep_learning_pack_layer
+    from dataset_streamlit_shell.ui.pca_pack import pca_pack_layer
+    from dataset_streamlit_shell.ui.startup_challenge_context import (
+        startup_workshop_pack_layer,
+    )
+    from dataset_streamlit_shell.ui.supervised_pack import supervised_pack_layer
+    from dataset_streamlit_shell.ui.unsupervised_pack import unsupervised_pack_layer
+
+    return {
+        "data-science": data_science_pack_layer(),
+        "supervised": supervised_pack_layer(),
+        "unsupervised": unsupervised_pack_layer(),
+        "deep-learning": deep_learning_pack_layer(),
+        "computer-vision": computer_vision_pack_layer(),
+        "pca": pca_pack_layer(),
+        "startup-workshop": startup_workshop_pack_layer(**_workshop_paths("edupulse")),
+    }
+
+
+def _page_hosts() -> dict[str, tuple[str, str]]:
+    """每頁（或同一 host 的頁組）→（所屬課程包, host）。"""
+    from dataset_streamlit_shell.ui import knn_ui, logistic_regression_ui, lr_ui, nn_ui
+    from dataset_streamlit_shell.ui import svm_ui, tree_ui
+    from dataset_streamlit_shell.ui.computer_vision_pack import (
+        computer_vision_host_context,
+    )
+    from dataset_streamlit_shell.ui.data_science import data_science_host_context
+    from dataset_streamlit_shell.ui.pca_pack import pca_host_context
+    from dataset_streamlit_shell.ui.startup_challenge_context import challenge_host_context
+    from dataset_streamlit_shell.ui.unsupervised_pack import unsupervised_host_context
+
+    return {
+        "資料整理各頁": ("data-science", data_science_host_context()),
+        "線性回歸": ("supervised", lr_ui.page_host_context()),
+        "邏輯回歸": ("supervised", logistic_regression_ui.page_host_context()),
+        "線性 SVM": ("supervised", svm_ui.page_host_context()),
+        "KNN": ("supervised", knn_ui.page_host_context()),
+        "決策樹": ("supervised", tree_ui.page_host_context()),
+        "分群": ("unsupervised", unsupervised_host_context()),
+        "類神經網路": ("deep-learning", nn_ui._nn_host()),
+        "電腦視覺各頁": ("computer-vision", computer_vision_host_context()),
+        "PCA": ("pca", pca_host_context()),
+        "專案展示": (
+            "startup-workshop",
+            challenge_host_context(company="edupulse", **_workshop_paths("edupulse")),
+        ),
+    }
+
+
+def test_every_page_host_carries_exactly_one_course_pack_layer() -> None:
+    layers = _pack_layers()
+    for page, (pack, host) in _page_hosts().items():
+        assert host.startswith(framework_host_context()), page
+        assert host.count(layers[pack]) == 1, page
+        others = [name for name, layer in layers.items() if name != pack and layer in host]
+        assert others == [], f"{page} 還帶了 {others}"
+
+
+def test_old_default_and_teaching_hosts_are_gone() -> None:
+    from dataset_streamlit_shell.ui import data_ui
+
+    assert not hasattr(data_ui, "dataset_base_context")
+    assert not hasattr(data_ui, "teaching_page_host_context")

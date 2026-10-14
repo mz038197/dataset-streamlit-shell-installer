@@ -345,18 +345,6 @@ def _remove_activation_marker() -> None:
         AGENT_ACTIVATION_MARKER_PATH.unlink()
 
 
-def teaching_page_host_context(*fragments: str) -> str:
-    """教學頁 host_context：內建範例邊界，可接該頁寫回 fragment。不叠 dataset_base_context。"""
-    boundary = (
-        "【教學頁】本頁使用內建範例資料，不是根目錄 Working／Original。"
-        "不准讀寫或覆寫根目錄 original.csv、working.csv。"
-        "不要讀寫 ready.csv。"
-        "不要引導雙表合併，也不要改 cleaning_log。"
-    )
-    extra = "".join(fragment for fragment in fragments if fragment)
-    return boundary + extra
-
-
 PageState = str | Callable[[], str]
 """每輪【目前頁面狀態】：由呼叫的頁面傳入字串，或送出當下才計算的函式。"""
 

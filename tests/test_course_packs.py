@@ -122,3 +122,38 @@ def test_framework_internal_imports_only_reach_framework_files() -> None:
             continue
         for target in _resolved_targets(rel, template):
             assert target in framework, f"{rel} → {target}"
+
+
+def test_readme_pack_table_matches_manifest() -> None:
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    for pack in COURSE_PACKS:
+        row = next(
+            (line for line in readme.splitlines() if line.startswith(f"| `{pack.name}` |")),
+            None,
+        )
+        assert row is not None, pack.name
+        assert pack.sidebar_section in row, pack.name
+    assert "uv add --upgrade-package" not in readme
+
+
+def test_every_template_file_belongs_to_at_most_one_course_pack() -> None:
+    owners: dict[str, list[str]] = {}
+    for pack in COURSE_PACKS:
+        for rel in pack_files(SHELL_ROOT, pack):
+            owners.setdefault(rel, []).append(pack.name)
+    shared = {rel: names for rel, names in owners.items() if len(names) > 1}
+    assert shared == {}
+
+
+def test_each_pack_internal_imports_only_reach_framework_or_itself() -> None:
+    framework = set(framework_files(SHELL_ROOT))
+    template = _template_files()
+    for pack in COURSE_PACKS:
+        own = set(pack_files(SHELL_ROOT, pack))
+        for rel in sorted(own):
+            if not rel.endswith(".py"):
+                continue
+            for target in _resolved_targets(rel, template):
+                assert target in framework or target in own, (
+                    f"{pack.name}: {rel} → {target}"
+                )
