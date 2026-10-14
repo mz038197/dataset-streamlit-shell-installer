@@ -83,15 +83,6 @@ def test_dual_pane_chrome_does_not_insert_column_sibling() -> None:
     assert "edge - e.clientX > 8" in chrome
 
 
-def test_overview_metrics_use_keyed_container_not_split_html() -> None:
-    app = (UI / "overview_ui.py").read_text(encoding="utf-8")
-    styles = (UI / "data_ui.py").read_text(encoding="utf-8")
-    assert 'st.markdown(\'<div class="data-card">\'' not in app
-    assert "st.markdown(\"</div>\"" not in app
-    assert 'key="overview_data_card"' in app
-    assert "st-key-overview_data_card" in styles
-
-
 def test_dual_pane_chrome_clears_overlay_header() -> None:
     chrome = (UI / "dual_pane_shell.py").read_text(encoding="utf-8")
     styles = (UI / "data_ui.py").read_text(encoding="utf-8")

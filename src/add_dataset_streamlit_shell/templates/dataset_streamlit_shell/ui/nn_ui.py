@@ -166,7 +166,6 @@ def render_neural_network_page() -> None:
             extra_context=extra_context,
             page_name=NN_PAGE_TITLE,
             host_context=_nn_host(),
-            skip_working_snapshot=True,
             after_reply=after_nn_chat_reply,
         )
 
@@ -414,7 +413,6 @@ def _run_agent_decision_turn(*, extra_context: str, row_count: int) -> None:
             user_text,
             extra_context=extra_context,
             display_user_text="（系統）請依剛剛的訓練結果決定是否調整參數並繼續實驗。",
-            skip_working_snapshot=True,
             host_context=_nn_host(),
             page_name=NN_PAGE_TITLE,
         )

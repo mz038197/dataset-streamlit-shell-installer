@@ -33,24 +33,26 @@ from dataset_streamlit_shell.ml.split import (
     ratios_sum_to_one,
     split_ready_frame,
 )
-from dataset_streamlit_shell.ui.data_ui import (
+from dataset_streamlit_shell.ui.data_science import (
     CLEANING_LOG_PATH,
-    SHELL_ROOT,
     TEST_DATASET_PATH,
     TRAIN_DATASET_PATH,
     VAL_DATASET_PATH,
-    WORKSPACE_DIR,
-    _display_path,
     append_cleaning_log,
     clear_to_dual_start,
     load_cleaning_log,
     load_working_dataset,
     refresh_working_dataset_cache,
-    render_chat_panel,
-    render_dataset_metrics,
+    render_data_science_chat,
     reset_working_dataset_from_source,
     save_split_datasets,
     working_dataset_file_exists,
+)
+from dataset_streamlit_shell.ui.data_ui import (
+    SHELL_ROOT,
+    WORKSPACE_DIR,
+    _display_path,
+    render_dataset_metrics,
 )
 from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.plotting import configure_matplotlib_for_traditional_chinese
@@ -109,7 +111,7 @@ def _page_shell(
         _render_recent_log()
     with agent:
         extra_context = extra_context_builder(df) if extra_context_builder else ""
-        render_chat_panel(extra_context=extra_context, page_name=title)
+        render_data_science_chat(extra_context, page_name=title)
 
 
 def _render_refresh_controls() -> None:
@@ -331,7 +333,7 @@ def render_quality_page() -> None:
         else:
             extra_context = _render_dual_table_quality()
     with agent:
-        render_chat_panel(extra_context=extra_context, page_name=title)
+        render_data_science_chat(extra_context, page_name=title)
 
 
 def render_missing_page() -> None:
@@ -1297,7 +1299,7 @@ def render_analysis_shell(title: str, caption: str, render_main: Callable[[pd.Da
             return
         render_main(df)
     with agent:
-        render_chat_panel(page_name=title)
+        render_data_science_chat(page_name=title)
 
 
 def render_transform_page() -> None:
@@ -1498,7 +1500,7 @@ def render_split_page() -> None:
                 )
 
     with agent:
-        render_chat_panel(
+        render_data_science_chat(
             extra_context=(
                 f"資料切分頁。Working 列數={len(working) if working is not None else 0}。"
                 f"預設比例 "

@@ -60,6 +60,13 @@ def challenge_agent_scope(company: str) -> str:
     return f"challenge_{company}"
 
 
+CHALLENGE_GREETING = (
+    "請先按「啟用資料 Agent」。啟用後，我會以專案展示規則協助你："
+    "先讀說明書、檢查 Challenge 起點資料，清理 Challenge 工作資料，再切成訓練／測試資料；"
+    "討論後改 dataset_streamlit_shell/ui/startup_challenge_ui.py 補齊模型區與成果區。"
+)
+
+
 def artifact_session_key(company: str) -> str:
     return f"{CHALLENGE_ARTIFACT_KEY}_{company}"
 

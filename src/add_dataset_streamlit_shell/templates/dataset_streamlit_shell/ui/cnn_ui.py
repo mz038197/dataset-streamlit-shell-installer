@@ -82,7 +82,6 @@ def render_cnn_introduction_page() -> None:
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,
             host_context=teaching_page_host_context(),
-            skip_working_snapshot=True,
         )
 
 
@@ -445,7 +444,6 @@ def _send_quiz_hint(qid: str) -> None:
         quiz.hint_user_text(qid),
         extra_context=appendix,
         display_user_text=quiz.hint_display_text(qid),
-        skip_working_snapshot=True,
         host_context=teaching_page_host_context(),
         page_name=PAGE_TITLE,
     )

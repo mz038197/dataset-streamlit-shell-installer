@@ -194,7 +194,6 @@ def render_logistic_regression_page() -> None:
             extra_context=extra,
             page_name=PAGE_TITLE,
             host_context=_lg_host(),
-            skip_working_snapshot=True,
             after_reply=_after_logistic_chat,
         )
 
@@ -1074,7 +1073,6 @@ def _send_boundary_quiz_hint(qid: str) -> None:
             focus_qid=qid,
         ),
         display_user_text=quiz.hint_display_text(qid),
-        skip_working_snapshot=True,
         host_context=_lg_host(),
         page_name=PAGE_TITLE,
     )
@@ -1088,7 +1086,6 @@ def _send_poly_quiz_hint(qid: str) -> None:
             focus_qid=qid,
         ),
         display_user_text=quiz.hint_display_text(qid),
-        skip_working_snapshot=True,
         host_context=_lg_host(),
         page_name=PAGE_TITLE,
     )

@@ -20,6 +20,7 @@ from dataset_streamlit_shell.ui.dual_pane_shell import open_content_dual_pane
 from dataset_streamlit_shell.ui.startup_challenge_context import (
     CHALLENGE_ARTIFACT_KEY,
     CHALLENGE_COMPANIES,
+    CHALLENGE_GREETING,
     CHALLENGE_SPLIT_SIGNATURE_KEY,
     CLEAR_BACK_TO_START_BUTTON_LABEL,
     CLEAR_BACK_TO_START_CANCEL_LABEL,
@@ -432,5 +433,6 @@ def render_startup_challenge_page() -> None:
             page_name="專案展示",
             host_context=host,
             agent_scope=challenge_agent_scope(display_company),
-            skip_working_snapshot=True,
+            greeting=CHALLENGE_GREETING,
+            new_session_on_entry=True,
         )
