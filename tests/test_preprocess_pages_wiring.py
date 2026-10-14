@@ -138,7 +138,7 @@ def test_ready_page_is_removed() -> None:
 
 
 def test_overview_downloads_working_not_ready() -> None:
-    src = APP.read_text(encoding="utf-8")
+    src = (UI / "overview_ui.py").read_text(encoding="utf-8")
     assert "下載 Working" in src
     assert "load_ready_dataset" not in src
     assert "READY_DATASET_PATH" not in src
