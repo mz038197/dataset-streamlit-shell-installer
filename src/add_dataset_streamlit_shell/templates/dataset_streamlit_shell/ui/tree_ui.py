@@ -45,8 +45,8 @@ from dataset_streamlit_shell.ui.data_ui import (
     invoke_data_agent,
     render_chat_panel,
     render_dataset_metrics,
-    teaching_page_host_context,
 )
+from dataset_streamlit_shell.ui.supervised_pack import supervised_host_context
 
 configure_matplotlib_for_traditional_chinese()
 
@@ -56,6 +56,10 @@ HEART_PATH = CLASSIFICATION_DEMO_DIR / "heart_disease.csv"
 
 PAGE_TITLE = "決策樹與集成"
 CONTEXT_KEY = f"{PAGE_TITLE}_agent_context"
+
+
+def page_host_context() -> str:
+    return supervised_host_context()
 
 
 def render_decision_tree_concepts_page() -> None:
@@ -89,7 +93,7 @@ def render_tree_ensemble_page() -> None:
         render_chat_panel(
             extra_context=str(st.session_state.get(CONTEXT_KEY, f"目前頁面：{PAGE_TITLE}。")),
             page_name=PAGE_TITLE,
-            host_context=teaching_page_host_context(),
+            host_context=page_host_context(),
         )
 
 
@@ -624,7 +628,7 @@ def _send_tree_hint(qid: str) -> None:
         quiz.tree_hint_user_text(qid),
         extra_context=_tree_quiz_appendix(unlocked=unlocked),
         display_user_text="（Agent 提示）請給熵／資訊增益線索，不要直接講正解。",
-        host_context=teaching_page_host_context(),
+        host_context=page_host_context(),
         page_name=PAGE_TITLE,
     )
     st.rerun()
@@ -655,7 +659,7 @@ def _send_bagging_hint(qid: str, *, n_estimators: int) -> None:
             n_estimators=n_estimators,
         ),
         display_user_text="（Agent 提示）請給 Bagging／多數決線索，不要直接講正解。",
-        host_context=teaching_page_host_context(),
+        host_context=page_host_context(),
         page_name=PAGE_TITLE,
     )
     st.rerun()
@@ -686,7 +690,7 @@ def _send_boost_hint(qid: str, *, learning_rate: float) -> None:
             learning_rate=learning_rate,
         ),
         display_user_text="（Agent 提示）請給 Boosting／對照線索，不要直接講正解。",
-        host_context=teaching_page_host_context(),
+        host_context=page_host_context(),
         page_name=PAGE_TITLE,
     )
     st.rerun()

@@ -56,6 +56,7 @@ SUPERVISED = CoursePack(
         "pages/18_Linear_SVM.py",
         "pages/19_KNN_Classification.py",
         "pages/19_Decision_Tree_Concepts.py",
+        "ui/supervised_pack.py",
         "ui/lr_ui.py",
         "ui/lr_slot_state.py",
         "ui/simple_regression_quiz.py",
