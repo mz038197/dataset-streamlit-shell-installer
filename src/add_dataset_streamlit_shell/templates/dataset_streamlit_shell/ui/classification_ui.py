@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
 
-from dataset_streamlit_shell.ml.tf_runtime import configure_tensorflow_runtime
+from dataset_streamlit_shell.cv.tf_runtime import configure_tensorflow_runtime
 
 configure_tensorflow_runtime()
 import tensorflow as tf
