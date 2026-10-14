@@ -37,7 +37,6 @@ def test_teaching_page_host_context_forbids_root_working_and_accepts_fragment() 
 
 
 TEACHING_CHAT_FILES = (
-    "nn_ui.py",
     "clustering_ui.py",
     "cnn_ui.py",
     "cv_layout.py",
