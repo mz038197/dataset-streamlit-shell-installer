@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from dataset_streamlit_shell.navigation import NavPage, installed_sections
 from dataset_streamlit_shell.ui.data_ui import (
     ORIGINAL_DATASET_PATH,
     WORKING_DATASET_PATH,
@@ -94,72 +95,63 @@ def overview() -> None:
         render_chat_panel(page_name="總覽")
 
 
-pages = {
+SECTIONS = {
     "": [
-        st.Page(overview, title="總覽", default=True),
+        NavPage(overview, "總覽", default=True),
     ],
     "AI 協作資料整理": [
-        st.Page(str(SHELL_ROOT / "pages" / "3_Field_Quality.py"), title="欄位與資料整合"),
-        st.Page(str(SHELL_ROOT / "pages" / "17_Data_Transform.py"), title="資料轉換"),
-        st.Page(str(SHELL_ROOT / "pages" / "4_Duplicates.py"), title="刪除重複資料列"),
-        st.Page(str(SHELL_ROOT / "pages" / "5_Numeric_Diagnostics.py"), title="缺失值處理"),
-        st.Page(str(SHELL_ROOT / "pages" / "6_Outliers.py"), title="離群值檢查"),
-        st.Page(str(SHELL_ROOT / "pages" / "7_Categorical.py"), title="類別欄位整理"),
-        st.Page(str(SHELL_ROOT / "pages" / "8_Encoding.py"), title="類別欄位編碼"),
-        st.Page(str(SHELL_ROOT / "pages" / "9_Correlation.py"), title="數值相關性"),
-        st.Page(str(SHELL_ROOT / "pages" / "13_Feature_Scaling.py"), title="特徵縮放"),
-        st.Page(str(SHELL_ROOT / "pages" / "2_Charts.py"), title="圖表探索"),
-        st.Page(str(SHELL_ROOT / "pages" / "20_Data_Split.py"), title="資料切分"),
+        NavPage("pages/3_Field_Quality.py", "欄位與資料整合"),
+        NavPage("pages/17_Data_Transform.py", "資料轉換"),
+        NavPage("pages/4_Duplicates.py", "刪除重複資料列"),
+        NavPage("pages/5_Numeric_Diagnostics.py", "缺失值處理"),
+        NavPage("pages/6_Outliers.py", "離群值檢查"),
+        NavPage("pages/7_Categorical.py", "類別欄位整理"),
+        NavPage("pages/8_Encoding.py", "類別欄位編碼"),
+        NavPage("pages/9_Correlation.py", "數值相關性"),
+        NavPage("pages/13_Feature_Scaling.py", "特徵縮放"),
+        NavPage("pages/2_Charts.py", "圖表探索"),
+        NavPage("pages/20_Data_Split.py", "資料切分"),
     ],
     "機器學習 · 監督式": [
-        st.Page(str(SHELL_ROOT / "pages" / "14_Simple_Linear_Regression.py"), title="線性回歸"),
-        st.Page(str(SHELL_ROOT / "pages" / "16_Logistic_Regression.py"), title="邏輯迴歸"),
-        st.Page(str(SHELL_ROOT / "pages" / "18_Linear_SVM.py"), title="線性支持向量機"),
-        st.Page(str(SHELL_ROOT / "pages" / "19_KNN_Classification.py"), title="K-近鄰分類"),
-        st.Page(str(SHELL_ROOT / "pages" / "19_Decision_Tree_Concepts.py"), title="決策樹與集成"),
+        NavPage("pages/14_Simple_Linear_Regression.py", "線性回歸"),
+        NavPage("pages/16_Logistic_Regression.py", "邏輯迴歸"),
+        NavPage("pages/18_Linear_SVM.py", "線性支持向量機"),
+        NavPage("pages/19_KNN_Classification.py", "K-近鄰分類"),
+        NavPage("pages/19_Decision_Tree_Concepts.py", "決策樹與集成"),
     ],
     "機器學習 · 非監督式": [
-        st.Page(str(SHELL_ROOT / "pages" / "11_Wards_Method.py"), title="Ward's Method（階層分群）"),
-        st.Page(str(SHELL_ROOT / "pages" / "12_KMeans.py"), title="K-Means 分群"),
+        NavPage("pages/11_Wards_Method.py", "Ward's Method（階層分群）"),
+        NavPage("pages/12_KMeans.py", "K-Means 分群"),
     ],
     "深度學習": [
-        st.Page(str(SHELL_ROOT / "pages" / "21_Neural_Network.py"), title="類神經網路"),
+        NavPage("pages/21_Neural_Network.py", "類神經網路"),
     ],
     "電腦視覺": [
-        st.Page(
-            str(SHELL_ROOT / "pages" / "27_CNN_Introduction.py"),
-            title="卷積神經網路（CNN）",
-        ),
-        st.Page(
-            str(SHELL_ROOT / "pages" / "22_Image_Classification.py"),
-            title="影像分類（Image Classification）",
-        ),
-        st.Page(
-            str(SHELL_ROOT / "pages" / "23_Object_Detection.py"),
-            title="物件偵測（Object Detection）",
-        ),
-        st.Page(
-            str(SHELL_ROOT / "pages" / "24_Semantic_Segmentation.py"),
-            title="語意分割（Semantic Segmentation）",
-        ),
-        st.Page(
-            str(SHELL_ROOT / "pages" / "25_Instance_Segmentation.py"),
-            title="實例分割（Instance Segmentation）",
-        ),
-        st.Page(
-            str(SHELL_ROOT / "pages" / "26_Promptable_Segmentation.py"),
-            title="提示式分割（Promptable Segmentation / SAM）",
-        ),
+        NavPage("pages/27_CNN_Introduction.py", "卷積神經網路（CNN）"),
+        NavPage("pages/22_Image_Classification.py", "影像分類（Image Classification）"),
+        NavPage("pages/23_Object_Detection.py", "物件偵測（Object Detection）"),
+        NavPage("pages/24_Semantic_Segmentation.py", "語意分割（Semantic Segmentation）"),
+        NavPage("pages/25_Instance_Segmentation.py", "實例分割（Instance Segmentation）"),
+        NavPage("pages/26_Promptable_Segmentation.py", "提示式分割（Promptable Segmentation / SAM）"),
     ],
     "降維分析": [
-        st.Page(str(SHELL_ROOT / "pages" / "10_PCA.py"), title="PCA 主成分分析"),
+        NavPage("pages/10_PCA.py", "PCA 主成分分析"),
     ],
     "AI新創工作坊": [
-        st.Page(
-            str(SHELL_ROOT / "pages" / "30_Startup_Challenge.py"),
-            title="專案展示",
-        ),
+        NavPage("pages/30_Startup_Challenge.py", "專案展示"),
     ],
+}
+
+pages = {
+    section: [
+        st.Page(
+            page.source if callable(page.source) else str(SHELL_ROOT / page.source),
+            title=page.title,
+            default=page.default,
+        )
+        for page in section_pages
+    ]
+    for section, section_pages in installed_sections(SHELL_ROOT, SECTIONS).items()
 }
 
 st.navigation(pages).run()
